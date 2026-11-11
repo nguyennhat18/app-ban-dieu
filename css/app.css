@@ -1426,6 +1426,223 @@ input, textarea, select {
   margin: 0 auto;
 }
 
+/* ================= MẪU HÓA ĐƠN BÁN HÀNG CHUẨN (MẪU 02GTTT3/001) ================= */
+.invoice-paper-scroll {
+  background: #f1f5f9;
+  padding: 12px;
+  overflow-y: auto;
+  max-height: 75vh;
+}
+
+.standard-invoice-paper {
+  background: #ffffff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: #111827;
+  max-width: 680px;
+  margin: 0 auto;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+}
+
+.invoice-box-border {
+  border: 1.5px solid #111827;
+  padding: 16px 14px;
+}
+
+.invoice-top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 8px;
+}
+
+.invoice-seller-snippet {
+  flex: 1;
+  line-height: 1.45;
+}
+
+.seller-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: #000000;
+  margin-bottom: 3px;
+}
+
+.invoice-meta-snippet {
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: nowrap;
+}
+
+.invoice-main-heading {
+  font-size: 19px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  margin: 6px 0 2px 0;
+  color: #000000;
+}
+
+.invoice-sub-heading {
+  color: #4b5563;
+  font-size: 11px;
+}
+
+.invoice-date-text {
+  color: #374151;
+  font-size: 11.5px;
+  font-style: italic;
+}
+
+.invoice-buyer-section {
+  border-top: 1px dashed #d1d5db;
+  border-bottom: 1px dashed #d1d5db;
+  padding: 8px 0;
+  margin: 8px 0;
+  line-height: 1.6;
+}
+
+.buyer-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px;
+  margin-bottom: 2px;
+}
+
+.buyer-lbl {
+  color: #4b5563;
+}
+
+.buyer-val {
+  color: #111827;
+}
+
+/* Bảng hàng hóa kẻ ô chuẩn mẫu hóa đơn (Image 3) */
+.standard-invoice-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 10px 0;
+  font-size: 12px;
+  border: 1px solid #000000;
+}
+
+.standard-invoice-table th,
+.standard-invoice-table td {
+  border: 1px solid #000000;
+  padding: 6px 4px;
+  vertical-align: middle;
+}
+
+.standard-invoice-table thead th {
+  background: #f9fafb;
+  font-weight: 800;
+  color: #000000;
+  text-align: center;
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.col-sub {
+  font-size: 9.5px;
+  font-weight: normal;
+  color: #6b7280;
+}
+
+.table-summary-row td {
+  font-size: 12px;
+  background: #ffffff;
+  padding: 5px 4px;
+}
+
+.table-grand-row td {
+  background: #f9fafb;
+  font-size: 12.5px;
+  padding: 7px 4px;
+}
+
+.invoice-words-box {
+  border-bottom: 1px dashed #d1d5db;
+  padding-bottom: 6px;
+  margin: 6px 0;
+  line-height: 1.5;
+}
+
+.invoice-qr-box {
+  background: #f0fdf4;
+  border: 1px dashed #86efac;
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin: 8px 0;
+}
+
+.invoice-qr-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.invoice-qr-img {
+  width: 75px;
+  height: 75px;
+  object-fit: contain;
+  background: #ffffff;
+  padding: 3px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.invoice-qr-text {
+  flex: 1;
+  line-height: 1.4;
+}
+
+.invoice-signatures-row {
+  display: flex;
+  justify-content: space-around;
+  margin-top: 16px;
+  padding-top: 8px;
+}
+
+.sig-col {
+  flex: 1;
+  text-align: center;
+}
+
+.sig-title {
+  font-size: 12.5px;
+  color: #000000;
+}
+
+.sig-sub {
+  color: #6b7280;
+  font-size: 10.5px;
+}
+
+.sig-space {
+  height: 52px;
+}
+
+.sig-name {
+  color: #111827;
+  font-size: 12px;
+}
+
+.invoice-footnote {
+  color: #9ca3af;
+  font-size: 10px;
+  margin-top: 8px;
+}
+  background: #ffffff;
+  padding: 4px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  display: block;
+  margin: 0 auto;
+}
+
 .quote-doc-header {
   display: flex;
   justify-content: space-between;
@@ -1845,7 +2062,7 @@ input, textarea, select {
 /* ================= PRINT STYLES ================= */
 @media print {
   @page {
-    margin: 4mm;
+    margin: 5mm;
     size: auto;
   }
 
@@ -1891,35 +2108,40 @@ input, textarea, select {
     border-radius: 0 !important;
   }
 
-  .receipt-view {
-    border: none !important;
-    box-shadow: none !important;
+  .invoice-paper-scroll {
+    background: #ffffff !important;
     padding: 0 !important;
-    margin: 0 auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  .standard-invoice-paper {
+    box-shadow: none !important;
     width: 100% !important;
     max-width: 100% !important;
-    color: #000000 !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
   }
 
-  .receipt-table {
+  .invoice-box-border {
+    border: 1.5pt solid #000000 !important;
+    padding: 8pt !important;
+  }
+
+  .standard-invoice-table {
+    border: 1pt solid #000000 !important;
     width: 100% !important;
   }
 
-  .receipt-table th,
-  .receipt-table td {
-    color: #000000 !important;
-    border-bottom: 1px dashed #666666 !important;
-    padding: 4px 2px !important;
-  }
-
-  .receipt-grand-total {
-    border-top: 2pt solid #000000 !important;
-    border-bottom: 2pt solid #000000 !important;
-    background: none !important;
-    color: #000000 !important;
-  }
-
-  .receipt-qr-img {
+  .standard-invoice-table th,
+  .standard-invoice-table td {
     border: 1pt solid #000000 !important;
+    color: #000000 !important;
+    padding: 3pt 2pt !important;
+  }
+
+  .invoice-qr-box {
+    border: 1pt solid #000000 !important;
+    background: none !important;
   }
 }

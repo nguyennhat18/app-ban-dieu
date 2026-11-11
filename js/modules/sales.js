@@ -1,6 +1,16 @@
 // Quản lý Bán Hàng (POS, Tạo đơn, Trừ kho Transaction, Hủy đơn hoàn kho - Mobile Optimized)
 import { db } from '../db.js';
-import { formatVND, parseVND, formatDateTime, generateId, escapeHTML } from '../utils.js';
+import {
+  formatVND,
+  parseVND,
+  formatDateTime,
+  formatDate,
+  generateId,
+  escapeHTML,
+  numberToVietnameseWords,
+  shareFileOrDownload
+} from '../utils.js';
+import { registerVietnameseFont } from '../vendor/roboto-font.js';
 import { PRODUCT_CATEGORIES } from '../config.js';
 
 export class SalesModule {
@@ -1036,10 +1046,15 @@ export class SalesModule {
     });
   }
 
-  // Modal hóa đơn
+  // Modal hóa đơn chuẩn mẫu Việt Nam (Mẫu số 02GTTT3/001)
   async showOrderDetailModal(orderId) {
     const order = await db.getById('orders', orderId);
     if (!order) return;
+
+    let customer = null;
+    if (order.customerId) {
+      customer = await db.getById('customers', order.customerId);
+    }
 
     const shopSettings = (await db.getSetting('shop_info')) || {};
     const ptttText = order.paymentMethod === 'cash' ? 'Tiền mặt' :
@@ -1047,117 +1062,179 @@ export class SalesModule {
                      order.paymentMethod === 'transfer' ? 'Chuyển khoản' :
                      order.paymentMethod === 'debt' ? 'Ghi nợ' : 'Trả một phần';
 
+    const orderDate = new Date(order.createdAt || Date.now());
+    const dayStr = String(orderDate.getDate()).padStart(2, '0');
+    const monthStr = String(orderDate.getMonth() + 1).padStart(2, '0');
+    const yearStr = orderDate.getFullYear();
+    const dateVietnamese = `Ngày ${dayStr} tháng ${monthStr} năm ${yearStr}`;
+
     const modalHtml = `
       <div class="modal-backdrop" id="order-detail-modal">
-        <div class="modal-content">
+        <div class="modal-content modal-lg">
           <div class="modal-header">
             <div>
-              <h2 class="modal-title">🧾 Hóa Đơn Bán Hàng</h2>
+              <h2 class="modal-title">📑 Hóa Đơn Bán Hàng</h2>
               <div class="modal-subtitle">Mã đơn: ${escapeHTML(order.id)}</div>
             </div>
             <button class="modal-close" id="btn-close-odmodal">&times;</button>
           </div>
 
-          <div class="modal-body receipt-view" id="printable-receipt">
-            <div class="receipt-header text-center">
-              ${shopSettings.logo ? `<img src="${shopSettings.logo}" class="receipt-logo" alt="Logo">` : ''}
-              <h2 class="receipt-shop-name">${escapeHTML(shopSettings.shopName || 'CỬA HÀNG DIỀU')}</h2>
-              <p class="receipt-shop-meta text-xs">${escapeHTML(shopSettings.address || '')}</p>
-              <p class="receipt-shop-meta text-xs">Hotline: ${escapeHTML(shopSettings.phone || '')}</p>
-              <div class="receipt-divider text-muted">********************************</div>
-            </div>
-
-            <div class="receipt-meta-grid text-xs mt-2 mb-2">
-              <div><b>Khách hàng:</b> ${escapeHTML(order.customerName || 'Khách lẻ')}</div>
-              <div><b>Ngày:</b> ${formatDateTime(order.createdAt)}</div>
-              ${order.customerPhone ? `<div><b>SĐT:</b> ${escapeHTML(order.customerPhone)}</div>` : ''}
-              <div><b>PTTT:</b> ${ptttText}</div>
-            </div>
-
-            <table class="receipt-table">
-              <thead>
-                <tr>
-                  <th>Sản phẩm</th>
-                  <th class="text-center">SL</th>
-                  <th class="text-right">Đơn giá</th>
-                  <th class="text-right">T.Tiền</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${(order.items || []).map(i => `
-                  <tr>
-                    <td>${escapeHTML(i.productName)}</td>
-                    <td class="text-center">${i.quantity}</td>
-                    <td class="text-right">${formatVND(i.unitPrice)}</td>
-                    <td class="text-right">${formatVND(i.subtotal)}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-
-            <div class="receipt-totals text-sm">
-              <div class="receipt-total-row">
-                <span>Tiền hàng:</span>
-                <span>${formatVND(order.subtotal)}</span>
-              </div>
-              ${order.discountAmount > 0 ? `
-                <div class="receipt-total-row">
-                  <span>Chiết khấu:</span>
-                  <span>-${formatVND(order.discountAmount)}</span>
+          <!-- KHU VỰC CUỘN XEM HÓA ĐƠN TRANG GIẤY -->
+          <div class="modal-body invoice-paper-scroll">
+            <div class="standard-invoice-paper" id="printable-invoice">
+              <div class="invoice-box-border">
+                
+                <!-- HÀNG HEADER: BÊN BÁN & MẪU SỐ -->
+                <div class="invoice-top-row">
+                  <div class="invoice-seller-snippet">
+                    <div class="seller-title"><b>ĐƠN VỊ BÁN:</b> ${escapeHTML((shopSettings.shopName || 'CỬA HÀNG BÁN DIỀU').toUpperCase())}</div>
+                    <div class="text-xs">Địa chỉ: ${escapeHTML(shopSettings.address || '---')}</div>
+                    <div class="text-xs">Điện thoại: ${escapeHTML(shopSettings.phone || '---')}</div>
+                    ${shopSettings.bankInfo ? `<div class="text-xs">Số tài khoản: <b>${escapeHTML(shopSettings.bankInfo)}</b></div>` : ''}
+                  </div>
+                  <div class="invoice-meta-snippet text-right">
+                    <div class="text-xs"><b>Mẫu số:</b> 02GTTT3/001</div>
+                    <div class="text-xs"><b>Ký hiệu:</b> 03AA/26P</div>
+                    <div class="text-xs"><b>Số:</b> <span class="text-danger text-bold">${escapeHTML(order.id)}</span></div>
+                  </div>
                 </div>
-              ` : ''}
-              ${order.shippingFee > 0 ? `
-                <div class="receipt-total-row">
-                  <span>Phí ship:</span>
-                  <span>+${formatVND(order.shippingFee)}</span>
-                </div>
-              ` : ''}
-              ${order.vatAmount > 0 ? `
-                <div class="receipt-total-row">
-                  <span>VAT:</span>
-                  <span>+${formatVND(order.vatAmount)}</span>
-                </div>
-              ` : ''}
-              <div class="receipt-total-row text-bold receipt-grand-total">
-                <span>TỔNG CỘNG:</span>
-                <span>${formatVND(order.totalAmount)}</span>
-              </div>
-              <div class="receipt-total-row">
-                <span>Đã thanh toán:</span>
-                <span>${formatVND(order.paidAmount || 0)}</span>
-              </div>
-              ${order.debtAmount > 0 ? `
-                <div class="receipt-total-row text-danger text-bold">
-                  <span>Còn nợ:</span>
-                  <span>${formatVND(order.debtAmount)}</span>
-                </div>
-              ` : ''}
-            </div>
 
-            ${shopSettings.bankInfo ? `
-              <div class="receipt-bank-box card p-2 bg-light mt-2">
-                <div class="text-xs text-muted">Thông tin chuyển khoản:</div>
-                <div class="text-xs text-bold">${escapeHTML(shopSettings.bankInfo)}</div>
-              </div>
-            ` : ''}
+                <!-- TIÊU ĐỀ HÓA ĐƠN CHÍNH GIỮA (Image 3) -->
+                <div class="invoice-title-block text-center mt-2 mb-2">
+                  <h1 class="invoice-main-heading">HÓA ĐƠN BÁN HÀNG</h1>
+                  <div class="invoice-sub-heading text-xs"><i>Liên 2: Giao cho người mua</i></div>
+                  <div class="invoice-date-text text-xs mt-1">${dateVietnamese}</div>
+                </div>
 
-            ${shopSettings.qrCode ? `
-              <div class="receipt-qr-box text-center mt-2">
-                <img src="${shopSettings.qrCode}" class="receipt-qr-img" alt="Mã QR thanh toán">
-                <div class="text-xs text-muted mt-1">(Quét mã QR để thanh toán)</div>
-                <button type="button" class="btn btn-outline-primary btn-xs mt-1 no-print" id="btn-zoom-receipt-qr">
-                  🔍 Phóng to mã QR
-                </button>
-              </div>
-            ` : ''}
+                <!-- KHUNG THÔNG TIN NGƯỜI MUA -->
+                <div class="invoice-buyer-section text-xs">
+                  <div class="buyer-row">
+                    <span class="buyer-lbl">Tên người mua hàng:</span>
+                    <span class="buyer-val text-bold">${escapeHTML(order.customerName || 'Khách lẻ')}</span>
+                  </div>
+                  ${(order.customerAddress || (customer && customer.address)) ? `
+                    <div class="buyer-row">
+                      <span class="buyer-lbl">Địa chỉ:</span>
+                      <span class="buyer-val">${escapeHTML(order.customerAddress || customer.address)}</span>
+                    </div>
+                  ` : ''}
+                  <div class="buyer-row">
+                    <span class="buyer-lbl">Số điện thoại:</span>
+                    <span class="buyer-val">${escapeHTML(order.customerPhone || (customer && customer.phone) || '---')}</span>
+                    <span class="buyer-lbl ml-3">Hình thức thanh toán:</span>
+                    <span class="buyer-val text-bold">${ptttText}</span>
+                  </div>
+                </div>
 
-            <div class="receipt-footer text-center mt-3 text-xs text-muted">
-              <p>Cảm ơn quý khách và hẹn gặp lại! 🪁</p>
+                <!-- BẢNG HÀNG HÓA KẺ Ô LƯỚI VUÔNG CHUẨN MẪU HÓA ĐƠN (Image 3) -->
+                <table class="standard-invoice-table mt-2">
+                  <thead>
+                    <tr>
+                      <th style="width: 36px;" class="text-center">STT<br><span class="col-sub">(1)</span></th>
+                      <th>Tên hàng hóa, dịch vụ<br><span class="col-sub">(2)</span></th>
+                      <th style="width: 50px;" class="text-center">ĐVT<br><span class="col-sub">(3)</span></th>
+                      <th style="width: 44px;" class="text-center">SL<br><span class="col-sub">(4)</span></th>
+                      <th style="width: 80px;" class="text-right">Đơn giá<br><span class="col-sub">(5)</span></th>
+                      <th style="width: 90px;" class="text-right">Thành tiền<br><span class="col-sub">(6=4x5)</span></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${(order.items || []).map((item, idx) => `
+                      <tr>
+                        <td class="text-center">${idx + 1}</td>
+                        <td><b>${escapeHTML(item.productName)}</b></td>
+                        <td class="text-center">${escapeHTML(item.unit || 'Chiếc')}</td>
+                        <td class="text-center text-bold">${item.quantity}</td>
+                        <td class="text-right">${formatVND(item.unitPrice)}</td>
+                        <td class="text-right text-bold">${formatVND(item.subtotal)}</td>
+                      </tr>
+                    `).join('')}
+
+                    <!-- DÒNG CỘNG TIỀN HÀNG HÓA -->
+                    <tr class="table-summary-row">
+                      <td colspan="5" class="text-right">Cộng tiền bán hàng hóa, dịch vụ:</td>
+                      <td class="text-right text-bold">${formatVND(order.subtotal)}</td>
+                    </tr>
+                    ${order.discountAmount > 0 ? `
+                      <tr class="table-summary-row">
+                        <td colspan="5" class="text-right">Chiết khấu giảm giá:</td>
+                        <td class="text-right text-danger">-${formatVND(order.discountAmount)}</td>
+                      </tr>
+                    ` : ''}
+                    ${order.shippingFee > 0 ? `
+                      <tr class="table-summary-row">
+                        <td colspan="5" class="text-right">Phí vận chuyển / giao hàng:</td>
+                        <td class="text-right">+${formatVND(order.shippingFee)}</td>
+                      </tr>
+                    ` : ''}
+                    ${order.vatAmount > 0 ? `
+                      <tr class="table-summary-row">
+                        <td colspan="5" class="text-right">Thuế giá trị gia tăng (VAT):</td>
+                        <td class="text-right">+${formatVND(order.vatAmount)}</td>
+                      </tr>
+                    ` : ''}
+                    <tr class="table-grand-row">
+                      <td colspan="5" class="text-right text-bold text-uppercase">TỔNG CỘNG TIỀN THANH TOÁN:</td>
+                      <td class="text-right text-bold text-primary" style="font-size: 13.5px;">${formatVND(order.totalAmount)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                <!-- SỐ TIỀN VIẾT BẰNG CHỮ -->
+                <div class="invoice-words-box mt-2 text-xs">
+                  <b>Số tiền viết bằng chữ:</b> <i>${numberToVietnameseWords(order.totalAmount)}</i>
+                </div>
+
+                <!-- MÃ QR THANH TOÁN (NẾU CÓ) -->
+                ${shopSettings.qrCode ? `
+                  <div class="invoice-qr-box mt-2">
+                    <div class="invoice-qr-content">
+                      <img src="${shopSettings.qrCode}" class="invoice-qr-img" alt="QR Code">
+                      <div class="invoice-qr-text">
+                        <div class="text-xs text-bold text-primary">📱 QUÉT MÃ QR THANH TOÁN CHUYỂN KHOẢN</div>
+                        <div class="text-xs mt-1">Số tiền: <b class="text-success">${formatVND(order.debtAmount > 0 ? order.debtAmount : order.totalAmount)}</b></div>
+                        ${shopSettings.bankInfo ? `<div class="text-xs text-muted mt-1">${escapeHTML(shopSettings.bankInfo)}</div>` : ''}
+                        <div class="text-xs text-muted">Dùng app ngân hàng hoặc MoMo quét mã để thanh toán</div>
+                      </div>
+                    </div>
+                  </div>
+                ` : (shopSettings.bankInfo ? `
+                  <div class="card p-2 bg-light text-xs mt-2">
+                    <b>Thông tin chuyển khoản ngân hàng:</b> ${escapeHTML(shopSettings.bankInfo)}
+                  </div>
+                ` : '')}
+
+                <!-- KHỐI CHỮ KÝ 2 BÊN CHUẨN MẪU (Image 3) -->
+                <div class="invoice-signatures-row mt-3 text-center">
+                  <div class="sig-col">
+                    <div class="sig-title text-bold">NGƯỜI MUA HÀNG</div>
+                    <div class="sig-sub text-xs"><i>(Ký, ghi rõ họ, tên)</i></div>
+                    <div class="sig-space"></div>
+                    <div class="sig-name text-xs text-bold">${escapeHTML(order.customerName || '')}</div>
+                  </div>
+                  <div class="sig-col">
+                    <div class="sig-title text-bold">NGƯỜI BÁN HÀNG</div>
+                    <div class="sig-sub text-xs"><i>(Ký, đóng dấu, ghi rõ họ, tên)</i></div>
+                    <div class="sig-space"></div>
+                    <div class="sig-name text-xs text-bold">${escapeHTML(shopSettings.shopName || '')}</div>
+                  </div>
+                </div>
+
+                <div class="invoice-footnote text-center text-xs text-muted mt-3">
+                  <i>(Cần kiểm tra, đối chiếu khi lập, giao, nhận hóa đơn)</i>
+                </div>
+              </div>
             </div>
           </div>
 
+          <!-- FOOTER MODAL VỚI NÚT XUẤT FILE PDF & IN -->
           <div class="modal-footer">
-            <button class="btn btn-outline-primary btn-sm" id="btn-print-receipt">🖨️ In Hóa Đơn</button>
+            <button class="btn btn-primary btn-sm" id="btn-export-order-pdf">
+              📄 Xuất File Hóa Đơn PDF (Gửi Zalo)
+            </button>
+            <button class="btn btn-outline-primary btn-sm" id="btn-print-receipt">
+              🖨️ In Hóa Đơn
+            </button>
             <div style="flex:1"></div>
             <button class="btn btn-secondary btn-sm" id="btn-close-odmodal2">Đóng</button>
           </div>
@@ -1174,15 +1251,275 @@ export class SalesModule {
     document.getElementById('btn-close-odmodal').addEventListener('click', close);
     document.getElementById('btn-close-odmodal2').addEventListener('click', close);
 
+    // Xuất file PDF chính thức
+    document.getElementById('btn-export-order-pdf').addEventListener('click', () => {
+      this.generateOrderPDF(orderId);
+    });
+
+    // In trực tiếp
     document.getElementById('btn-print-receipt').addEventListener('click', () => {
       window.print();
     });
+  }
 
-    const openQrZoom = () => {
-      this.showFullScreenQrModal(shopSettings.qrCode, shopSettings.bankInfo, (order.debtAmount > 0 ? order.debtAmount : order.totalAmount));
-    };
+  // Tạo và xuất File PDF Hóa Đơn Bán Hàng theo mẫu 02GTTT3/001 chuẩn quốc gia
+  async generateOrderPDF(orderId) {
+    const order = await db.getById('orders', orderId);
+    if (!order) return;
+    const shop = (await db.getSetting('shop_info')) || {};
+    let customer = null;
+    if (order.customerId) {
+      customer = await db.getById('customers', order.customerId);
+    }
 
-    document.getElementById('btn-zoom-receipt-qr')?.addEventListener('click', openQrZoom);
+    try {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({
+        orientation: 'p',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      // Nhúng font Roboto hỗ trợ 100% tiếng Việt có dấu
+      registerVietnameseFont(doc);
+
+      const darkColor = [17, 24, 39];
+      const grayColor = [100, 116, 139];
+
+      // 1. Khung viền ngoài chữ nhật bao quanh toàn bộ hóa đơn (Image 3)
+      doc.setDrawColor(20, 20, 20);
+      doc.setLineWidth(0.4);
+      doc.rect(12, 12, 186, 273);
+
+      let curY = 18;
+
+      // 2. Header: Đơn vị bán bên trái
+      doc.setFont('Roboto', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(...darkColor);
+      doc.text(`TÊN ĐƠN VỊ BÁN: ${(shop.shopName || 'CỬA HÀNG BÁN DIỀU').toUpperCase()}`, 16, curY);
+
+      doc.setFont('Roboto', 'normal');
+      doc.setFontSize(8.5);
+      doc.text(`Địa chỉ: ${shop.address || '---'}`, 16, curY + 5);
+      doc.text(`Điện thoại: ${shop.phone || '---'}`, 16, curY + 10);
+      if (shop.bankInfo) {
+        doc.text(`Số tài khoản: ${shop.bankInfo}`, 16, curY + 15);
+      }
+
+      // Thông tin Mẫu số & Ký hiệu bên phải (Image 3)
+      doc.setFontSize(8.5);
+      doc.text('Mẫu số: 02GTTT3/001', 194, curY, { align: 'right' });
+      doc.text('Ký hiệu: 03AA/26P', 194, curY + 5, { align: 'right' });
+      doc.setFont('Roboto', 'bold');
+      doc.setTextColor(220, 38, 38);
+      doc.text(`Số: ${order.id}`, 194, curY + 10, { align: 'right' });
+      doc.setTextColor(...darkColor);
+
+      curY += 21;
+
+      // Đường kẻ ngang phân cách header
+      doc.setDrawColor(200, 200, 200);
+      doc.setLineWidth(0.3);
+      doc.line(14, curY, 196, curY);
+
+      curY += 6;
+
+      // 3. Tiêu đề HÓA ĐƠN BÁN HÀNG chính giữa
+      doc.setFont('Roboto', 'bold');
+      doc.setFontSize(15);
+      doc.text('HÓA ĐƠN BÁN HÀNG', 105, curY, { align: 'center' });
+
+      doc.setFont('Roboto', 'normal');
+      doc.setFontSize(8.5);
+      doc.setTextColor(...grayColor);
+      doc.text('Liên 2: Giao cho người mua', 105, curY + 5, { align: 'center' });
+
+      const orderDate = new Date(order.createdAt || Date.now());
+      const dateText = `Ngày ${String(orderDate.getDate()).padStart(2, '0')} tháng ${String(orderDate.getMonth() + 1).padStart(2, '0')} năm ${orderDate.getFullYear()}`;
+      doc.text(dateText, 105, curY + 10, { align: 'center' });
+
+      curY += 15;
+
+      // 4. Khung thông tin Người mua hàng
+      doc.setFont('Roboto', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(...darkColor);
+      doc.text('Tên người mua hàng:', 16, curY);
+      doc.setFont('Roboto', 'bold');
+      doc.text(`${order.customerName || 'Khách lẻ'}`, 52, curY);
+
+      doc.setFont('Roboto', 'normal');
+      if (order.customerAddress || (customer && customer.address)) {
+        curY += 5;
+        doc.text('Địa chỉ:', 16, curY);
+        doc.text(`${order.customerAddress || customer.address}`, 52, curY);
+      }
+
+      curY += 5;
+      doc.text('Số điện thoại:', 16, curY);
+      doc.text(`${order.customerPhone || (customer && customer.phone) || '---'}`, 52, curY);
+
+      const pttt = order.paymentMethod === 'cash' ? 'Tiền mặt' :
+                   order.paymentMethod === 'qr' ? 'Quét mã QR' :
+                   order.paymentMethod === 'transfer' ? 'Chuyển khoản' :
+                   order.paymentMethod === 'debt' ? 'Ghi nợ' : 'Trả một phần';
+      doc.text('Hình thức thanh toán:', 110, curY);
+      doc.setFont('Roboto', 'bold');
+      doc.text(pttt, 146, curY);
+
+      curY += 6;
+
+      // 5. Bảng hàng hóa kẻ ô lưới chuẩn (AutoTable)
+      const tableRows = (order.items || []).map((item, index) => [
+        index + 1,
+        item.productName,
+        item.unit || 'Chiếc',
+        item.quantity,
+        formatVND(item.unitPrice),
+        formatVND(item.subtotal)
+      ]);
+
+      // Dòng cộng tiền
+      tableRows.push([
+        { content: 'Cộng tiền bán hàng hóa, dịch vụ:', colSpan: 5, styles: { halign: 'right', fontStyle: 'normal' } },
+        { content: formatVND(order.subtotal), styles: { halign: 'right', fontStyle: 'bold' } }
+      ]);
+
+      if (order.discountAmount > 0) {
+        tableRows.push([
+          { content: 'Chiết khấu giảm giá:', colSpan: 5, styles: { halign: 'right', fontStyle: 'normal', textColor: [220, 38, 38] } },
+          { content: `-${formatVND(order.discountAmount)}`, styles: { halign: 'right', fontStyle: 'bold', textColor: [220, 38, 38] } }
+        ]);
+      }
+      if (order.shippingFee > 0) {
+        tableRows.push([
+          { content: 'Phí vận chuyển / giao hàng:', colSpan: 5, styles: { halign: 'right', fontStyle: 'normal' } },
+          { content: `+${formatVND(order.shippingFee)}`, styles: { halign: 'right', fontStyle: 'bold' } }
+        ]);
+      }
+      if (order.vatAmount > 0) {
+        tableRows.push([
+          { content: 'Thuế giá trị gia tăng (VAT):', colSpan: 5, styles: { halign: 'right', fontStyle: 'normal' } },
+          { content: `+${formatVND(order.vatAmount)}`, styles: { halign: 'right', fontStyle: 'bold' } }
+        ]);
+      }
+
+      tableRows.push([
+        { content: 'TỔNG CỘNG TIỀN THANH TOÁN:', colSpan: 5, styles: { halign: 'right', fontStyle: 'bold' } },
+        { content: formatVND(order.totalAmount), styles: { halign: 'right', fontStyle: 'bold', textColor: [2, 132, 199] } }
+      ]);
+
+      doc.autoTable({
+        startY: curY,
+        margin: { left: 16, right: 16 },
+        head: [['STT\n(1)', 'Tên hàng hóa, dịch vụ\n(2)', 'ĐVT\n(3)', 'SL\n(4)', 'Đơn giá\n(5)', 'Thành tiền\n(6=4x5)']],
+        body: tableRows,
+        styles: {
+          font: 'Roboto',
+          fontSize: 8.5,
+          cellPadding: 2.5,
+          lineColor: [40, 40, 40],
+          lineWidth: 0.2
+        },
+        headStyles: {
+          font: 'Roboto',
+          fontStyle: 'bold',
+          fillColor: [243, 244, 246],
+          textColor: [0, 0, 0],
+          halign: 'center',
+          lineColor: [40, 40, 40],
+          lineWidth: 0.2
+        },
+        columnStyles: {
+          0: { halign: 'center', cellWidth: 12 },
+          1: { cellWidth: 76 },
+          2: { halign: 'center', cellWidth: 18 },
+          3: { halign: 'center', cellWidth: 16 },
+          4: { halign: 'right', cellWidth: 26 },
+          5: { halign: 'right', cellWidth: 32 }
+        },
+        theme: 'grid'
+      });
+
+      let finalY = doc.lastAutoTable.finalY + 5;
+
+      // 6. Số tiền viết bằng chữ
+      doc.setFont('Roboto', 'bold');
+      doc.setFontSize(8.5);
+      doc.text('Số tiền viết bằng chữ:', 16, finalY);
+      doc.setFont('Roboto', 'italic');
+      doc.text(numberToVietnameseWords(order.totalAmount), 52, finalY);
+
+      finalY += 6;
+
+      // 7. Mã QR Thanh Toán nhúng vào PDF
+      if (shop.qrCode) {
+        try {
+          doc.setFillColor(240, 253, 244);
+          doc.setDrawColor(187, 247, 208);
+          doc.roundedRect(16, finalY, 178, 25, 2, 2, 'FD');
+          doc.addImage(shop.qrCode, 'JPEG', 18, finalY + 2, 21, 21);
+
+          doc.setFont('Roboto', 'bold');
+          doc.setFontSize(8.5);
+          doc.setTextColor(22, 101, 52);
+          doc.text('QUÉT MÃ QR THANH TOÁN / CHUYỂN KHOẢN', 44, finalY + 7);
+
+          doc.setFont('Roboto', 'normal');
+          doc.setFontSize(8);
+          doc.setTextColor(...darkColor);
+          doc.text(`Số tiền: ${formatVND(order.debtAmount > 0 ? order.debtAmount : order.totalAmount)}`, 44, finalY + 12);
+          if (shop.bankInfo) {
+            doc.text(`Tài khoản: ${shop.bankInfo}`, 44, finalY + 17);
+          }
+          finalY += 28;
+        } catch {
+          // Bỏ qua nếu lỗi ảnh
+        }
+      } else if (shop.bankInfo) {
+        doc.setFont('Roboto', 'normal');
+        doc.setFontSize(8.5);
+        doc.text(`Thông tin chuyển khoản: ${shop.bankInfo}`, 16, finalY);
+        finalY += 7;
+      }
+
+      // 8. Khối chữ ký 2 bên chuẩn mẫu (Image 3)
+      finalY += 4;
+      doc.setFont('Roboto', 'bold');
+      doc.setFontSize(9.5);
+      doc.setTextColor(...darkColor);
+      doc.text('NGƯỜI MUA HÀNG', 55, finalY, { align: 'center' });
+      doc.text('NGƯỜI BÁN HÀNG', 155, finalY, { align: 'center' });
+
+      doc.setFont('Roboto', 'italic');
+      doc.setFontSize(7.5);
+      doc.setTextColor(...grayColor);
+      doc.text('(Ký, ghi rõ họ, tên)', 55, finalY + 4, { align: 'center' });
+      doc.text('(Ký, đóng dấu, ghi rõ họ, tên)', 155, finalY + 4, { align: 'center' });
+
+      // Tên bên dưới chữ ký
+      doc.setFont('Roboto', 'bold');
+      doc.setFontSize(8.5);
+      doc.setTextColor(...darkColor);
+      if (order.customerName && order.customerName !== 'Khách lẻ') {
+        doc.text(order.customerName, 55, finalY + 22, { align: 'center' });
+      }
+      doc.text(shop.shopName || '', 155, finalY + 22, { align: 'center' });
+
+      // Footnote
+      doc.setFont('Roboto', 'italic');
+      doc.setFontSize(7.5);
+      doc.setTextColor(156, 163, 175);
+      doc.text('(Cần kiểm tra, đối chiếu khi lập, giao, nhận hóa đơn)', 105, 281, { align: 'center' });
+
+      const pdfBlob = doc.output('blob');
+      const filename = `HoaDon-${order.id}.pdf`;
+      await shareFileOrDownload(pdfBlob, filename, `Hóa đơn bán hàng ${order.id}`);
+    } catch (err) {
+      console.error('Lỗi xuất PDF hóa đơn:', err);
+      alert('Lỗi tạo file PDF: ' + err.message);
+    }
   }
 
   // Modal phóng to mã QR toàn màn hình sáng rõ cho khách quét
