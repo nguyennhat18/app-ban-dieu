@@ -1,0 +1,519 @@
+// Quản lý cơ sở dữ liệu IndexedDB (Offline-First, Transactional, Versioned, Snapshot)
+import { APP_CONFIG, DEFAULT_SHOP_SETTINGS } from './config.js';
+import { calculateChecksum } from './utils.js';
+
+class KiteDatabase {
+  constructor() {
+    this.db = null;
+    this.snapshotDb = null;
+    this.initPromise = null;
+  }
+
+  /**
+   * Khởi tạo và mở kết nối cơ sở dữ liệu IndexedDB
+   */
+  async init() {
+    if (this.initPromise) return this.initPromise;
+
+    this.initPromise = (async () => {
+      // 1. Mở CSDL chính KiteStoreDB
+      this.db = await this._openMainDB();
+
+      // 2. Mở CSDL Snapshot KiteStoreSnapshotsDB
+      this.snapshotDb = await this._openSnapshotDB();
+
+      // 3. Khởi tạo cài đặt mặc định nếu chưa có
+      await this._ensureDefaultSettings();
+
+      // 4. Kiểm tra và chụp snapshot tự động mỗi ngày lần đầu
+      await this.checkAndCreateDailySnapshot();
+
+      return this;
+    })();
+
+    return this.initPromise;
+  }
+
+  _openMainDB() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(APP_CONFIG.DB_NAME, APP_CONFIG.DB_VERSION);
+
+      request.onupgradeneeded = (event) => {
+        const db = event.target.result;
+        const oldVersion = event.oldVersion;
+        console.log(`[DB] Nâng cấp cơ sở dữ liệu từ v${oldVersion} lên v${APP_CONFIG.DB_VERSION}`);
+
+        // Phiên bản 1: Cấu trúc cơ sở dữ liệu ban đầu
+        if (oldVersion < 1) {
+          // 1. Sản phẩm (Diều)
+          if (!db.objectStoreNames.contains('products')) {
+            const productStore = db.createObjectStore('products', { keyPath: 'id' });
+            productStore.createIndex('code', 'code', { unique: false });
+            productStore.createIndex('name', 'name', { unique: false });
+            productStore.createIndex('category', 'category', { unique: false });
+            productStore.createIndex('isDeleted', 'isDeleted', { unique: false });
+          }
+
+          // 2. Khách hàng
+          if (!db.objectStoreNames.contains('customers')) {
+            const customerStore = db.createObjectStore('customers', { keyPath: 'id' });
+            customerStore.createIndex('name', 'name', { unique: false });
+            customerStore.createIndex('phone', 'phone', { unique: false });
+            customerStore.createIndex('isDeleted', 'isDeleted', { unique: false });
+          }
+
+          // 3. Đơn hàng (Bán hàng)
+          if (!db.objectStoreNames.contains('orders')) {
+            const orderStore = db.createObjectStore('orders', { keyPath: 'id' });
+            orderStore.createIndex('customerId', 'customerId', { unique: false });
+            orderStore.createIndex('createdAt', 'createdAt', { unique: false });
+            orderStore.createIndex('status', 'status', { unique: false });
+            orderStore.createIndex('isDeleted', 'isDeleted', { unique: false });
+          }
+
+          // 4. Lịch sử kho hàng (Truy vết biến động tồn)
+          if (!db.objectStoreNames.contains('inventory_logs')) {
+            const invLogStore = db.createObjectStore('inventory_logs', { keyPath: 'id' });
+            invLogStore.createIndex('productId', 'productId', { unique: false });
+            invLogStore.createIndex('changeType', 'changeType', { unique: false });
+            invLogStore.createIndex('createdAt', 'createdAt', { unique: false });
+          }
+
+          // 5. Phiếu nhập hàng
+          if (!db.objectStoreNames.contains('stock_imports')) {
+            const importStore = db.createObjectStore('stock_imports', { keyPath: 'id' });
+            importStore.createIndex('createdAt', 'createdAt', { unique: false });
+          }
+
+          // 6. Báo giá
+          if (!db.objectStoreNames.contains('quotations')) {
+            const quoteStore = db.createObjectStore('quotations', { keyPath: 'id' });
+            quoteStore.createIndex('customerId', 'customerId', { unique: false });
+            quoteStore.createIndex('createdAt', 'createdAt', { unique: false });
+            quoteStore.createIndex('status', 'status', { unique: false });
+            quoteStore.createIndex('isDeleted', 'isDeleted', { unique: false });
+          }
+
+          // 7. Lịch sử thu nợ
+          if (!db.objectStoreNames.contains('debt_payments')) {
+            const debtStore = db.createObjectStore('debt_payments', { keyPath: 'id' });
+            debtStore.createIndex('customerId', 'customerId', { unique: false });
+            debtStore.createIndex('createdAt', 'createdAt', { unique: false });
+          }
+
+          // 8. Cài đặt hệ thống
+          if (!db.objectStoreNames.contains('settings')) {
+            db.createObjectStore('settings', { keyPath: 'key' });
+          }
+        }
+      };
+
+      request.onsuccess = (e) => resolve(e.target.result);
+      request.onerror = (e) => reject(new Error('Không thể mở IndexedDB: ' + e.target.error));
+    });
+  }
+
+  _openSnapshotDB() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(APP_CONFIG.SNAPSHOT_DB_NAME, 1);
+
+      request.onupgradeneeded = (event) => {
+        const db = event.target.result;
+        if (!db.objectStoreNames.contains('snapshots')) {
+          const store = db.createObjectStore('snapshots', { keyPath: 'id' });
+          store.createIndex('dateKey', 'dateKey', { unique: false });
+          store.createIndex('createdAt', 'createdAt', { unique: false });
+        }
+      };
+
+      request.onsuccess = (e) => resolve(e.target.result);
+      request.onerror = (e) => {
+        console.warn('Không thể mở Snapshot DB:', e.target.error);
+        resolve(null);
+      };
+    });
+  }
+
+  async _ensureDefaultSettings() {
+    const existing = await this.getSetting('shop_info');
+    if (!existing) {
+      await this.saveSetting('shop_info', { ...DEFAULT_SHOP_SETTINGS });
+    }
+  }
+
+  // ================= TRANSACTION HELPER =================
+  /**
+   * Chạy transaction an toàn với nhiều bảng
+   */
+  async runTransaction(storeNames, mode, callback) {
+    await this.init();
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction(storeNames, mode);
+      let result = null;
+
+      tx.oncomplete = () => resolve(result);
+      tx.onerror = (e) => reject(new Error('Transaction thất bại: ' + e.target.error));
+      tx.onabort = (e) => reject(new Error('Transaction bị hủy: ' + e.target.error));
+
+      try {
+        result = callback(tx);
+      } catch (err) {
+        tx.abort();
+        reject(err);
+      }
+    });
+  }
+
+  // ================= GENERIC CRUD =================
+  async getAll(storeName, includeDeleted = false) {
+    await this.init();
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction(storeName, 'readonly');
+      const store = tx.objectStore(storeName);
+      const req = store.getAll();
+      req.onsuccess = () => {
+        let items = req.result || [];
+        if (!includeDeleted) {
+          items = items.filter(item => !item.isDeleted);
+        }
+        resolve(items);
+      };
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async getById(storeName, id) {
+    await this.init();
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction(storeName, 'readonly');
+      const store = tx.objectStore(storeName);
+      const req = store.get(id);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async put(storeName, item, trackChange = true) {
+    await this.init();
+    const now = new Date().toISOString();
+    if (!item.createdAt) item.createdAt = now;
+    item.updatedAt = now;
+    if (item.isDeleted === undefined) item.isDeleted = false;
+
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction([storeName], 'readwrite');
+      const store = tx.objectStore(storeName);
+      const req = store.put(item);
+      req.onsuccess = async () => {
+        if (trackChange) {
+          await this._incrementUnbackedChanges();
+        }
+        resolve(item);
+      };
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async softDelete(storeName, id) {
+    await this.init();
+    const item = await this.getById(storeName, id);
+    if (!item) throw new Error('Không tìm thấy bản ghi để xóa');
+
+    item.isDeleted = true;
+    item.deletedAt = new Date().toISOString();
+    await this.put(storeName, item, true);
+    return item;
+  }
+
+  async restoreSoftDelete(storeName, id) {
+    await this.init();
+    const item = await this.getById(storeName, id);
+    if (!item) throw new Error('Không tìm thấy bản ghi để khôi phục');
+
+    item.isDeleted = false;
+    item.deletedAt = null;
+    await this.put(storeName, item, true);
+    return item;
+  }
+
+  async permanentDelete(storeName, id) {
+    await this.init();
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction([storeName], 'readwrite');
+      const store = tx.objectStore(storeName);
+      const req = store.delete(id);
+      req.onsuccess = async () => {
+        await this._incrementUnbackedChanges();
+        resolve(true);
+      };
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async getTrashItems() {
+    await this.init();
+    const stores = ['products', 'customers', 'orders', 'quotations'];
+    const trash = [];
+
+    for (const s of stores) {
+      const all = await this.getAll(s, true);
+      const deleted = all.filter(item => item.isDeleted);
+      deleted.forEach(item => {
+        trash.push({
+          ...item,
+          _storeName: s,
+          _typeName: s === 'products' ? 'Sản phẩm' :
+                     s === 'customers' ? 'Khách hàng' :
+                     s === 'orders' ? 'Đơn hàng' : 'Báo giá'
+        });
+      });
+    }
+
+    return trash.sort((a, b) => new Date(b.deletedAt || 0) - new Date(a.deletedAt || 0));
+  }
+
+  // ================= SETTINGS =================
+  async getSetting(key) {
+    await this.init();
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction('settings', 'readonly');
+      const store = tx.objectStore('settings');
+      const req = store.get(key);
+      req.onsuccess = () => resolve(req.result ? req.result.value : null);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async saveSetting(key, value) {
+    await this.init();
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction('settings', 'readwrite');
+      const store = tx.objectStore('settings');
+      const req = store.put({ key, value, updatedAt: new Date().toISOString() });
+      req.onsuccess = () => resolve(value);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async _incrementUnbackedChanges() {
+    try {
+      const shopInfo = (await this.getSetting('shop_info')) || { ...DEFAULT_SHOP_SETTINGS };
+      shopInfo.unbackedChangesCount = (shopInfo.unbackedChangesCount || 0) + 1;
+      await this.saveSetting('shop_info', shopInfo);
+    } catch {
+      // Ignored
+    }
+  }
+
+  async markBackupCompleted() {
+    const shopInfo = (await this.getSetting('shop_info')) || { ...DEFAULT_SHOP_SETTINGS };
+    shopInfo.lastBackupTime = new Date().toISOString();
+    shopInfo.unbackedChangesCount = 0;
+    await this.saveSetting('shop_info', shopInfo);
+  }
+
+  // ================= BACKUP & RESTORE =================
+  /**
+   * Xuất toàn bộ CSDL ra JSON kèm Checksum & Version
+   */
+  async exportFullBackup() {
+    await this.init();
+    const stores = ['products', 'customers', 'orders', 'inventory_logs', 'stock_imports', 'quotations', 'debt_payments'];
+    const exportData = {
+      app: APP_CONFIG.APP_NAME,
+      schemaVersion: APP_CONFIG.DB_VERSION,
+      exportTime: new Date().toISOString(),
+      stores: {},
+      settings: {}
+    };
+
+    // Lấy dữ liệu tất cả các bảng (bao gồm cả thùng rác)
+    for (const s of stores) {
+      exportData.stores[s] = await this.getAll(s, true);
+    }
+
+    // Lấy settings
+    const shopInfo = await this.getSetting('shop_info');
+    exportData.settings['shop_info'] = shopInfo;
+
+    // Tính Checksum cho khối dữ liệu chính
+    const payloadStr = JSON.stringify({
+      stores: exportData.stores,
+      settings: exportData.settings
+    });
+    exportData.checksum = await calculateChecksum(payloadStr);
+
+    return exportData;
+  }
+
+  /**
+   * Khôi phục CSDL từ đối tượng sao lưu
+   * @param {object} backupData Đối tượng JSON đã nạp
+   * @param {'replace'|'merge'} mode Chế độ khôi phục
+   */
+  async restoreFromBackup(backupData, mode = 'replace') {
+    await this.init();
+
+    // 1. Kiểm tra cấu trúc bắt buộc
+    if (!backupData || !backupData.stores) {
+      throw new Error('Dữ liệu sao lưu không đúng định dạng!');
+    }
+
+    // 2. Kiểm tra checksum
+    const payloadStr = JSON.stringify({
+      stores: backupData.stores,
+      settings: backupData.settings
+    });
+    const expectedChecksum = await calculateChecksum(payloadStr);
+    if (backupData.checksum && backupData.checksum !== expectedChecksum) {
+      throw new Error('Mã băm Checksum không khớp! File sao lưu có thể đã bị sửa đổi hoặc hỏng.');
+    }
+
+    // 3. QUAN TRỌNG: LUÔN tự tạo một bản sao lưu cứu hộ (snapshot) trước khi phục hồi
+    console.log('[Restore] Đang tự động tạo bản chụp cứu hộ trước khi khôi phục...');
+    await this.createSnapshot('Cứu hộ tự động trước khi khôi phục');
+
+    const storeNames = ['products', 'customers', 'orders', 'inventory_logs', 'stock_imports', 'quotations', 'debt_payments'];
+
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction([...storeNames, 'settings'], 'readwrite');
+      tx.oncomplete = async () => {
+        console.log('[Restore] Khôi phục hoàn tất!');
+        await this.markBackupCompleted();
+        resolve(true);
+      };
+      tx.onerror = (e) => reject(new Error('Khôi phục thất bại: ' + e.target.error));
+
+      try {
+        for (const s of storeNames) {
+          const store = tx.objectStore(s);
+          if (mode === 'replace') {
+            store.clear();
+          }
+          const items = backupData.stores[s] || [];
+          for (const item of items) {
+            store.put(item);
+          }
+        }
+
+        // Cài đặt
+        if (backupData.settings && backupData.settings['shop_info']) {
+          const settingsStore = tx.objectStore('settings');
+          settingsStore.put({
+            key: 'shop_info',
+            value: backupData.settings['shop_info'],
+            updatedAt: new Date().toISOString()
+          });
+        }
+      } catch (err) {
+        tx.abort();
+        reject(err);
+      }
+    });
+  }
+
+  // ================= DAILY SNAPSHOTS (Disaster Recovery) =================
+  async checkAndCreateDailySnapshot() {
+    if (!this.snapshotDb) return;
+    try {
+      const todayKey = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+      const existing = await this.getSnapshotByDate(todayKey);
+      if (!existing) {
+        console.log('[Snapshot] Chưa có bản chụp hôm nay. Đang tạo snapshot tự động...');
+        await this.createSnapshot(`Bản chụp tự động ngày ${todayKey}`, todayKey);
+      }
+    } catch (err) {
+      console.warn('Lỗi kiểm tra snapshot hàng ngày:', err);
+    }
+  }
+
+  async createSnapshot(note = '', dateKey = null) {
+    if (!this.snapshotDb) return null;
+    const backupData = await this.exportFullBackup();
+    const id = 'SNAP-' + Date.now();
+    const snapshotRecord = {
+      id,
+      dateKey: dateKey || new Date().toISOString().slice(0, 10),
+      createdAt: new Date().toISOString(),
+      note,
+      data: backupData,
+      summary: {
+        productsCount: (backupData.stores.products || []).filter(p => !p.isDeleted).length,
+        ordersCount: (backupData.stores.orders || []).filter(o => !o.isDeleted).length,
+        customersCount: (backupData.stores.customers || []).filter(c => !c.isDeleted).length
+      }
+    };
+
+    return new Promise((resolve) => {
+      const tx = this.snapshotDb.transaction('snapshots', 'readwrite');
+      const store = tx.objectStore('snapshots');
+      store.put(snapshotRecord);
+
+      tx.oncomplete = async () => {
+        // Dọn dẹp chỉ giữ lại tối đa SNAPSHOT_MAX_COUNT bản gần nhất
+        await this._pruneSnapshots();
+        resolve(snapshotRecord);
+      };
+      tx.onerror = () => resolve(null);
+    });
+  }
+
+  async getSnapshotByDate(dateKey) {
+    if (!this.snapshotDb) return null;
+    return new Promise((resolve) => {
+      const tx = this.snapshotDb.transaction('snapshots', 'readonly');
+      const store = tx.objectStore('snapshots');
+      const index = store.index('dateKey');
+      const req = index.get(dateKey);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    });
+  }
+
+  async getAllSnapshots() {
+    if (!this.snapshotDb) return [];
+    return new Promise((resolve) => {
+      const tx = this.snapshotDb.transaction('snapshots', 'readonly');
+      const store = tx.objectStore('snapshots');
+      const req = store.getAll();
+      req.onsuccess = () => {
+        const list = req.result || [];
+        list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        resolve(list);
+      };
+      req.onerror = () => resolve([]);
+    });
+  }
+
+  async _pruneSnapshots() {
+    if (!this.snapshotDb) return;
+    const all = await this.getAllSnapshots();
+    if (all.length > APP_CONFIG.SNAPSHOT_MAX_COUNT) {
+      const toDelete = all.slice(APP_CONFIG.SNAPSHOT_MAX_COUNT);
+      const tx = this.snapshotDb.transaction('snapshots', 'readwrite');
+      const store = tx.objectStore('snapshots');
+      for (const item of toDelete) {
+        store.delete(item.id);
+      }
+    }
+  }
+
+  // ================= XÓA DỮ LIỆU MẪU / KHỞI TẠO =================
+  async clearAllBusinessData() {
+    await this.init();
+    // Tạo bản snapshot trước khi xóa sạch
+    await this.createSnapshot('Bản chụp an toàn trước khi xóa trắng dữ liệu kinh doanh');
+
+    const stores = ['products', 'customers', 'orders', 'inventory_logs', 'stock_imports', 'quotations', 'debt_payments'];
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction(stores, 'readwrite');
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = (e) => reject(e.target.error);
+      for (const s of stores) {
+        tx.objectStore(s).clear();
+      }
+    });
+  }
+}
+
+export const db = new KiteDatabase();

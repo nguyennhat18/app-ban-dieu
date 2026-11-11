@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Cửa Hàng Diều - Bán Hàng & Báo Giá</title>
+  
+  <!-- PWA Settings -->
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#0284c7">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Bán Diều">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png">
+  <link rel="icon" type="image/svg+xml" href="./icons/icon-kite.svg">
+  <link rel="icon" type="image/png" href="./icons/icon-192.png">
+
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="./css/app.css">
+</head>
+<body>
+  <!-- Header cố định trên cùng -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="header-brand" id="header-brand-wrap" title="Về cài đặt cửa hàng">
+        <img src="" id="header-shop-logo" class="shop-brand-logo" alt="Logo" style="display:none">
+        <div class="brand-text-wrap">
+          <span class="shop-brand-title" id="header-shop-name">CỬA HÀNG DIỀU</span>
+          <span class="shop-offline-pill" id="offline-pill">● Offline</span>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <button class="header-icon-btn" id="btn-header-inventory" title="Kho hàng">
+          <span>📦</span>
+        </button>
+        <button class="header-icon-btn" id="btn-header-reports" title="Báo cáo">
+          <span>📊</span>
+        </button>
+        <button class="header-icon-btn" id="btn-header-settings" title="Cài đặt">
+          <span>⚙️</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Banner thông báo cập nhật Service Worker -->
+  <div class="sw-update-banner" id="sw-update-banner" style="display:none">
+    <div class="sw-update-content">
+      <span>🚀 Đã có phiên bản mới của ứng dụng!</span>
+      <button class="btn btn-warning btn-xs" id="btn-apply-update">Cập nhật ngay</button>
+    </div>
+  </div>
+
+  <!-- Banner cảnh báo chưa sao lưu dữ liệu -->
+  <div class="backup-reminder-banner" id="backup-reminder-banner" style="display:none"></div>
+
+  <!-- Khu vực nội dung chính của màn hình -->
+  <main id="view-container" class="app-main-content">
+    <div class="app-loading-spinner">
+      <div class="spinner"></div>
+      <p>Đang tải dữ liệu cửa hàng...</p>
+    </div>
+  </main>
+
+  <!-- Thanh điều hướng dưới cùng Mobile-First (Bottom Nav Bar) -->
+  <nav class="bottom-nav-bar">
+    <button class="bottom-nav-item active" data-view="sales">
+      <span class="nav-icon">⚡</span>
+      <span class="nav-label">Bán Hàng</span>
+    </button>
+    <button class="bottom-nav-item" data-view="products">
+      <span class="nav-icon">🪁</span>
+      <span class="nav-label">Diều</span>
+    </button>
+    <button class="bottom-nav-item" data-view="quotations">
+      <span class="nav-icon">📑</span>
+      <span class="nav-label">Báo Giá</span>
+    </button>
+    <button class="bottom-nav-item" data-view="customers">
+      <span class="nav-icon">👥</span>
+      <span class="nav-label">Khách</span>
+    </button>
+    <button class="bottom-nav-item" data-view="debts">
+      <span class="nav-icon">💵</span>
+      <span class="nav-label">Công Nợ</span>
+    </button>
+    <button class="bottom-nav-item" data-view="inventory">
+      <span class="nav-icon">📦</span>
+      <span class="nav-label">Kho</span>
+    </button>
+    <button class="bottom-nav-item" data-view="settings">
+      <span class="nav-icon">⚙️</span>
+      <span class="nav-label">Cài Đặt</span>
+    </button>
+  </nav>
+
+  <!-- Thư viện Vendor cục bộ (Chạy offline 100%, không tải CDN) -->
+  <script src="./js/vendor/jspdf.umd.min.js"></script>
+  <script src="./js/vendor/jspdf.plugin.autotable.min.js"></script>
+  <script src="./js/vendor/xlsx.full.min.js"></script>
+
+  <!-- Module khởi chạy chính -->
+  <script type="module" src="./js/app.js"></script>
+
+  <script>
+    // Kiểm tra trạng thái mạng để đổi màu badge
+    function updateOnlineStatus() {
+      const pill = document.getElementById('offline-pill');
+      if (pill) {
+        if (navigator.onLine) {
+          pill.textContent = '● Sẵn sàng';
+          pill.classList.remove('offline');
+        } else {
+          pill.textContent = '● Ngoại tuyến (Offline)';
+          pill.classList.add('offline');
+        }
+      }
+    }
+    window.addEventListener('online', updateOnlineStatus);
+    window.addEventListener('offline', updateOnlineStatus);
+    updateOnlineStatus();
+
+    // Sự kiện nút trên Header
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('btn-header-inventory')?.addEventListener('click', () => {
+        window.app?.navigateTo('inventory');
+      });
+      document.getElementById('btn-header-reports')?.addEventListener('click', () => {
+        window.app?.navigateTo('reports');
+      });
+      document.getElementById('btn-header-settings')?.addEventListener('click', () => {
+        window.app?.navigateTo('settings');
+      });
+    });
+  </script>
+</body>
+</html>

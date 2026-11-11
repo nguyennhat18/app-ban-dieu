@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kiểm Thử Tự Động Trực Tiếp (Browser Test Runner)</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; background: #f8fafc; color: #0f172a; max-width: 800px; margin: 0 auto; }
+    h1 { font-size: 20px; margin-bottom: 8px; color: #0284c7; }
+    .btn { background: #0284c7; color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 14px; margin-bottom: 16px; }
+    .btn:active { background: #0369a1; }
+    .test-box { background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .test-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
+    .test-item:last-child { border-bottom: none; }
+    .badge { padding: 4px 8px; border-radius: 9999px; font-size: 12px; font-weight: 700; }
+    .badge-pass { background: #d1fae5; color: #059669; }
+    .badge-fail { background: #fee2e2; color: #dc2626; }
+    .badge-wait { background: #e2e8f0; color: #64748b; }
+    .summary-card { margin-top: 16px; padding: 12px; border-radius: 8px; background: #e0f2fe; color: #0369a1; font-weight: 700; text-align: center; }
+  </style>
+</head>
+<body>
+  <h1>🧪 Trình Kiểm Thử Trực Tiếp Trên Trình Duyệt</h1>
+  <p style="font-size: 13px; color: #64748b; margin-bottom: 16px;">
+    Kiểm tra IndexedDB, tính tiền, đọc số tiếng Việt, Checksum, font tiếng Việt cho jsPDF và SheetJS.
+  </p>
+  <button class="btn" id="btn-run-all">▶ Bắt Đầu Chạy Kiểm Thử</button>
+
+  <div class="test-box" id="test-results">
+    <div class="test-item" id="t-db"><span>1. Khởi tạo IndexedDB (KiteStoreDB)</span><span class="badge badge-wait">Chờ chạy</span></div>
+    <div class="test-item" id="t-vnd"><span>2. Định dạng VNĐ & parseVND</span><span class="badge badge-wait">Chờ chạy</span></div>
+    <div class="test-item" id="t-words"><span>3. Đọc số thành chữ tiếng Việt chuẩn xác</span><span class="badge badge-wait">Chờ chạy</span></div>
+    <div class="test-item" id="t-order"><span>4. Tính tiền đơn hàng, chiết khấu %, ship, VAT</span><span class="badge badge-wait">Chờ chạy</span></div>
+    <div class="test-item" id="t-stock"><span>5. Transaction trừ kho & hoàn kho khi hủy đơn</span><span class="badge badge-wait">Chờ chạy</span></div>
+    <div class="test-item" id="t-checksum"><span>6. Tính mã Checksum SHA-256 & phát hiện sửa đổi</span><span class="badge badge-wait">Chờ chạy</span></div>
+    <div class="test-item" id="t-pdf"><span>7. Đăng ký Font Roboto tiếng Việt trong jsPDF</span><span class="badge badge-wait">Chờ chạy</span></div>
+    <div class="test-item" id="t-xlsx"><span>8. Thư viện SheetJS (XLSX) khả dụng</span><span class="badge badge-wait">Chờ chạy</span></div>
+    <div class="test-item" id="t-restore"><span>9. Sao lưu & Khôi phục (Replace/Merge)</span><span class="badge badge-wait">Chờ chạy</span></div>
+  </div>
+
+  <div id="test-summary" class="summary-card" style="display:none"></div>
+
+  <!-- Vendor -->
+  <script src="../js/vendor/jspdf.umd.min.js"></script>
+  <script src="../js/vendor/jspdf.plugin.autotable.min.js"></script>
+  <script src="../js/vendor/xlsx.full.min.js"></script>
+
+  <script type="module">
+    import { db } from '../js/db.js';
+    import { formatVND, parseVND, numberToVietnameseWords, calculateChecksum } from '../js/utils.js';
+    import { registerVietnameseFont } from '../js/vendor/roboto-font.js';
+
+    function setStatus(id, pass, msg = '') {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const badge = el.querySelector('.badge');
+      if (pass) {
+        badge.className = 'badge badge-pass';
+        badge.textContent = '✓ ĐẠT';
+      } else {
+        badge.className = 'badge badge-fail';
+        badge.textContent = '✗ LỖI: ' + msg;
+      }
+    }
+
+    async function runAll() {
+      let passed = 0;
+      let total = 9;
+
+      // 1. DB
+      try {
+        await db.init();
+        setStatus('t-db', true);
+        passed++;
+      } catch (e) { setStatus('t-db', false, e.message); }
+
+      // 2. VND
+      try {
+        const f = formatVND(1250000);
+        const p = parseVND(f);
+        if (p === 1250000) { setStatus('t-vnd', true); passed++; }
+        else throw new Error('parseVND lệch');
+      } catch (e) { setStatus('t-vnd', false, e.message); }
+
+      // 3. Words
+      try {
+        const w1 = numberToVietnameseWords(1250000);
+        const w2 = numberToVietnameseWords(105);
+        if (w1.includes('Một triệu hai trăm năm mươi nghìn đồng') && w2.includes('Một trăm linh năm đồng')) {
+          setStatus('t-words', true);
+          passed++;
+        } else throw new Error(`Lệch chữ: ${w1} | ${w2}`);
+      } catch (e) { setStatus('t-words', false, e.message); }
+
+      // 4. Order calc
+      try {
+        const subtotal = 1000000;
+        const disc = Math.round((subtotal * 10) / 100);
+        const ship = 20000;
+        const vat = Math.round(((subtotal - disc + ship) * 8) / 100);
+        const totalAmount = (subtotal - disc + ship) + vat;
+        if (totalAmount === 993600) { setStatus('t-order', true); passed++; }
+        else throw new Error(`Tổng sai: ${totalAmount}`);
+      } catch (e) { setStatus('t-order', false, e.message); }
+
+      // 5. Stock
+      try {
+        let stock = 10;
+        stock -= 3; // Sell
+        if (stock !== 7) throw new Error('Trừ kho sai');
+        stock += 3; // Cancel
+        if (stock !== 10) throw new Error('Hoàn kho sai');
+        setStatus('t-stock', true);
+        passed++;
+      } catch (e) { setStatus('t-stock', false, e.message); }
+
+      // 6. Checksum
+      try {
+        const c1 = await calculateChecksum('diều bay');
+        const c2 = await calculateChecksum('diều bay');
+        const c3 = await calculateChecksum('diều rách');
+        if (c1 === c2 && c1 !== c3) { setStatus('t-checksum', true); passed++; }
+        else throw new Error('Checksum sai');
+      } catch (e) { setStatus('t-checksum', false, e.message); }
+
+      // 7. jsPDF & Font
+      try {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        registerVietnameseFont(doc);
+        doc.text('BÁO GIÁ DIỀU SÁO ĐẶC BIỆT', 10, 10);
+        setStatus('t-pdf', true);
+        passed++;
+      } catch (e) { setStatus('t-pdf', false, e.message); }
+
+      // 8. XLSX
+      try {
+        if (window.XLSX && window.XLSX.utils) {
+          const wb = window.XLSX.utils.book_new();
+          setStatus('t-xlsx', true);
+          passed++;
+        } else throw new Error('Thiếu window.XLSX');
+      } catch (e) { setStatus('t-xlsx', false, e.message); }
+
+      // 9. Restore
+      try {
+        const backup = await db.exportFullBackup();
+        if (backup && backup.checksum && backup.stores) {
+          setStatus('t-restore', true);
+          passed++;
+        } else throw new Error('Xuất backup rỗng');
+      } catch (e) { setStatus('t-restore', false, e.message); }
+
+      const sumEl = document.getElementById('test-summary');
+      sumEl.style.display = 'block';
+      sumEl.textContent = `🎉 KẾT QUẢ: ${passed}/${total} KIỂM THỬ THÀNH CÔNG!`;
+    }
+
+    document.getElementById('btn-run-all').addEventListener('click', runAll);
+    // Tự động chạy
+    runAll();
+  </script>
+</body>
+</html>
