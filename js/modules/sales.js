@@ -1042,10 +1042,10 @@ export class SalesModule {
     if (!order) return;
 
     const shopSettings = (await db.getSetting('shop_info')) || {};
-    const ptttText = order.paymentMethod === 'cash' ? '💵 Tiền mặt' :
-                     order.paymentMethod === 'qr' ? '📱 Quét mã QR' :
-                     order.paymentMethod === 'transfer' ? '🏦 Chuyển khoản' :
-                     order.paymentMethod === 'debt' ? '📝 Ghi nợ' : '💳 Trả một phần';
+    const ptttText = order.paymentMethod === 'cash' ? 'Tiền mặt' :
+                     order.paymentMethod === 'qr' ? 'Quét mã QR' :
+                     order.paymentMethod === 'transfer' ? 'Chuyển khoản' :
+                     order.paymentMethod === 'debt' ? 'Ghi nợ' : 'Trả một phần';
 
     const modalHtml = `
       <div class="modal-backdrop" id="order-detail-modal">
@@ -1064,7 +1064,7 @@ export class SalesModule {
               <h2 class="receipt-shop-name">${escapeHTML(shopSettings.shopName || 'CỬA HÀNG DIỀU')}</h2>
               <p class="receipt-shop-meta text-xs">${escapeHTML(shopSettings.address || '')}</p>
               <p class="receipt-shop-meta text-xs">Hotline: ${escapeHTML(shopSettings.phone || '')}</p>
-              <div class="receipt-divider"></div>
+              <div class="receipt-divider text-muted">********************************</div>
             </div>
 
             <div class="receipt-meta-grid text-xs mt-2 mb-2">
@@ -1086,7 +1086,7 @@ export class SalesModule {
               <tbody>
                 ${(order.items || []).map(i => `
                   <tr>
-                    <td><b>${escapeHTML(i.productName)}</b></td>
+                    <td>${escapeHTML(i.productName)}</td>
                     <td class="text-center">${i.quantity}</td>
                     <td class="text-right">${formatVND(i.unitPrice)}</td>
                     <td class="text-right">${formatVND(i.subtotal)}</td>
@@ -1120,7 +1120,7 @@ export class SalesModule {
               ` : ''}
               <div class="receipt-total-row text-bold receipt-grand-total">
                 <span>TỔNG CỘNG:</span>
-                <span class="text-primary">${formatVND(order.totalAmount)}</span>
+                <span>${formatVND(order.totalAmount)}</span>
               </div>
               <div class="receipt-total-row">
                 <span>Đã thanh toán:</span>
@@ -1134,30 +1134,22 @@ export class SalesModule {
               ` : ''}
             </div>
 
-            ${shopSettings.qrCode ? `
-              <div class="receipt-qr-payment-box mt-3 text-center">
-                <div class="receipt-qr-badge">📱 QUÉT MÃ QR ĐỂ THANH TOÁN</div>
-                <div class="receipt-qr-img-wrap my-2">
-                  <img src="${shopSettings.qrCode}" class="receipt-qr-img" alt="Mã QR thanh toán">
-                </div>
-                <div class="receipt-qr-amount-text">
-                  Số tiền cần trả: <b class="text-success text-bold">${formatVND(order.debtAmount > 0 ? order.debtAmount : order.totalAmount)}</b>
-                </div>
-                ${shopSettings.bankInfo ? `
-                  <div class="receipt-qr-bank-text">${escapeHTML(shopSettings.bankInfo)}</div>
-                ` : ''}
-                <div class="receipt-qr-actions mt-2 no-print">
-                  <button type="button" class="btn btn-outline-primary btn-xs" id="btn-zoom-receipt-qr">
-                    🔍 Phóng to mã QR cho khách quét
-                  </button>
-                </div>
-              </div>
-            ` : (shopSettings.bankInfo ? `
+            ${shopSettings.bankInfo ? `
               <div class="receipt-bank-box card p-2 bg-light mt-2">
                 <div class="text-xs text-muted">Thông tin chuyển khoản:</div>
                 <div class="text-xs text-bold">${escapeHTML(shopSettings.bankInfo)}</div>
               </div>
-            ` : '')}
+            ` : ''}
+
+            ${shopSettings.qrCode ? `
+              <div class="receipt-qr-box text-center mt-2">
+                <img src="${shopSettings.qrCode}" class="receipt-qr-img" alt="Mã QR thanh toán">
+                <div class="text-xs text-muted mt-1">(Quét mã QR để thanh toán)</div>
+                <button type="button" class="btn btn-outline-primary btn-xs mt-1 no-print" id="btn-zoom-receipt-qr">
+                  🔍 Phóng to mã QR
+                </button>
+              </div>
+            ` : ''}
 
             <div class="receipt-footer text-center mt-3 text-xs text-muted">
               <p>Cảm ơn quý khách và hẹn gặp lại! 🪁</p>
@@ -1166,9 +1158,6 @@ export class SalesModule {
 
           <div class="modal-footer">
             <button class="btn btn-outline-primary btn-sm" id="btn-print-receipt">🖨️ In Hóa Đơn</button>
-            ${shopSettings.qrCode ? `
-              <button class="btn btn-outline-success btn-sm" id="btn-footer-zoom-qr">📱 Mã QR</button>
-            ` : ''}
             <div style="flex:1"></div>
             <button class="btn btn-secondary btn-sm" id="btn-close-odmodal2">Đóng</button>
           </div>
@@ -1194,7 +1183,6 @@ export class SalesModule {
     };
 
     document.getElementById('btn-zoom-receipt-qr')?.addEventListener('click', openQrZoom);
-    document.getElementById('btn-footer-zoom-qr')?.addEventListener('click', openQrZoom);
   }
 
   // Modal phóng to mã QR toàn màn hình sáng rõ cho khách quét
