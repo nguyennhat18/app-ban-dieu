@@ -6,6 +6,12 @@ import {
   numberToVietnameseWords,
   calculateChecksum
 } from '../js/utils.js';
+import {
+  parseStockArray2D,
+  detectCategory,
+  detectUnit,
+  SAMPLE_STOCK_INVENTORY
+} from '../js/excel-importer.js';
 
 console.log('========================================================');
 console.log('🧪 BẮT ĐẦU CHẠY BỘ TEST TỰ ĐỘNG CHO HỆ THỐNG BÁN DIỀU');
@@ -286,6 +292,65 @@ async function main() {
     assert.strictEqual(product.id, 'SP-100');
     assert.strictEqual(product.sellingPrice, 500000);
     assert.strictEqual(product.stock, 5);
+  });
+
+  // ================= 8. TEST PHÂN TÁCH HAI KHO & EXCEL IMPORTER =================
+  runTest('8.1. Phân chia 2 kho: Kho Mới (\'new\') và Kho Tồn (\'stock\')', () => {
+    const products = [
+      { id: '1', name: 'Diều sáo 2.5m', warehouse: 'new', stock: 5 },
+      { id: '2', name: 'Pass khóa D7 D8', warehouse: 'stock', stock: 12 },
+      { id: '3', name: 'Diều lắp ghép', stock: 3 }, // Mặc định là 'new' nếu thiếu trường
+      { id: '4', name: 'Dây amiang 3.0', warehouse: 'stock', stock: 4 }
+    ];
+
+    const newWarehouseProducts = products.filter(p => (p.warehouse || 'new') === 'new');
+    const stockWarehouseProducts = products.filter(p => p.warehouse === 'stock');
+
+    assert.strictEqual(newWarehouseProducts.length, 2);
+    assert.strictEqual(stockWarehouseProducts.length, 2);
+  });
+
+  runTest('8.2. Chuyển đổi mặt hàng giữa 2 kho hàng', () => {
+    const product = { id: '1', name: 'Diều sáo 2 cánh', warehouse: 'new' };
+    const switchWarehouse = (p) => {
+      p.warehouse = (p.warehouse === 'stock') ? 'new' : 'stock';
+    };
+
+    switchWarehouse(product);
+    assert.strictEqual(product.warehouse, 'stock');
+
+    switchWarehouse(product);
+    assert.strictEqual(product.warehouse, 'new');
+  });
+
+  runTest('8.3. Excel Importer & Nhận diện tự động danh mục, đơn vị tính', () => {
+    assert.strictEqual(detectCategory('Nan carbon D7 D8'), 'Nan carbon & Nan diều');
+    assert.strictEqual(detectCategory('Pass inox 304'), 'Pass & Phụ kiện nối');
+    assert.strictEqual(detectCategory('Dây dù đan 2.5'), 'Cuộn guồng & Dây thả diều');
+    assert.strictEqual(detectCategory('Còi sáo D40'), 'Sáo diều & Âm thanh');
+
+    assert.strictEqual(detectUnit('Dây dù cuộn 500m'), 'Cuộn');
+    assert.strictEqual(detectUnit('cáp quang 2ly mét'), 'Mét');
+    assert.strictEqual(detectUnit('Bộ còi sáo 35'), 'Bộ');
+    assert.strictEqual(detectUnit('Diều sáo đại trà'), 'Chiếc');
+  });
+
+  runTest('8.4. Nạp 69 mặt hàng mẫu chuẩn xác từ file Excel của người dùng', () => {
+    assert.strictEqual(SAMPLE_STOCK_INVENTORY.length, 69);
+    const nanXoan = SAMPLE_STOCK_INVENTORY.find(i => i.name === 'Nan đen xoắn 85cm');
+    assert.ok(nanXoan, 'Phải có sản phẩm Nan đen xoắn 85cm');
+    assert.strictEqual(nanXoan.stock, 4);
+    assert.strictEqual(nanXoan.costPrice, 11000);
+    assert.strictEqual(nanXoan.sellingPrice, 15000);
+
+    const dayAmiang = SAMPLE_STOCK_INVENTORY.find(i => i.name.includes('Dây amiang 1ly2'));
+    assert.ok(dayAmiang, 'Phải có sản phẩm Dây amiang 1ly2');
+    assert.strictEqual(dayAmiang.costPrice, 500000);
+    assert.strictEqual(dayAmiang.sellingPrice, 760000);
+
+    const boCoi = SAMPLE_STOCK_INVENTORY.find(i => i.name.includes('Pass inox 14'));
+    assert.ok(boCoi, 'Phải có Pass inox 14');
+    assert.strictEqual(boCoi.supplier, 'Duy Phương');
   });
 
   console.log('\n========================================================');

@@ -1,11 +1,13 @@
-// Quản lý sản phẩm (Diều & Phụ kiện - Mobile First)
+// Quản lý sản phẩm (Diều & Phụ kiện - Mobile First - Hỗ Trợ 2 Kho: Kho Mới & Kho Tồn)
 import { db } from '../db.js';
 import { formatVND, parseVND, compressImage, escapeHTML } from '../utils.js';
 import { PRODUCT_CATEGORIES, PRODUCT_UNITS } from '../config.js';
+import { parseStockArray2D, SAMPLE_STOCK_INVENTORY, detectCategory, detectUnit } from '../excel-importer.js';
 
 export class ProductModule {
   constructor(app) {
     this.app = app;
+    this.currentWarehouse = 'new'; // 'new' (Kho Mới) | 'stock' (Kho Tồn)
     this.currentCategory = 'all';
     this.stockFilter = 'all'; // 'all' | 'low' | 'out'
     this.searchQuery = '';
@@ -13,16 +15,22 @@ export class ProductModule {
 
   async render() {
     const container = document.getElementById('view-container');
-    const products = await db.getAll('products');
+    const allProducts = await db.getAll('products');
     const categories = await db.getCategories();
 
-    // Lọc theo tìm kiếm, danh mục và trạng thái tồn kho
-    const filtered = products.filter(p => {
+    // Phân tách 2 kho
+    const newProducts = allProducts.filter(p => p.warehouse !== 'stock');
+    const stockProducts = allProducts.filter(p => p.warehouse === 'stock');
+    const warehouseProducts = (this.currentWarehouse === 'stock') ? stockProducts : newProducts;
+
+    // Lọc theo tìm kiếm, danh mục và trạng thái tồn kho trong kho đang chọn
+    const filtered = warehouseProducts.filter(p => {
       const matchCat = this.currentCategory === 'all' || p.category === this.currentCategory;
       const q = this.searchQuery.toLowerCase().trim();
       const matchSearch = !q ||
         p.name.toLowerCase().includes(q) ||
         (p.code && p.code.toLowerCase().includes(q)) ||
+        (p.supplier && p.supplier.toLowerCase().includes(q)) ||
         (p.size && p.size.toLowerCase().includes(q)) ||
         (p.color && p.color.toLowerCase().includes(q));
 
@@ -44,31 +52,66 @@ export class ProductModule {
       return a.name.localeCompare(b.name, 'vi');
     });
 
-    const lowStockCount = products.filter(p => p.stock > 0 && p.stock <= (p.lowStockThreshold || 5)).length;
-    const outStockCount = products.filter(p => p.stock <= 0).length;
+    const lowStockCount = warehouseProducts.filter(p => p.stock > 0 && p.stock <= (p.lowStockThreshold || 5)).length;
+    const outStockCount = warehouseProducts.filter(p => p.stock <= 0).length;
 
     container.innerHTML = `
+      <!-- THANH CHUYỂN ĐỔI HAI KHO (KHO MỚI & KHO TỒN) -->
+      <div class="warehouse-tabs-bar mb-3">
+        <button class="warehouse-tab-btn ${this.currentWarehouse === 'new' ? 'active' : ''}" data-warehouse="new">
+          <span class="wh-tab-icon">✨</span>
+          <span class="wh-tab-title">Kho Mới</span>
+          <span class="wh-tab-badge badge ${this.currentWarehouse === 'new' ? 'badge-primary' : 'badge-light'}">${newProducts.length}</span>
+        </button>
+        <button class="warehouse-tab-btn ${this.currentWarehouse === 'stock' ? 'active' : ''}" data-warehouse="stock">
+          <span class="wh-tab-icon">📦</span>
+          <span class="wh-tab-title">Kho Tồn</span>
+          <span class="wh-tab-badge badge ${this.currentWarehouse === 'stock' ? 'badge-warning' : 'badge-light'}">${stockProducts.length}</span>
+        </button>
+      </div>
+
       <div class="view-header">
         <div class="header-title-row">
           <div>
-            <h1 class="view-title">🪁 Kho Diều & Phụ Kiện</h1>
-            <p class="view-subtitle">${products.length} sản phẩm • ${lowStockCount} sắp hết • ${outStockCount} hết hàng</p>
+            <h1 class="view-title">
+              ${this.currentWarehouse === 'stock' ? '📦 Kho Tồn Hàng & Phụ Kiện' : '✨ Kho Diều Mới'}
+            </h1>
+            <p class="view-subtitle">${warehouseProducts.length} mặt hàng • ${lowStockCount} sắp hết • ${outStockCount} hết hàng</p>
           </div>
-          <button id="btn-add-product" class="btn btn-primary btn-sm">
-            <span>+</span> Thêm Diều
-          </button>
+          <div class="d-flex gap-2">
+            ${this.currentWarehouse === 'stock' ? `
+              <button id="btn-import-stock-excel" class="btn btn-outline-success btn-sm" title="Đẩy file Excel hoặc CSV vào Kho Tồn">
+                <span>📥</span> Đẩy File Excel
+              </button>
+              <input type="file" id="stock-excel-file-input" accept=".xlsx, .xls, .csv" style="display:none">
+            ` : ''}
+            <button id="btn-add-product" class="btn btn-primary btn-sm">
+              <span>+</span> Thêm Mặt Hàng
+            </button>
+          </div>
         </div>
+
+        ${this.currentWarehouse === 'stock' ? `
+          <div class="stock-tools-bar mb-2 p-2 d-flex justify-between align-center flex-wrap gap-2">
+            <div class="text-xs text-muted">
+              💡 <b>Kho Tồn:</b> Nan, pass, sáo, dây, phụ kiện tồn kho. Bạn có thể đẩy file Excel lên bất cứ lúc nào.
+            </div>
+            <button id="btn-load-sample-stock-69" class="btn btn-outline-primary btn-xs" title="Nạp nhanh 69 mặt hàng phụ kiện từ file mẫu bạn gửi">
+              ⚡ Nạp 69 Mặt Hàng Mẫu
+            </button>
+          </div>
+        ` : ''}
 
         <!-- Tìm kiếm & Bộ lọc nhanh -->
         <div class="search-filter-bar">
           <div class="search-input-wrap">
-            <input type="text" id="product-search" class="form-input" placeholder="🔍 Tìm tên, mã, kích thước, màu..." value="${escapeHTML(this.searchQuery)}">
+            <input type="text" id="product-search" class="form-input" placeholder="🔍 Tìm tên, mã, kích thước, nhà cung cấp..." value="${escapeHTML(this.searchQuery)}">
             ${this.searchQuery ? `<button id="btn-clear-search" class="clear-search-btn">&times;</button>` : ''}
           </div>
 
           <!-- Lọc nhanh theo tồn kho -->
           <div class="category-tabs-scroll mb-2">
-            <button class="cat-pill ${this.stockFilter === 'all' ? 'active' : ''}" data-stock="all">Tất cả (${products.length})</button>
+            <button class="cat-pill ${this.stockFilter === 'all' ? 'active' : ''}" data-stock="all">Tất cả (${warehouseProducts.length})</button>
             <button class="cat-pill ${this.stockFilter === 'low' ? 'active' : ''}" data-stock="low">⚠️ Sắp hết (${lowStockCount})</button>
             <button class="cat-pill ${this.stockFilter === 'out' ? 'active' : ''}" data-stock="out">❌ Hết hàng (${outStockCount})</button>
           </div>
@@ -87,10 +130,21 @@ export class ProductModule {
       <div class="product-grid">
         ${filtered.length === 0 ? `
           <div class="empty-state" style="grid-column: 1 / -1;">
-            <p class="empty-icon">🪁</p>
-            <p class="empty-title">Không tìm thấy diều phù hợp</p>
-            <p class="empty-desc">Thử tìm từ khóa khác hoặc bấm nút dưới để thêm diều mới.</p>
-            <button id="btn-add-product-empty" class="btn btn-primary btn-sm">+ Thêm Diều Mới</button>
+            <p class="empty-icon">${this.currentWarehouse === 'stock' ? '📦' : '🪁'}</p>
+            <p class="empty-title">${this.currentWarehouse === 'stock' ? 'Kho Tồn Chưa Có Mặt Hàng Nào' : 'Không tìm thấy diều phù hợp'}</p>
+            <p class="empty-desc">${this.currentWarehouse === 'stock' ? 'Bạn có thể đẩy file Excel tồn kho lên hoặc nạp sẵn 69 mặt hàng mẫu từ file bạn cung cấp.' : 'Thử tìm từ khóa khác hoặc bấm nút thêm diều mới.'}</p>
+            <div class="d-flex justify-center gap-2 mt-2 flex-wrap">
+              ${this.currentWarehouse === 'stock' ? `
+                <button id="btn-trigger-upload-excel" class="btn btn-success btn-sm">
+                  <span>📥</span> Đẩy File Excel Lên
+                </button>
+                <button id="btn-trigger-sample-69" class="btn btn-primary btn-sm">
+                  <span>⚡</span> Nạp 69 Mặt Hàng Mẫu
+                </button>
+              ` : `
+                <button id="btn-add-product-empty" class="btn btn-primary btn-sm">+ Thêm Diều Mới</button>
+              `}
+            </div>
           </div>
         ` : filtered.map(p => {
           const isOut = p.stock <= 0;
@@ -102,6 +156,10 @@ export class ProductModule {
             `<span class="badge badge-warning low-stock-badge">Còn ${p.stock}</span>` :
             `<span class="badge badge-success stock-badge">Còn ${p.stock}</span>`;
 
+          const warehouseBadge = p.warehouse === 'stock' ?
+            `<span class="badge badge-warning text-xs" style="position:absolute; bottom:6px; left:6px;">📦 Kho Tồn</span>` :
+            `<span class="badge badge-primary-subtle text-xs" style="position:absolute; bottom:6px; left:6px;">✨ Kho Mới</span>`;
+
           return `
             <div class="product-card ${isLow || isOut ? 'card-warning' : ''}" data-id="${p.id}">
               <div class="product-thumb-wrap">
@@ -109,18 +167,19 @@ export class ProductModule {
                   <img src="${p.photo}" alt="${escapeHTML(p.name)}" class="product-thumb" loading="lazy">
                 ` : `
                   <div class="product-thumb-placeholder">
-                    <span>🪁</span>
+                    <span>${p.warehouse === 'stock' ? '📦' : '🪁'}</span>
                   </div>
                 `}
                 ${stockBadge}
+                ${warehouseBadge}
               </div>
 
               <div class="product-info">
-                <div class="product-category-tag">${escapeHTML(p.category || 'Diều')}</div>
+                <div class="product-category-tag">${escapeHTML(p.category || 'Phụ kiện diều')}</div>
                 <h3 class="product-name" title="${escapeHTML(p.name)}">${escapeHTML(p.name)}</h3>
                 <div class="product-code-meta">
                   <span class="meta-tag">Mã: ${escapeHTML(p.code || '---')}</span>
-                  ${p.size ? `<span class="meta-tag">KT: ${escapeHTML(p.size)}</span>` : ''}
+                  ${p.supplier ? `<span class="meta-tag text-primary">Nguồn: ${escapeHTML(p.supplier)}</span>` : ''}
                 </div>
                 <div class="product-price-row">
                   <div>
@@ -128,6 +187,9 @@ export class ProductModule {
                     <div class="cost-price-hint">Vốn: ${formatVND(p.costPrice)}</div>
                   </div>
                   <div class="product-card-actions">
+                    <button class="btn-icon btn-switch-warehouse" data-id="${p.id}" data-current="${p.warehouse || 'new'}" title="${p.warehouse === 'stock' ? 'Chuyển sang Kho Mới' : 'Chuyển sang Kho Tồn'}">
+                      ${p.warehouse === 'stock' ? '✨ Sang Mới' : '📦 Sang Tồn'}
+                    </button>
                     <button class="btn-icon btn-edit-product" data-id="${p.id}" title="Chỉnh sửa">✏️</button>
                     <button class="btn-icon btn-quick-sell" data-id="${p.id}" title="Thêm vào giỏ bán">⚡ Bán</button>
                   </div>
@@ -139,8 +201,8 @@ export class ProductModule {
       </div>
 
       <!-- Nút tròn nổi (FAB) ở góc dưới phải để thêm diều bằng ngón cái -->
-      <button class="fab-btn" id="btn-fab-add-product" title="Thêm diều mới">
-        <span>+ Thêm Diều</span>
+      <button class="fab-btn" id="btn-fab-add-product" title="Thêm mặt hàng mới">
+        <span>+ Thêm Hàng</span>
       </button>
     `;
 
@@ -148,6 +210,60 @@ export class ProductModule {
   }
 
   bindEvents() {
+    // Chuyển đổi giữa 2 Kho
+    document.querySelectorAll('[data-warehouse]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.currentWarehouse = btn.dataset.warehouse;
+        this.render();
+      });
+    });
+
+    // Chuyển nhanh 1 mặt hàng giữa Kho Mới và Kho Tồn
+    document.querySelectorAll('.btn-switch-warehouse').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const id = btn.dataset.id;
+        const currentWh = btn.dataset.current;
+        const targetWh = currentWh === 'stock' ? 'new' : 'stock';
+        const targetName = targetWh === 'stock' ? 'Kho Tồn' : 'Kho Mới';
+
+        const p = await db.getById('products', id);
+        if (p) {
+          p.warehouse = targetWh;
+          await db.put('products', p);
+          alert(`✅ Đã chuyển "${p.name}" sang ${targetName}!`);
+          this.render();
+        }
+      });
+    });
+
+    // Đẩy file Excel lên Kho Tồn
+    const importExcelBtn = document.getElementById('btn-import-stock-excel');
+    const triggerUploadBtn = document.getElementById('btn-trigger-upload-excel');
+    const fileInput = document.getElementById('stock-excel-file-input');
+
+    if (importExcelBtn && fileInput) {
+      importExcelBtn.addEventListener('click', () => fileInput.click());
+    }
+    if (triggerUploadBtn && fileInput) {
+      triggerUploadBtn.addEventListener('click', () => fileInput.click());
+    }
+    if (fileInput) {
+      fileInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          await this.handleExcelUpload(file);
+          fileInput.value = '';
+        }
+      });
+    }
+
+    // Nạp sẵn 69 mặt hàng mẫu
+    const sampleStockBtn = document.getElementById('btn-load-sample-stock-69');
+    const triggerSampleBtn = document.getElementById('btn-trigger-sample-69');
+    if (sampleStockBtn) sampleStockBtn.addEventListener('click', () => this.loadSampleStockProducts());
+    if (triggerSampleBtn) triggerSampleBtn.addEventListener('click', () => this.loadSampleStockProducts());
+
     const searchInput = document.getElementById('product-search');
     if (searchInput) {
       searchInput.addEventListener('input', (e) => {
@@ -217,6 +333,85 @@ export class ProductModule {
     });
   }
 
+  // ================= XỬ LÝ ĐẨY FILE EXCEL / CSV LÊN KHO TỒN =================
+  async handleExcelUpload(file) {
+    if (!file) return;
+    try {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const XLSX = window.XLSX;
+          if (!XLSX) {
+            alert('Thư viện đọc Excel chưa sẵn sàng!');
+            return;
+          }
+          const wb = XLSX.read(data, { type: 'array' });
+          const firstSheetName = wb.SheetNames[0];
+          const ws = wb.Sheets[firstSheetName];
+          const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+          const parsedProducts = parseStockArray2D(rows);
+          if (parsedProducts.length === 0) {
+            alert('Không tìm thấy dữ liệu mặt hàng hợp lệ trong file Excel/CSV!');
+            return;
+          }
+
+          const confirmed = confirm(
+            `📊 PHÁT HIỆN ${parsedProducts.length} MẶT HÀNG TRONG FILE:\n"${file.name}"\n\n` +
+            `Bạn có muốn GỘP THÊM toàn bộ danh sách này vào KHO TỒN không?\n` +
+            `(Hệ thống sẽ tự nhận diện tên, giá nhập, giá bán, số lượng và nhà cung cấp)`
+          );
+
+          if (confirmed) {
+            for (const p of parsedProducts) {
+              await db.put('products', p);
+            }
+            alert(`🎉 Đã đẩy thành công ${parsedProducts.length} mặt hàng vào Kho Tồn!`);
+            this.currentWarehouse = 'stock';
+            await this.render();
+          }
+        } catch (err) {
+          alert('Lỗi phân tích file Excel: ' + err.message);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    } catch (err) {
+      alert('Lỗi đọc file: ' + err.message);
+    }
+  }
+
+  // ================= NẠP NHANH 69 MẶT HÀNG TỪ FILE MẪU =================
+  async loadSampleStockProducts() {
+    if (confirm(`Bạn có muốn nạp nhanh 69 mặt hàng phụ kiện diều, nan, pass, sáo, dây từ file mẫu bạn gửi vào KHO TỒN không?`)) {
+      let count = 1;
+      for (const item of SAMPLE_STOCK_INVENTORY) {
+        const p = {
+          id: 'SP-STOCK-SAMPLE-' + Date.now() + '-' + (count++),
+          code: 'TON-' + String(count).padStart(3, '0'),
+          name: item.name,
+          warehouse: 'stock',
+          category: detectCategory(item.name),
+          unit: detectUnit(item.name),
+          size: '',
+          color: '',
+          stock: item.stock || 0,
+          costPrice: item.costPrice || 0,
+          sellingPrice: item.sellingPrice || 0,
+          lowStockThreshold: 3,
+          supplier: item.supplier || '',
+          importDate: item.importDate || '',
+          photo: '',
+          notes: item.supplier ? `Nguồn: ${item.supplier}` : 'Hàng nhập kho tồn'
+        };
+        await db.put('products', p);
+      }
+      alert('🎉 Đã nạp thành công 69 mặt hàng vào Kho Tồn!');
+      this.currentWarehouse = 'stock';
+      await this.render();
+    }
+  }
+
   async showProductModal(productId = null) {
     let product = null;
     let isEdit = false;
@@ -235,6 +430,7 @@ export class ProductModule {
         id: 'SP-' + Date.now(),
         code,
         name: '',
+        warehouse: this.currentWarehouse || 'new',
         category: categories[0] || 'Diều khí động học',
         size: '',
         color: '',
@@ -243,6 +439,7 @@ export class ProductModule {
         sellingPrice: 0,
         stock: 10,
         lowStockThreshold: 5,
+        supplier: '',
         photo: '',
         notes: ''
       };
@@ -284,6 +481,21 @@ export class ProductModule {
               <div class="form-group flex-1">
                 <label class="form-label">Mã diều</label>
                 <input type="text" id="p-code" class="form-input" placeholder="Tự sinh" value="${escapeHTML(product.code)}">
+              </div>
+            </div>
+
+            <!-- Phân loại Kho hàng & Nguồn nhập -->
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label class="form-label required">Kho lưu trữ</label>
+                <select id="p-warehouse" class="form-select">
+                  <option value="new" ${(product.warehouse || 'new') === 'new' ? 'selected' : ''}>✨ Kho Mới (Diều mới)</option>
+                  <option value="stock" ${product.warehouse === 'stock' ? 'selected' : ''}>📦 Kho Tồn (Phụ kiện / Hàng tồn)</option>
+                </select>
+              </div>
+              <div class="form-group flex-1">
+                <label class="form-label">Nguồn nhập / NCC</label>
+                <input type="text" id="p-supplier" class="form-input" placeholder="VD: Mai Ngọc, Huân nguyễn..." value="${escapeHTML(product.supplier || '')}">
               </div>
             </div>
 
@@ -465,10 +677,12 @@ export class ProductModule {
         ...product,
         name,
         code,
+        warehouse: document.getElementById('p-warehouse').value,
         category: document.getElementById('p-category').value,
         unit: document.getElementById('p-unit').value,
         size: document.getElementById('p-size').value.trim(),
         color: document.getElementById('p-color').value.trim(),
+        supplier: document.getElementById('p-supplier').value.trim(),
         sellingPrice,
         costPrice,
         stock,

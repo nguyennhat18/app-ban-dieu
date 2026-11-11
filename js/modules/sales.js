@@ -26,6 +26,7 @@ export class SalesModule {
     this.paymentMethod = 'cash'; // 'cash' | 'transfer' | 'debt' | 'partial'
     this.paidAmount = 0;
     this.searchProductQuery = '';
+    this.posWarehouse = 'all'; // 'all' | 'new' | 'stock'
     this.posCategory = 'all';
     this.orderFilterStatus = 'all';
     this.orderSearchQuery = '';
@@ -64,11 +65,15 @@ export class SalesModule {
     const shopSettings = (await db.getSetting('shop_info')) || {};
     const categories = await db.getCategories();
 
+    const newStockCount = products.filter(p => (p.warehouse || 'new') === 'new').length;
+    const stockWhCount = products.filter(p => p.warehouse === 'stock').length;
+
     const filteredProducts = products.filter(p => {
+      const matchWh = this.posWarehouse === 'all' || (p.warehouse || 'new') === this.posWarehouse;
       const matchCat = this.posCategory === 'all' || p.category === this.posCategory;
       const q = this.searchProductQuery.toLowerCase().trim();
       const matchQuery = !q || p.name.toLowerCase().includes(q) || (p.code && p.code.toLowerCase().includes(q));
-      return matchCat && matchQuery;
+      return matchWh && matchCat && matchQuery;
     });
 
     const totals = this.calculateTotals(shopSettings);
@@ -79,6 +84,19 @@ export class SalesModule {
         <!-- Khung danh mục diều -->
         <div class="pos-catalog-panel">
           <div class="search-filter-bar">
+            <!-- Phân loại Kho Mới / Kho Tồn trên POS -->
+            <div class="pos-warehouse-pill-row mb-2">
+              <button class="warehouse-filter-pill ${this.posWarehouse === 'all' ? 'active' : ''}" data-pos-wh="all">
+                🌐 Toàn bộ (${products.length})
+              </button>
+              <button class="warehouse-filter-pill ${this.posWarehouse === 'new' ? 'active' : ''}" data-pos-wh="new">
+                ✨ Kho Mới (${newStockCount})
+              </button>
+              <button class="warehouse-filter-pill ${this.posWarehouse === 'stock' ? 'active' : ''}" data-pos-wh="stock">
+                📦 Kho Tồn (${stockWhCount})
+              </button>
+            </div>
+
             <div class="search-input-wrap">
               <input type="text" id="pos-product-search" class="form-input" placeholder="🔍 Tìm tên, mã diều..." value="${escapeHTML(this.searchProductQuery)}">
               ${this.searchProductQuery ? `<button id="btn-clear-pos-search" class="clear-search-btn">&times;</button>` : ''}
@@ -103,6 +121,7 @@ export class SalesModule {
               const qtyInCart = inCartItem ? inCartItem.quantity : 0;
               const isOutOfStock = p.stock <= 0;
               const isLowStock = p.stock <= (p.lowStockThreshold || 5);
+              const isStockWh = p.warehouse === 'stock';
 
               return `
                 <div class="pos-item-card ${isOutOfStock ? 'out-of-stock' : ''}" data-id="${p.id}">
@@ -116,6 +135,9 @@ export class SalesModule {
                     <div class="pos-item-meta">
                       <span class="pos-stock-tag ${isOutOfStock ? 'text-danger text-bold' : isLowStock ? 'text-danger' : 'text-muted'}">
                         ${isOutOfStock ? 'Hết hàng' : `Tồn: ${p.stock}`}
+                      </span>
+                      <span class="pos-wh-badge ${isStockWh ? 'badge-stock' : 'badge-new'}">
+                        ${isStockWh ? '📦 Kho Tồn' : '✨ Mới'}
                       </span>
                       <span class="pos-item-price">${formatVND(p.sellingPrice)}</span>
                     </div>
@@ -523,6 +545,14 @@ export class SalesModule {
         this.render();
       });
     }
+
+    // Lọc theo Kho hàng POS (Kho Mới / Kho Tồn)
+    document.querySelectorAll('[data-pos-wh]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.posWarehouse = btn.dataset.posWh;
+        this.render();
+      });
+    });
 
     // Lọc danh mục POS
     document.querySelectorAll('.pos-catalog-panel .cat-pill').forEach(btn => {
