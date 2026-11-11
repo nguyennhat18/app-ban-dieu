@@ -353,6 +353,45 @@ async function main() {
     assert.strictEqual(boCoi.supplier, 'Duy Phương');
   });
 
+  runTest('8.5. Thao tác giỏ hàng: Thêm, tăng, giảm và xóa sản phẩm', () => {
+    let cart = [];
+    const addItem = (p) => {
+      const ex = cart.find(i => i.productId === p.id);
+      if (ex) {
+        ex.quantity += 1;
+        ex.subtotal = ex.quantity * ex.unitPrice;
+      } else {
+        cart.push({ productId: p.id, unitPrice: p.sellingPrice, quantity: 1, subtotal: p.sellingPrice });
+      }
+    };
+    const decItem = (productId) => {
+      const idx = cart.findIndex(i => i.productId === productId);
+      if (idx !== -1) {
+        if (cart[idx].quantity > 1) {
+          cart[idx].quantity -= 1;
+          cart[idx].subtotal = cart[idx].quantity * cart[idx].unitPrice;
+        } else {
+          cart.splice(idx, 1);
+        }
+      }
+    };
+
+    const p1 = { id: 'SP-1', sellingPrice: 200000 };
+    addItem(p1);
+    assert.strictEqual(cart.length, 1);
+    assert.strictEqual(cart[0].quantity, 1);
+
+    addItem(p1);
+    assert.strictEqual(cart[0].quantity, 2);
+    assert.strictEqual(cart[0].subtotal, 400000);
+
+    decItem('SP-1');
+    assert.strictEqual(cart[0].quantity, 1);
+
+    decItem('SP-1');
+    assert.strictEqual(cart.length, 0);
+  });
+
   console.log('\n========================================================');
   console.log(`🎉 KẾT QUẢ KIỂM THỬ: ${passedTests}/${totalTests} TESTS ĐẠT (100%)`);
   console.log('========================================================\n');

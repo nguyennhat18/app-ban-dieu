@@ -91,7 +91,7 @@ export class SettingsModule {
           <span class="tab-icon">🏷️</span> Loại Diều & Hàng (${products.length})
         </button>
         <button type="button" class="settings-pill-tab ${this.activeSettingSection === 'backup' ? 'active' : ''}" data-section="backup">
-          <span class="tab-icon">🛡️</span> Sao Lưu Dữ Liệu
+          <span class="tab-icon">📥</span> Nạp & Sao Lưu
         </button>
         <button type="button" class="settings-pill-tab ${this.activeSettingSection === 'guide' ? 'active' : ''}" data-section="guide">
           <span class="tab-icon">📲</span> Cài App & Trợ Giúp
@@ -246,6 +246,25 @@ export class SettingsModule {
 
       <!-- ================= MỤC 3: SAO LƯU DỮ LIỆU & BỘ NHỚ ================= -->
       <div id="settings-sec-backup" class="settings-section-pane" style="display: ${this.activeSettingSection === 'backup' ? 'block' : 'none'};">
+        
+        <!-- HỘP NẠP FILE SAO LƯU DỮ LIỆU NỔI BẬT DÀNH CHO MÁY MỚI / CHUYỂN MÁY -->
+        <div class="card p-3 mb-3 restore-featured-box" style="background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%); border: 2px dashed #0284c7; border-radius: 14px;">
+          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+            <div style="width: 44px; height: 44px; border-radius: 10px; background: #0284c7; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0;">
+              📥
+            </div>
+            <div>
+              <h3 class="text-bold text-primary" style="font-size: 15px; margin: 0 0 2px 0;">NẠP FILE SAO LƯU DỮ LIỆU VÀO MÁY NÀY</h3>
+              <p class="text-xs text-muted" style="margin: 0; line-height: 1.35;">
+                Nhận dữ liệu từ máy khác hoặc nạp lại bản sao lưu bạn đã cất trên <b>Zalo / Google Drive</b>.
+              </p>
+            </div>
+          </div>
+          <button type="button" class="btn btn-primary btn-block btn-lg" id="btn-featured-restore" style="font-weight: 700; font-size: 14px; padding: 12px; box-shadow: 0 3px 10px rgba(2, 132, 199, 0.3);">
+            📂 BẤM ĐỂ CHỌN FILE SAO LƯU (.JSON)
+          </button>
+        </div>
+
         <!-- Thẻ an toàn bộ nhớ -->
         <div class="card p-3 mb-3" style="background: linear-gradient(135deg, #f0fdf4 0%, #e0f2fe 100%); border: 1px solid #bae6fd;">
           <div class="d-flex justify-between align-center mb-2">
@@ -633,6 +652,13 @@ export class SettingsModule {
     }
 
     // Các nút Sao lưu / Khôi phục
+    const btnFeaturedRestore = document.getElementById('btn-featured-restore');
+    if (btnFeaturedRestore) {
+      btnFeaturedRestore.addEventListener('click', () => {
+        this.app.backupModule.promptRestoreFile();
+      });
+    }
+
     document.getElementById('btn-do-backup').addEventListener('click', () => {
       this.app.backupModule.exportBackupFile();
     });

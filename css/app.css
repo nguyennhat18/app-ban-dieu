@@ -1013,6 +1013,88 @@ input, textarea, select {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
+/* Nút Chọn Bán / Tăng Giảm trực tiếp ngay trên thẻ diều ngoài màn hình */
+.pos-card-action-bar {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border);
+}
+
+.btn-pos-add {
+  width: 100%;
+  padding: 7px 10px;
+  background: #f0f9ff;
+  color: #0284c7;
+  border: 1.5px solid #bae6fd;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.btn-pos-add:hover {
+  background: #0284c7;
+  color: #ffffff;
+}
+
+.btn-pos-add:disabled {
+  opacity: 0.45;
+  background: #f1f5f9;
+  color: #94a3b8;
+  border-color: #cbd5e1;
+  cursor: not-allowed;
+}
+
+.pos-card-qty-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f0fdf4;
+  border: 1.5px solid #86efac;
+  border-radius: var(--radius-sm);
+  padding: 3px;
+}
+
+.btn-card-qty-dec,
+.btn-card-qty-inc {
+  width: 28px;
+  height: 28px;
+  background: #ffffff;
+  border: 1px solid #bbf7d0;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #166534;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.1s;
+}
+
+.btn-card-qty-dec {
+  color: #dc2626;
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.btn-card-qty-dec:active,
+.btn-card-qty-inc:active {
+  transform: scale(0.9);
+}
+
+.card-qty-num {
+  font-size: 11px;
+  font-weight: 700;
+  color: #166534;
+  white-space: nowrap;
+}
+
 /* ================= BOTTOM SHEET GIỎ HÀNG (MOBILE DRAWER) ================= */
 .pos-cart-panel {
   background: var(--bg-card);
@@ -1036,12 +1118,14 @@ input, textarea, select {
     bottom: 0;
     left: 0;
     right: 0;
-    max-height: 88vh;
+    max-height: 90vh;
     border-radius: 20px 20px 0 0;
     z-index: 1500;
     box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.35);
     animation: drawerSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-    padding-bottom: calc(16px + var(--safe-bottom));
+    padding: 12px 14px calc(16px + var(--safe-bottom)) 14px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .drawer-backdrop {
@@ -1057,12 +1141,19 @@ input, textarea, select {
   }
 
   .drawer-handle-bar {
-    width: 36px;
+    width: 40px;
     height: 4px;
     background: #cbd5e1;
     border-radius: var(--radius-full);
     margin: 0 auto 10px auto;
   }
+}
+
+.drawer-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 6px;
 }
 
 @keyframes drawerSlideUp {
@@ -1107,12 +1198,10 @@ input, textarea, select {
 }
 
 .cart-items-list {
-  max-height: 220px;
-  overflow-y: auto;
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  padding: 6px 0;
-  margin-bottom: 10px;
+  max-height: none;
+  overflow: visible;
+  padding: 4px 0;
+  margin-bottom: 12px;
 }
 
 .cart-empty {
@@ -1125,64 +1214,132 @@ input, textarea, select {
   font-size: 36px;
 }
 
-.cart-item-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 0;
-  border-bottom: 1px dashed var(--border);
+/* Thẻ từng món trong giỏ hàng - Thiết kế thẻ rộng rãi, không bị dồn một khe nhỏ */
+.cart-item-card {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
 }
 
-.cart-item-info {
-  flex: 2;
+.cart-item-top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
 .cart-item-title {
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 700;
-  line-height: 1.25;
-}
-
-.cart-item-qty-wrap {
-  display: flex;
-  align-items: center;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-}
-
-.btn-qty-adj {
-  background: #f1f5f9;
-  border: none;
-  width: 30px;
-  height: 32px;
-  font-size: 16px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.input-item-qty {
-  width: 32px;
-  height: 32px;
-  text-align: center;
-  border: none;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.cart-item-subtotal {
+  color: #0f172a;
+  line-height: 1.35;
   flex: 1;
-  text-align: right;
-  font-size: 13px;
 }
 
 .btn-remove-cart-item {
+  background: #fef2f2;
+  border: 1px solid #fee2e2;
+  color: #dc2626;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+.btn-remove-cart-item:active {
+  transform: scale(0.92);
+  background: #fee2e2;
+}
+
+.cart-item-bottom-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.cart-item-unit-box {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cart-unit-price {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.cart-unit-text {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.btn-edit-line-price {
   background: none;
   border: none;
-  color: var(--danger);
-  font-size: 18px;
+  color: var(--primary);
+  font-size: 10.5px;
+  font-weight: 600;
   cursor: pointer;
-  margin-left: 4px;
+  padding: 0;
+  text-align: left;
+  text-decoration: underline;
+}
+
+/* Bộ chỉnh số lượng to bản cho ngón tay cái */
+.cart-item-stepper {
+  display: flex;
+  align-items: center;
+  background: #f8fafc;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.btn-stepper {
+  background: #ffffff;
+  border: none;
+  width: 36px;
+  height: 36px;
+  font-size: 16px;
+  font-weight: 800;
+  color: #0f172a;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.btn-stepper:active {
+  background: #e2e8f0;
+}
+
+.stepper-qty {
+  min-width: 32px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.cart-item-subtotal-box {
+  text-align: right;
+}
+
+.cart-subtotal-val {
+  font-size: 14.5px;
+  font-weight: 800;
+  color: var(--primary);
+  white-space: nowrap;
 }
 
 /* ================= CART SUMMARY ================= */

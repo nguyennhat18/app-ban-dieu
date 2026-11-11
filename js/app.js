@@ -258,6 +258,13 @@ class KiteApp {
     });
 
     // Lối tắt từ Header cố định trên cùng
+    const btnHeaderRestore = document.getElementById('btn-header-restore');
+    if (btnHeaderRestore) {
+      btnHeaderRestore.addEventListener('click', () => {
+        this.backupModule.promptRestoreFile();
+      });
+    }
+
     const btnHeaderInv = document.getElementById('btn-header-inventory');
     if (btnHeaderInv) btnHeaderInv.addEventListener('click', () => this.navigateTo('inventory'));
 

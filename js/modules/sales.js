@@ -144,6 +144,23 @@ export class SalesModule {
                         ${isOutOfStock ? '⚠️ Hết hàng' : `Kho còn: ${p.stock} ${escapeHTML(p.unit || '')}`}
                       </span>
                     </div>
+
+                    <!-- Nút thao tác Thêm / Xóa ngay trên thẻ mặt hàng -->
+                    <div class="pos-card-action-bar ${qtyInCart > 0 ? 'is-active' : ''}">
+                      ${qtyInCart === 0 ? `
+                        <button type="button" class="btn-pos-add" data-id="${p.id}" ${isOutOfStock ? 'disabled' : ''}>
+                          🛒 Chọn Bán
+                        </button>
+                      ` : `
+                        <div class="pos-card-qty-stepper">
+                          <button type="button" class="btn-card-qty-dec" data-id="${p.id}" title="${qtyInCart === 1 ? 'Xóa khỏi giỏ' : 'Bớt 1'}">
+                            ${qtyInCart === 1 ? '🗑️' : '−'}
+                          </button>
+                          <span class="card-qty-num">${qtyInCart} trong giỏ</span>
+                          <button type="button" class="btn-card-qty-inc" data-id="${p.id}" title="Thêm 1">+</button>
+                        </div>
+                      `}
+                    </div>
                   </div>
 
                   ${qtyInCart > 0 ? `
@@ -176,9 +193,21 @@ export class SalesModule {
           <!-- Thanh tay nắm trên Mobile -->
           <div class="drawer-handle-bar"></div>
           
-          <div class="d-flex justify-between align-center mb-2" style="display: flex; justify-content: space-between; align-items: center;">
-            <h3 class="text-bold" style="font-size: 16px;">🛒 Giỏ Hàng (${totalCartItems} món)</h3>
-            <button class="btn-icon btn-close-drawer" id="btn-close-drawer" style="border:none; font-size: 20px; color: #64748b; background: none; cursor: pointer;">&times;</button>
+          <div class="drawer-header-row mb-2">
+            <div>
+              <h3 class="text-bold" style="font-size: 16px; margin: 0; display: flex; align-items: center; gap: 6px;">
+                🛒 Giỏ Hàng <span class="badge badge-primary">${totalCartItems}</span>
+              </h3>
+              <div class="text-xs text-muted" style="margin-top: 2px;">Kiểm tra mặt hàng và tính tiền</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              ${this.cart.length > 0 ? `
+                <button type="button" class="btn btn-outline-danger btn-xs" id="btn-clear-cart" title="Xóa toàn bộ giỏ hàng">
+                  🗑️ Xóa hết
+                </button>
+              ` : ''}
+              <button class="btn-icon btn-close-drawer" id="btn-close-drawer" style="border:none; font-size: 24px; color: #64748b; background: none; cursor: pointer; padding: 0 4px; line-height: 1;">&times;</button>
+            </div>
           </div>
 
           <!-- Chọn khách hàng -->
@@ -210,27 +239,38 @@ export class SalesModule {
               <div class="cart-empty">
                 <span class="cart-empty-icon">🛒</span>
                 <p class="text-bold">Giỏ hàng đang trống</p>
-                <span class="cart-empty-hint text-xs">Chạm vào sản phẩm để thêm vào đơn</span>
+                <span class="cart-empty-hint text-xs">Bấm "🛒 Chọn Bán" trên sản phẩm để thêm vào đơn</span>
               </div>
             ` : this.cart.map((item, idx) => `
-              <div class="cart-item-row" data-idx="${idx}">
-                <div class="cart-item-info">
+              <div class="cart-item-card" data-idx="${idx}">
+                <!-- Dòng 1: Tên sản phẩm & Nút xóa rõ ràng -->
+                <div class="cart-item-top-row">
                   <div class="cart-item-title">${escapeHTML(item.productName)}</div>
-                  <div class="cart-item-price-edit">
-                    <input type="text" class="input-line-price form-input-xs" data-idx="${idx}" value="${formatVND(item.unitPrice)}" title="Chỉnh giá bán dòng này">
-                    <span class="text-muted text-xs">/${escapeHTML(item.unit || 'cái')}</span>
+                  <button type="button" class="btn-remove-cart-item" data-idx="${idx}" title="Xóa món này khỏi giỏ">
+                    🗑️ Xóa
+                  </button>
+                </div>
+
+                <!-- Dòng 2: Đơn giá, Bộ tăng giảm số lượng to rõ & Thành tiền -->
+                <div class="cart-item-bottom-row">
+                  <div class="cart-item-unit-box">
+                    <span class="cart-unit-price">${formatVND(item.unitPrice)}</span>
+                    <span class="cart-unit-text">/${escapeHTML(item.unit || 'chiếc')}</span>
+                    <button type="button" class="btn-edit-line-price" data-idx="${idx}" title="Chỉnh đơn giá món này">✏️ Đổi giá</button>
                   </div>
-                </div>
 
-                <div class="cart-item-qty-wrap">
-                  <button class="btn-qty-adj btn-qty-dec" data-idx="${idx}">-</button>
-                  <input type="number" class="input-item-qty" data-idx="${idx}" min="1" value="${item.quantity}">
-                  <button class="btn-qty-adj btn-qty-inc" data-idx="${idx}">+</button>
-                </div>
+                  <!-- Bộ chỉnh số lượng to bản cho ngón cái -->
+                  <div class="cart-item-stepper">
+                    <button type="button" class="btn-stepper btn-qty-dec" data-idx="${idx}" title="${item.quantity === 1 ? 'Xóa khỏi giỏ' : 'Bớt 1'}">
+                      ${item.quantity === 1 ? '🗑️' : '−'}
+                    </button>
+                    <span class="stepper-qty">${item.quantity}</span>
+                    <button type="button" class="btn-stepper btn-qty-inc" data-idx="${idx}" title="Thêm 1">+</button>
+                  </div>
 
-                <div class="cart-item-subtotal">
-                  <span class="text-bold">${formatVND(item.subtotal)}</span>
-                  <button class="btn-remove-cart-item" data-idx="${idx}" title="Xóa món này">&times;</button>
+                  <div class="cart-item-subtotal-box">
+                    <span class="cart-subtotal-val">${formatVND(item.subtotal)}</span>
+                  </div>
                 </div>
               </div>
             `).join('')}
@@ -477,6 +517,22 @@ export class SalesModule {
     this.render();
   }
 
+  decrementItemInCart(productId) {
+    const idx = this.cart.findIndex(i => i.productId === productId);
+    if (idx !== -1) {
+      if (this.cart[idx].quantity > 1) {
+        this.cart[idx].quantity -= 1;
+        this.cart[idx].subtotal = this.cart[idx].quantity * this.cart[idx].unitPrice;
+      } else {
+        this.cart.splice(idx, 1);
+        if (this.cart.length === 0) {
+          this.isDrawerOpen = false;
+        }
+      }
+      this.render();
+    }
+  }
+
   setCustomer(customer) {
     this.selectedCustomer = customer;
     this.render();
@@ -566,17 +622,58 @@ export class SalesModule {
       });
     });
 
-    // Thêm sản phẩm vào giỏ khi chạm card
+    // 1. Thao tác ngay trên thẻ sản phẩm (Thêm / Tăng / Giảm / Xóa)
+    document.querySelectorAll('.btn-pos-add').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const p = await db.getById('products', btn.dataset.id);
+        if (p) this.addItemToCart(p);
+      });
+    });
+
+    document.querySelectorAll('.btn-card-qty-inc').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const p = await db.getById('products', btn.dataset.id);
+        if (p) this.addItemToCart(p);
+      });
+    });
+
+    document.querySelectorAll('.btn-card-qty-dec').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        this.decrementItemInCart(btn.dataset.id);
+      });
+    });
+
+    // Chạm vào thân thẻ (nếu chưa có trong giỏ thì thêm vào giỏ)
     document.querySelectorAll('.pos-item-card').forEach(card => {
-      card.addEventListener('click', async () => {
+      card.addEventListener('click', async (e) => {
+        // Tránh trigger khi bấm các nút con
+        if (e.target.closest('.pos-card-action-bar')) return;
         const p = await db.getById('products', card.dataset.id);
         if (p) this.addItemToCart(p);
       });
     });
 
-    // Thao tác giỏ hàng
+    // 2. Thao tác bên trong Giỏ Hàng Drawer
+    // Nút xóa toàn bộ giỏ hàng
+    const clearCartBtn = document.getElementById('btn-clear-cart');
+    if (clearCartBtn) {
+      clearCartBtn.addEventListener('click', () => {
+        if (this.cart.length === 0) return;
+        if (confirm('Bạn có chắc muốn xóa sạch toàn bộ giỏ hàng này không?')) {
+          this.cart = [];
+          closeDrawer();
+          this.render();
+        }
+      });
+    }
+
+    // Tăng số lượng trong drawer
     document.querySelectorAll('.btn-qty-inc').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
         const idx = parseInt(btn.dataset.idx, 10);
         if (this.cart[idx]) {
           this.cart[idx].quantity += 1;
@@ -586,8 +683,10 @@ export class SalesModule {
       });
     });
 
+    // Giảm số lượng trong drawer (bấm khi là 1 sẽ xóa khỏi giỏ)
     document.querySelectorAll('.btn-qty-dec').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
         const idx = parseInt(btn.dataset.idx, 10);
         if (this.cart[idx]) {
           if (this.cart[idx].quantity > 1) {
@@ -602,41 +701,34 @@ export class SalesModule {
       });
     });
 
-    document.querySelectorAll('.input-item-qty').forEach(input => {
-      input.addEventListener('change', () => {
-        const idx = parseInt(input.dataset.idx, 10);
-        const val = parseInt(input.value, 10);
-        if (this.cart[idx]) {
-          if (val > 0) {
-            this.cart[idx].quantity = val;
-            this.cart[idx].subtotal = this.cart[idx].quantity * this.cart[idx].unitPrice;
-          } else {
-            this.cart.splice(idx, 1);
-            if (this.cart.length === 0) closeDrawer();
-          }
-          this.render();
-        }
-      });
-    });
-
-    document.querySelectorAll('.input-line-price').forEach(input => {
-      input.addEventListener('change', () => {
-        const idx = parseInt(input.dataset.idx, 10);
-        const val = parseVND(input.value);
-        if (this.cart[idx]) {
-          this.cart[idx].unitPrice = val;
-          this.cart[idx].subtotal = this.cart[idx].quantity * val;
-          this.render();
-        }
-      });
-    });
-
+    // Xóa 1 món trong drawer
     document.querySelectorAll('.btn-remove-cart-item').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
         const idx = parseInt(btn.dataset.idx, 10);
         this.cart.splice(idx, 1);
         if (this.cart.length === 0) closeDrawer();
         this.render();
+      });
+    });
+
+    // Đổi đơn giá từng dòng trong drawer
+    document.querySelectorAll('.btn-edit-line-price').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = parseInt(btn.dataset.idx, 10);
+        if (this.cart[idx]) {
+          const cur = this.cart[idx].unitPrice;
+          const input = prompt(`Nhập đơn giá mới cho "${this.cart[idx].productName}" (VNĐ):`, cur);
+          if (input !== null) {
+            const val = parseVND(input);
+            if (!isNaN(val) && val >= 0) {
+              this.cart[idx].unitPrice = val;
+              this.cart[idx].subtotal = this.cart[idx].quantity * val;
+              this.render();
+            }
+          }
+        }
       });
     });
 
