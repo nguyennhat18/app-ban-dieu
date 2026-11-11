@@ -76,6 +76,21 @@ export class SettingsModule {
         </div>
       </div>
 
+      <!-- LỐI TẮT NGHIỆP VỤ NHANH -->
+      <div class="card p-3 mb-3">
+        <h3 class="card-title">⚡ Lối Tắt Nghiệp Vụ</h3>
+        <div class="quick-shortcuts-grid">
+          <button id="btn-shortcut-reports" class="btn btn-outline-primary btn-block text-left" style="display:flex; align-items:center; justify-content:space-between; padding: 12px 14px; margin-bottom: 8px; font-weight:600;">
+            <span>📊 Báo Cáo Doanh Thu & Lợi Nhuận Gộp</span>
+            <span>➔</span>
+          </button>
+          <button id="btn-shortcut-inventory" class="btn btn-outline-secondary btn-block text-left" style="display:flex; align-items:center; justify-content:space-between; padding: 12px 14px; font-weight:600;">
+            <span>📦 Quản Lý Kho Diều, Nhập Hàng & Kiểm Kê</span>
+            <span>➔</span>
+          </button>
+        </div>
+      </div>
+
       <!-- KHỐI 1: SAO LƯU & KHÔI PHỤC DỮ LIỆU (Ưu tiên đưa lên đầu) -->
       <div class="card p-3 mb-3">
         <h3 class="card-title">🛡️ Sao Lưu & Khôi Phục Dữ Liệu</h3>
@@ -330,6 +345,17 @@ export class SettingsModule {
         alert('✓ Đã lưu cài đặt cửa hàng thành công!');
         this.app.updateHeaderBrand();
       });
+    }
+
+    // Lối tắt nghiệp vụ Báo cáo & Kho hàng
+    const btnShortcutReports = document.getElementById('btn-shortcut-reports');
+    if (btnShortcutReports) {
+      btnShortcutReports.addEventListener('click', () => this.app.navigateTo('reports'));
+    }
+
+    const btnShortcutInventory = document.getElementById('btn-shortcut-inventory');
+    if (btnShortcutInventory) {
+      btnShortcutInventory.addEventListener('click', () => this.app.navigateTo('inventory'));
     }
 
     // Các nút Sao lưu / Khôi phục

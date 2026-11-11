@@ -257,6 +257,16 @@ class KiteApp {
       });
     });
 
+    // Lối tắt từ Header cố định trên cùng
+    const btnHeaderInv = document.getElementById('btn-header-inventory');
+    if (btnHeaderInv) btnHeaderInv.addEventListener('click', () => this.navigateTo('inventory'));
+
+    const btnHeaderRep = document.getElementById('btn-header-reports');
+    if (btnHeaderRep) btnHeaderRep.addEventListener('click', () => this.navigateTo('reports'));
+
+    const btnHeaderSet = document.getElementById('btn-header-settings');
+    if (btnHeaderSet) btnHeaderSet.addEventListener('click', () => this.navigateTo('settings'));
+
     // Logo & tên shop click -> về màn hình Cài đặt
     const brandWrap = document.getElementById('header-brand-wrap');
     if (brandWrap) {

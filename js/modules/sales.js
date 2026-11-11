@@ -1,4 +1,4 @@
-// Quản lý Bán Hàng (POS, Tạo đơn, Trừ kho Transaction, Hủy đơn hoàn kho)
+// Quản lý Bán Hàng (POS, Tạo đơn, Trừ kho Transaction, Hủy đơn hoàn kho - Mobile Optimized)
 import { db } from '../db.js';
 import { formatVND, parseVND, formatDateTime, generateId, escapeHTML } from '../utils.js';
 import { PRODUCT_CATEGORIES } from '../config.js';
@@ -19,6 +19,7 @@ export class SalesModule {
     this.posCategory = 'all';
     this.orderFilterStatus = 'all';
     this.orderSearchQuery = '';
+    this.isDrawerOpen = false;
   }
 
   async render() {
@@ -28,12 +29,12 @@ export class SalesModule {
       <div class="view-header">
         <div class="header-title-row">
           <div>
-            <h1 class="view-title">⚡ Bán Hàng & Đơn Hàng</h1>
-            <p class="view-subtitle">Tạo đơn nhanh, tự động trừ tồn kho, quản lý đơn</p>
+            <h1 class="view-title">⚡ Bán Hàng (Thu Ngân)</h1>
+            <p class="view-subtitle">Chạm vào diều để thêm vào đơn bán nhanh</p>
           </div>
           <div class="header-tab-switch">
-            <button class="tab-switch-btn ${this.activeTab === 'pos' ? 'active' : ''}" id="tab-btn-pos">🛍️ Thu Ngân (POS)</button>
-            <button class="tab-switch-btn ${this.activeTab === 'orders' ? 'active' : ''}" id="tab-btn-orders">📋 Danh Sách Đơn</button>
+            <button class="tab-switch-btn ${this.activeTab === 'pos' ? 'active' : ''}" id="tab-btn-pos">🛍️ Bán Hàng</button>
+            <button class="tab-switch-btn ${this.activeTab === 'orders' ? 'active' : ''}" id="tab-btn-orders">📋 Đơn Hàng</button>
           </div>
         </div>
       </div>
@@ -60,18 +61,19 @@ export class SalesModule {
     });
 
     const totals = this.calculateTotals(shopSettings);
+    const totalCartItems = this.cart.reduce((s, i) => s + i.quantity, 0);
 
     return `
       <div class="pos-layout">
-        <!-- Khung bên trái: Chọn diều & Phụ kiện -->
+        <!-- Khung danh mục diều -->
         <div class="pos-catalog-panel">
           <div class="search-filter-bar">
             <div class="search-input-wrap">
-              <input type="text" id="pos-product-search" class="form-input" placeholder="🔍 Tìm nhanh diều để thêm vào đơn..." value="${escapeHTML(this.searchProductQuery)}">
+              <input type="text" id="pos-product-search" class="form-input" placeholder="🔍 Tìm tên, mã diều..." value="${escapeHTML(this.searchProductQuery)}">
               ${this.searchProductQuery ? `<button id="btn-clear-pos-search" class="clear-search-btn">&times;</button>` : ''}
             </div>
             <div class="category-tabs-scroll">
-              <button class="cat-pill ${this.posCategory === 'all' ? 'active' : ''}" data-cat="all">Tất cả</button>
+              <button class="cat-pill ${this.posCategory === 'all' ? 'active' : ''}" data-cat="all">Tất cả diều</button>
               ${PRODUCT_CATEGORIES.map(c => `
                 <button class="cat-pill ${this.posCategory === c ? 'active' : ''}" data-cat="${escapeHTML(c)}">${escapeHTML(c)}</button>
               `).join('')}
@@ -80,29 +82,35 @@ export class SalesModule {
 
           <div class="pos-product-grid">
             ${filteredProducts.length === 0 ? `
-              <div class="empty-state">
-                <p>Không có sản phẩm nào phù hợp.</p>
+              <div class="empty-state" style="grid-column: 1 / -1;">
+                <p class="empty-icon">🪁</p>
+                <p class="empty-title">Không tìm thấy diều nào</p>
+                <p class="empty-desc">Thử tìm tên khác hoặc vào mục Kho Diều để thêm mới.</p>
               </div>
             ` : filteredProducts.map(p => {
               const inCartItem = this.cart.find(i => i.productId === p.id);
               const qtyInCart = inCartItem ? inCartItem.quantity : 0;
               const isOutOfStock = p.stock <= 0;
+              const isLowStock = p.stock <= (p.lowStockThreshold || 5);
+
               return `
                 <div class="pos-item-card ${isOutOfStock ? 'out-of-stock' : ''}" data-id="${p.id}">
                   ${p.photo ? `
-                    <img src="${p.photo}" class="pos-item-img" alt="${escapeHTML(p.name)}">
+                    <img src="${p.photo}" class="pos-item-img" alt="${escapeHTML(p.name)}" loading="lazy">
                   ` : `
                     <div class="pos-item-img-placeholder">🪁</div>
                   `}
                   <div class="pos-item-body">
                     <div class="pos-item-name">${escapeHTML(p.name)}</div>
                     <div class="pos-item-meta">
-                      <span class="pos-stock-tag ${p.stock <= 3 ? 'text-danger' : ''}">Tồn: ${p.stock}</span>
+                      <span class="pos-stock-tag ${isOutOfStock ? 'text-danger text-bold' : isLowStock ? 'text-danger' : 'text-muted'}">
+                        ${isOutOfStock ? 'Hết hàng' : `Tồn: ${p.stock}`}
+                      </span>
                       <span class="pos-item-price">${formatVND(p.sellingPrice)}</span>
                     </div>
                   </div>
                   ${qtyInCart > 0 ? `
-                    <div class="pos-item-badge">${qtyInCart}</div>
+                    <div class="pos-item-badge">+${qtyInCart}</div>
                   ` : ''}
                 </div>
               `;
@@ -110,25 +118,49 @@ export class SalesModule {
           </div>
         </div>
 
-        <!-- Khung bên phải (hoặc Mobile Drawer): Giỏ hàng & Thanh toán -->
-        <div class="pos-cart-panel">
+        <!-- Thanh Nổi Giỏ Hàng Mobile (Chạm mở Drawer) -->
+        ${this.cart.length > 0 ? `
+          <div class="floating-cart-bar" id="floating-cart-bar">
+            <div class="floating-cart-info">
+              <span class="floating-cart-badge">${totalCartItems}</span>
+              <div>
+                <div class="text-xs" style="color: #94a3b8">Giỏ hàng:</div>
+                <div class="floating-cart-total">${formatVND(totals.totalAmount)}</div>
+              </div>
+            </div>
+            <button class="btn btn-success btn-sm" id="btn-open-drawer">
+              <span>🛒 Xem Giỏ & Bán ➔</span>
+            </button>
+          </div>
+        ` : ''}
+
+        <!-- Khung Giỏ hàng & Thanh toán (Desktop: Cột bên phải, Mobile: Bottom Sheet Drawer) -->
+        <div class="pos-cart-panel ${this.isDrawerOpen ? 'drawer-open' : ''}" id="pos-cart-panel">
+          <!-- Thanh tay nắm trên Mobile -->
+          <div class="drawer-handle-bar"></div>
+          
+          <div class="d-flex justify-between align-center mb-2" style="display: flex; justify-content: space-between; align-items: center;">
+            <h3 class="text-bold" style="font-size: 16px;">🛒 Giỏ Hàng (${totalCartItems} món)</h3>
+            <button class="btn-icon btn-close-drawer" id="btn-close-drawer" style="border:none; font-size: 20px; color: #64748b; background: none; cursor: pointer;">&times;</button>
+          </div>
+
           <!-- Chọn khách hàng -->
           <div class="cart-customer-box">
             <div class="cart-customer-header">
               <span class="cart-box-title">👤 Khách hàng:</span>
               <button id="btn-change-customer" class="btn btn-outline-primary btn-xs">
-                ${this.selectedCustomer ? 'Đổi khách' : 'Chọn khách'}
+                ${this.selectedCustomer ? 'Đổi' : '+ Chọn khách'}
               </button>
             </div>
             <div class="cart-customer-info">
               ${this.selectedCustomer ? `
                 <div class="selected-customer-pill">
                   <span class="name text-bold">${escapeHTML(this.selectedCustomer.name)}</span>
-                  ${this.selectedCustomer.phone ? `<span class="phone">📞 ${escapeHTML(this.selectedCustomer.phone)}</span>` : ''}
-                  <button id="btn-remove-selected-cust" class="btn-remove-cust">&times;</button>
+                  ${this.selectedCustomer.phone ? `<span class="phone text-muted text-xs">📞 ${escapeHTML(this.selectedCustomer.phone)}</span>` : ''}
+                  <button id="btn-remove-selected-cust" class="btn-remove-cust" title="Hủy chọn">&times;</button>
                 </div>
               ` : `
-                <div class="customer-walkin-pill">
+                <div class="customer-walkin-pill text-muted text-xs">
                   <span>Khách lẻ (vãng lai)</span>
                 </div>
               `}
@@ -140,8 +172,8 @@ export class SalesModule {
             ${this.cart.length === 0 ? `
               <div class="cart-empty">
                 <span class="cart-empty-icon">🛒</span>
-                <p>Giỏ hàng đang trống</p>
-                <span class="cart-empty-hint">Chạm vào sản phẩm bên trái để thêm vào đơn</span>
+                <p class="text-bold">Giỏ hàng đang trống</p>
+                <span class="cart-empty-hint text-xs">Chạm vào sản phẩm để thêm vào đơn</span>
               </div>
             ` : this.cart.map((item, idx) => `
               <div class="cart-item-row" data-idx="${idx}">
@@ -161,7 +193,7 @@ export class SalesModule {
 
                 <div class="cart-item-subtotal">
                   <span class="text-bold">${formatVND(item.subtotal)}</span>
-                  <button class="btn-remove-cart-item" data-idx="${idx}" title="Xóa dòng">&times;</button>
+                  <button class="btn-remove-cart-item" data-idx="${idx}" title="Xóa món này">&times;</button>
                 </div>
               </div>
             `).join('')}
@@ -171,7 +203,7 @@ export class SalesModule {
           ${this.cart.length > 0 ? `
             <div class="cart-summary-box">
               <div class="summary-line">
-                <span>Tiền hàng (${this.cart.reduce((s, i) => s + i.quantity, 0)} món):</span>
+                <span>Tiền hàng:</span>
                 <span class="text-bold">${formatVND(totals.itemsTotal)}</span>
               </div>
 
@@ -188,7 +220,7 @@ export class SalesModule {
               </div>
 
               <div class="summary-line">
-                <span>Phí vận chuyển:</span>
+                <span>Phí ship:</span>
                 <input type="number" id="input-shipping-fee" class="form-input-sm text-right" style="width: 100px" value="${this.shippingFee || ''}" placeholder="0 ₫">
               </div>
 
@@ -200,28 +232,28 @@ export class SalesModule {
               ` : ''}
 
               <div class="summary-line total-highlight">
-                <span class="total-lbl">TỔNG CỘNG:</span>
+                <span class="total-lbl text-bold">TỔNG CỘNG:</span>
                 <span class="total-val text-primary text-bold">${formatVND(totals.totalAmount)}</span>
               </div>
 
               <!-- Hình thức thanh toán -->
               <div class="payment-method-selector">
-                <label class="form-label-xs">Hình thức thanh toán:</label>
+                <label class="form-label-xs">Phương thức thanh toán:</label>
                 <div class="payment-pills">
                   <button class="pay-pill ${this.paymentMethod === 'cash' ? 'active' : ''}" data-method="cash">💵 Tiền mặt</button>
                   <button class="pay-pill ${this.paymentMethod === 'transfer' ? 'active' : ''}" data-method="transfer">🏦 Chuyển khoản</button>
                   <button class="pay-pill ${this.paymentMethod === 'debt' ? 'active' : ''}" data-method="debt">📝 Ghi nợ</button>
-                  <button class="pay-pill ${this.paymentMethod === 'partial' ? 'active' : ''}" data-method="partial">💳 Trả một phần</button>
+                  <button class="pay-pill ${this.paymentMethod === 'partial' ? 'active' : ''}" data-method="partial">💳 Trả 1 phần</button>
                 </div>
               </div>
 
               ${this.paymentMethod === 'partial' ? `
-                <div class="partial-pay-box">
+                <div class="partial-pay-box card p-2 bg-light mt-1">
                   <div class="summary-line">
                     <span>Khách trả trước:</span>
                     <input type="number" id="input-paid-amount" class="form-input-sm text-right" style="width: 120px" value="${this.paidAmount || 0}">
                   </div>
-                  <div class="summary-line text-danger">
+                  <div class="summary-line text-danger mt-1">
                     <span>Ghi nợ lại:</span>
                     <span class="text-bold">${formatVND(Math.max(0, totals.totalAmount - this.paidAmount))}</span>
                   </div>
@@ -229,7 +261,7 @@ export class SalesModule {
               ` : ''}
 
               <!-- Ghi chú đơn -->
-              <div class="form-group mb-2 mt-2">
+              <div class="form-group mb-1 mt-1">
                 <input type="text" id="input-order-notes" class="form-input-sm" placeholder="Ghi chú đơn hàng (nếu có)..." value="${escapeHTML(this.notes)}">
               </div>
 
@@ -263,7 +295,7 @@ export class SalesModule {
       <div class="orders-view-panel">
         <div class="search-filter-bar">
           <div class="search-input-wrap">
-            <input type="text" id="order-search" class="form-input" placeholder="🔍 Tìm theo mã đơn, tên khách, SĐT..." value="${escapeHTML(this.orderSearchQuery)}">
+            <input type="text" id="order-search" class="form-input" placeholder="🔍 Tìm theo mã đơn, khách, SĐT..." value="${escapeHTML(this.orderSearchQuery)}">
             ${this.orderSearchQuery ? `<button id="btn-clear-order-search" class="clear-search-btn">&times;</button>` : ''}
           </div>
           <div class="category-tabs-scroll">
@@ -285,8 +317,8 @@ export class SalesModule {
               <div class="order-card ${isCancelled ? 'card-cancelled' : ''}" data-id="${o.id}">
                 <div class="order-card-top">
                   <div>
-                    <span class="order-id-badge">${escapeHTML(o.id)}</span>
-                    <span class="order-time text-muted">${formatDateTime(o.createdAt)}</span>
+                    <span class="order-id-badge text-bold">${escapeHTML(o.id)}</span>
+                    <span class="order-time text-muted text-xs ml-2">${formatDateTime(o.createdAt)}</span>
                   </div>
                   <div>
                     ${isCancelled ? `
@@ -300,17 +332,17 @@ export class SalesModule {
                 </div>
 
                 <div class="order-card-mid">
-                  <div class="order-customer-line">
+                  <div class="order-customer-line text-sm">
                     <b>${escapeHTML(o.customerName || 'Khách lẻ')}</b>
                     ${o.customerPhone ? `<span class="text-muted ml-2">📞 ${escapeHTML(o.customerPhone)}</span>` : ''}
                   </div>
-                  <div class="order-items-snippet">
+                  <div class="order-items-snippet text-xs text-muted mt-1">
                     ${(o.items || []).map(i => `${escapeHTML(i.productName)} (x${i.quantity})`).join(', ')}
                   </div>
                 </div>
 
                 <div class="order-card-bottom">
-                  <div class="order-pay-info">
+                  <div class="order-pay-info text-xs">
                     <span>${o.paymentMethod === 'cash' ? '💵 Tiền mặt' : o.paymentMethod === 'transfer' ? '🏦 Chuyển khoản' : '📝 Ghi nợ'}</span>
                   </div>
                   <div class="order-total-price">
@@ -318,8 +350,8 @@ export class SalesModule {
                   </div>
                 </div>
 
-                <div class="order-card-actions">
-                  <button class="btn btn-outline-primary btn-xs btn-view-order-detail" data-id="${o.id}">👁️ Xem chi tiết</button>
+                <div class="order-card-actions mt-2" style="display:flex; justify-content: flex-end; gap:6px;">
+                  <button class="btn btn-outline-primary btn-xs btn-view-order-detail" data-id="${o.id}">👁️ Hóa đơn</button>
                   ${!isCancelled ? `
                     <button class="btn btn-outline-danger btn-xs btn-cancel-order" data-id="${o.id}">❌ Hủy đơn & hoàn kho</button>
                   ` : ''}
@@ -388,7 +420,6 @@ export class SalesModule {
   }
 
   bindCommonEvents() {
-    // Chuyển Tab
     const tabPos = document.getElementById('tab-btn-pos');
     const tabOrders = document.getElementById('tab-btn-orders');
     if (tabPos) {
@@ -412,6 +443,34 @@ export class SalesModule {
   }
 
   bindPosEvents() {
+    // Mở / Đóng Drawer giỏ hàng trên Mobile
+    const openDrawerBtn = document.getElementById('btn-open-drawer');
+    const closeDrawerBtn = document.getElementById('btn-close-drawer');
+    const cartPanel = document.getElementById('pos-cart-panel');
+
+    const openDrawer = () => {
+      this.isDrawerOpen = true;
+      if (cartPanel) cartPanel.classList.add('drawer-open');
+      let backdrop = document.getElementById('cart-drawer-backdrop');
+      if (!backdrop) {
+        backdrop = document.createElement('div');
+        backdrop.id = 'cart-drawer-backdrop';
+        backdrop.className = 'drawer-backdrop';
+        document.body.appendChild(backdrop);
+        backdrop.addEventListener('click', closeDrawer);
+      }
+    };
+
+    const closeDrawer = () => {
+      this.isDrawerOpen = false;
+      if (cartPanel) cartPanel.classList.remove('drawer-open');
+      const backdrop = document.getElementById('cart-drawer-backdrop');
+      if (backdrop) backdrop.remove();
+    };
+
+    if (openDrawerBtn) openDrawerBtn.addEventListener('click', openDrawer);
+    if (closeDrawerBtn) closeDrawerBtn.addEventListener('click', closeDrawer);
+
     // Tìm sản phẩm
     const searchInput = document.getElementById('pos-product-search');
     if (searchInput) {
@@ -436,7 +495,7 @@ export class SalesModule {
       });
     });
 
-    // Thêm sản phẩm vào giỏ
+    // Thêm sản phẩm vào giỏ khi chạm card
     document.querySelectorAll('.pos-item-card').forEach(card => {
       card.addEventListener('click', async () => {
         const p = await db.getById('products', card.dataset.id);
@@ -465,6 +524,7 @@ export class SalesModule {
             this.cart[idx].subtotal = this.cart[idx].quantity * this.cart[idx].unitPrice;
           } else {
             this.cart.splice(idx, 1);
+            if (this.cart.length === 0) closeDrawer();
           }
           this.render();
         }
@@ -481,6 +541,7 @@ export class SalesModule {
             this.cart[idx].subtotal = this.cart[idx].quantity * this.cart[idx].unitPrice;
           } else {
             this.cart.splice(idx, 1);
+            if (this.cart.length === 0) closeDrawer();
           }
           this.render();
         }
@@ -503,6 +564,7 @@ export class SalesModule {
       btn.addEventListener('click', () => {
         const idx = parseInt(btn.dataset.idx, 10);
         this.cart.splice(idx, 1);
+        if (this.cart.length === 0) closeDrawer();
         this.render();
       });
     });
@@ -591,8 +653,11 @@ export class SalesModule {
     const totals = this.calculateTotals(shopSettings);
     const totalEl = document.querySelector('.total-val');
     const completeBtnSpan = document.querySelector('#btn-complete-order span');
+    const floatingTotalEl = document.querySelector('.floating-cart-total');
+
     if (totalEl) totalEl.textContent = formatVND(totals.totalAmount);
     if (completeBtnSpan) completeBtnSpan.textContent = `✓ HOÀN TẤT ĐƠN (${formatVND(totals.totalAmount)})`;
+    if (floatingTotalEl) floatingTotalEl.textContent = formatVND(totals.totalAmount);
   }
 
   bindOrdersEvents() {
@@ -643,7 +708,7 @@ export class SalesModule {
   // ================= HOÀN TẤT ĐƠN & TRỪ TỒN KHO TRANSACTION =================
   async handleCompleteOrder() {
     if (this.cart.length === 0) {
-      alert('Giỏ hàng trống! Vui lòng chọn sản phẩm.');
+      alert('Giỏ hàng trống! Vui lòng chọn diều.');
       return;
     }
 
@@ -711,8 +776,7 @@ export class SalesModule {
       isDeleted: false
     };
 
-    // 3. THỰC HIỆN TRANSACTION AN TOÀN TRÊN NHIỀU BẢNG:
-    // ['orders', 'products', 'inventory_logs', 'settings']
+    // 3. THỰC HIỆN TRANSACTION AN TOÀN TRÊN NHIỀU BẢNG
     try {
       await db.runTransaction(
         ['orders', 'products', 'inventory_logs', 'settings'],
@@ -722,10 +786,8 @@ export class SalesModule {
           const productStore = tx.objectStore('products');
           const invLogStore = tx.objectStore('inventory_logs');
 
-          // Lưu đơn hàng
           orderStore.put(orderRecord);
 
-          // Trừ tồn kho & ghi lịch sử kho từng món
           for (const item of this.cart) {
             const prodReq = productStore.get(item.productId);
             prodReq.onsuccess = () => {
@@ -737,7 +799,6 @@ export class SalesModule {
                 product.updatedAt = now;
                 productStore.put(product);
 
-                // Ghi nhận biến động kho
                 invLogStore.put({
                   id: 'LOG-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
                   productId: product.id,
@@ -757,7 +818,12 @@ export class SalesModule {
         }
       );
 
-      // Đơn hàng thành công -> Reset giỏ hàng
+      // Đóng drawer nếu mở
+      this.isDrawerOpen = false;
+      const backdrop = document.getElementById('cart-drawer-backdrop');
+      if (backdrop) backdrop.remove();
+
+      // Reset giỏ hàng
       this.cart = [];
       this.selectedCustomer = null;
       this.discountValue = 0;
@@ -766,7 +832,7 @@ export class SalesModule {
       this.paidAmount = 0;
       this.paymentMethod = 'cash';
 
-      alert(`🎉 Đã tạo đơn hàng ${orderId} thành công!\nTồn kho đã được tự động cập nhật.`);
+      alert(`🎉 Đã tạo đơn hàng ${orderId} thành công!\nTồn kho đã được tự động trừ.`);
       this.showOrderDetailModal(orderId);
       this.render();
     } catch (err) {
@@ -784,7 +850,7 @@ export class SalesModule {
     }
 
     const reason = prompt(`Nhập lý do hủy đơn "${orderId}":`, 'Khách đổi ý trả hàng');
-    if (reason === null) return; // Bấm cancel prompt
+    if (reason === null) return;
 
     const now = new Date().toISOString();
 
@@ -797,14 +863,12 @@ export class SalesModule {
           const productStore = tx.objectStore('products');
           const invLogStore = tx.objectStore('inventory_logs');
 
-          // Cập nhật trạng thái đơn
           order.status = 'cancelled';
           order.cancelledAt = now;
           order.cancelReason = reason || 'Hủy đơn';
-          order.debtAmount = 0; // Xóa nợ phát sinh từ đơn này
+          order.debtAmount = 0;
           orderStore.put(order);
 
-          // Hoàn tồn kho các mặt hàng
           for (const item of (order.items || [])) {
             const prodReq = productStore.get(item.productId);
             prodReq.onsuccess = () => {
@@ -816,7 +880,6 @@ export class SalesModule {
                 product.updatedAt = now;
                 productStore.put(product);
 
-                // Ghi nhận biến động hoàn kho
                 invLogStore.put({
                   id: 'LOG-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
                   productId: product.id,
@@ -843,7 +906,7 @@ export class SalesModule {
     }
   }
 
-  // Modal chọn khách hàng cho giỏ hàng
+  // Modal chọn khách hàng
   async showCustomerSelectModal() {
     const customers = await db.getAll('customers');
     const modalHtml = `
@@ -855,13 +918,13 @@ export class SalesModule {
           </div>
           <div class="modal-body">
             <input type="text" id="cust-select-search" class="form-input mb-3" placeholder="🔍 Gõ tên hoặc SĐT khách...">
-            <div class="customer-picker-list" id="cust-picker-container">
-              <div class="picker-item-walkin" id="pick-walkin">
-                <b>Khách lẻ (vãng lai)</b>
-                <span class="text-muted text-xs">Không lưu công nợ</span>
+            <div class="customer-picker-list" id="cust-picker-container" style="display:flex; flex-direction:column; gap:6px;">
+              <div class="picker-item-walkin card p-2 bg-light" id="pick-walkin" style="cursor:pointer;">
+                <b class="text-primary">Khách lẻ (vãng lai)</b>
+                <div class="text-muted text-xs">Không lưu công nợ</div>
               </div>
               ${customers.map(c => `
-                <div class="picker-item-cust" data-id="${c.id}">
+                <div class="picker-item-cust card p-2" data-id="${c.id}" style="cursor:pointer;">
                   <div class="text-bold">${escapeHTML(c.name)}</div>
                   <div class="text-muted text-xs">${c.phone ? `📞 ${escapeHTML(c.phone)}` : ''} ${c.address ? `• 📍 ${escapeHTML(c.address)}` : ''}</div>
                 </div>
@@ -915,7 +978,7 @@ export class SalesModule {
     });
   }
 
-  // Modal xem chi tiết hóa đơn
+  // Modal hóa đơn
   async showOrderDetailModal(orderId) {
     const order = await db.getById('orders', orderId);
     if (!order) return;
@@ -937,12 +1000,12 @@ export class SalesModule {
             <div class="receipt-header text-center">
               ${shopSettings.logo ? `<img src="${shopSettings.logo}" class="receipt-logo" alt="Logo">` : ''}
               <h2 class="receipt-shop-name">${escapeHTML(shopSettings.shopName || 'CỬA HÀNG DIỀU')}</h2>
-              <p class="receipt-shop-meta">${escapeHTML(shopSettings.address || '')}</p>
-              <p class="receipt-shop-meta">Hotline: ${escapeHTML(shopSettings.phone || '')}</p>
-              <div class="receipt-divider">================================</div>
+              <p class="receipt-shop-meta text-xs">${escapeHTML(shopSettings.address || '')}</p>
+              <p class="receipt-shop-meta text-xs">Hotline: ${escapeHTML(shopSettings.phone || '')}</p>
+              <div class="receipt-divider text-muted">--------------------------------</div>
             </div>
 
-            <div class="receipt-meta-grid">
+            <div class="receipt-meta-grid text-xs mt-2 mb-2">
               <div><b>Khách hàng:</b> ${escapeHTML(order.customerName || 'Khách lẻ')}</div>
               <div><b>Ngày:</b> ${formatDateTime(order.createdAt)}</div>
               ${order.customerPhone ? `<div><b>SĐT:</b> ${escapeHTML(order.customerPhone)}</div>` : ''}
@@ -970,7 +1033,7 @@ export class SalesModule {
               </tbody>
             </table>
 
-            <div class="receipt-totals">
+            <div class="receipt-totals text-sm">
               <div class="receipt-total-row">
                 <span>Tiền hàng:</span>
                 <span>${formatVND(order.subtotal)}</span>
@@ -1010,21 +1073,21 @@ export class SalesModule {
             </div>
 
             ${shopSettings.bankInfo ? `
-              <div class="receipt-bank-box">
+              <div class="receipt-bank-box card p-2 bg-light mt-2">
                 <div class="text-xs text-muted">Thông tin chuyển khoản:</div>
                 <div class="text-xs text-bold">${escapeHTML(shopSettings.bankInfo)}</div>
               </div>
             ` : ''}
 
-            <div class="receipt-footer text-center">
+            <div class="receipt-footer text-center mt-3 text-xs text-muted">
               <p>Cảm ơn quý khách và hẹn gặp lại! 🪁</p>
             </div>
           </div>
 
           <div class="modal-footer">
-            <button class="btn btn-outline-primary" id="btn-print-receipt">🖨️ In Hóa Đơn</button>
+            <button class="btn btn-outline-primary btn-sm" id="btn-print-receipt">🖨️ In Hóa Đơn</button>
             <div style="flex:1"></div>
-            <button class="btn btn-secondary" id="btn-close-odmodal2">Đóng</button>
+            <button class="btn btn-secondary btn-sm" id="btn-close-odmodal2">Đóng</button>
           </div>
         </div>
       </div>
