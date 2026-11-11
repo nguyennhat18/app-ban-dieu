@@ -11,6 +11,8 @@ import { DEFAULT_SHOP_SETTINGS } from '../config.js';
 export class SettingsModule {
   constructor(app) {
     this.app = app;
+    this.activeSettingSection = 'shop'; // 'shop' | 'catalog' | 'backup' | 'guide'
+    this.guidePlatform = 'ios'; // 'ios' | 'android'
     this.catalogTab = 'categories'; // 'categories' | 'products' | 'units'
     this.productSearchQuery = '';
     this.productCatFilter = 'all';
@@ -68,275 +70,355 @@ export class SettingsModule {
     const products = await db.getAll('products');
 
     container.innerHTML = `
-      <div class="view-header">
-        <h1 class="view-title">⚙️ Cài Đặt & An Toàn Dữ Liệu</h1>
-        <p class="view-subtitle">Cấu hình cửa hàng, sao lưu khôi phục và bảo vệ bộ nhớ</p>
-      </div>
-
-      <!-- CẢNH BÁO SỐNG CÒN VỀ DỮ LIỆU -->
-      <div class="vital-warning-banner">
-        <div class="warning-icon">⚠️</div>
-        <div class="warning-text">
-          <b>LƯU Ý QUAN TRỌNG VỀ BẢO VỆ DỮ LIỆU:</b><br>
-          Dữ liệu bán diều được lưu trực tiếp và duy nhất trong điện thoại này. Nếu bạn <b>đổi máy</b>, <b>gỡ app</b>, hoặc <b>xóa lịch sử duyệt web</b> mà chưa bấm Sao lưu thì dữ liệu sẽ bị mất. Hãy bấm <b>SAO LƯU</b> gửi file vào Zalo Cloud hoặc Google Drive ít nhất 1 lần mỗi tuần!
-        </div>
-      </div>
-
-      <!-- LỐI TẮT NGHIỆP VỤ NHANH -->
-      <div class="card p-3 mb-3">
-        <h3 class="card-title">⚡ Lối Tắt Nghiệp Vụ</h3>
-        <div class="quick-shortcuts-grid">
-          <button id="btn-shortcut-catalog" class="btn btn-outline-info btn-block text-left" style="display:flex; align-items:center; justify-content:space-between; padding: 12px 14px; margin-bottom: 8px; font-weight:600;">
-            <span>🏷️ Quản Lý Loại Diều & Sửa Mặt Hàng</span>
-            <span>➔</span>
-          </button>
-          <button id="btn-shortcut-reports" class="btn btn-outline-primary btn-block text-left" style="display:flex; align-items:center; justify-content:space-between; padding: 12px 14px; margin-bottom: 8px; font-weight:600;">
-            <span>📊 Báo Cáo Doanh Thu & Lợi Nhuận Gộp</span>
-            <span>➔</span>
-          </button>
-          <button id="btn-shortcut-inventory" class="btn btn-outline-secondary btn-block text-left" style="display:flex; align-items:center; justify-content:space-between; padding: 12px 14px; font-weight:600;">
-            <span>📦 Quản Lý Kho Diều, Nhập Hàng & Kiểm Kê</span>
-            <span>➔</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- KHỐI 1: SAO LƯU & KHÔI PHỤC DỮ LIỆU (Ưu tiên đưa lên đầu) -->
-      <div class="card p-3 mb-3">
-        <h3 class="card-title">🛡️ Sao Lưu & Khôi Phục Dữ Liệu</h3>
-        <p class="text-muted text-xs mb-3">
-          Sao lưu gần nhất: <b>${shop.lastBackupTime ? formatDateTime(shop.lastBackupTime) : 'Chưa sao lưu lần nào!'}</b>
-          ${shop.unbackedChangesCount > 0 ? `• <span class="text-danger text-bold">Có ${shop.unbackedChangesCount} thay đổi chưa sao lưu</span>` : ''}
-        </p>
-
-        <div class="backup-actions-grid">
-          <button id="btn-do-backup" class="btn btn-primary btn-block">
-            <span>💾 SAO LƯU DỮ LIỆU (Gửi Zalo / Drive)</span>
-          </button>
-          <button id="btn-do-restore" class="btn btn-outline-danger btn-block">
-            <span>🔄 Khôi Phục Dữ Liệu Từ File JSON</span>
-          </button>
-          <button id="btn-do-excel-all" class="btn btn-outline-success btn-block">
-            <span>📊 Xuất Toàn Bộ Dữ Liệu Ra Excel</span>
-          </button>
-          <button id="btn-open-trash" class="btn btn-secondary btn-block">
-            <span>🗑️ Mở Thùng Rác (Khôi Phục Xóa Mềm)</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- KHỐI 2: TRẠNG THÁI LƯU TRỮ BỀN VỮNG (STORAGE PERSIST) -->
-      <div class="card p-3 mb-3">
-        <h3 class="card-title">📱 Trạng Thái Lưu Trữ Trong Máy</h3>
-        <div class="storage-info-row">
+      <div class="view-header mb-2">
+        <div class="header-title-row">
           <div>
-            <div class="text-sm">Trạng thái bảo vệ bộ nhớ:</div>
-            ${this.storageStatus.isPersisted ? `
-              <span class="badge badge-success">🛡️ ĐÃ BẢO VỆ BỀN VỮNG (An toàn)</span>
-            ` : `
-              <span class="badge badge-warning">⚠️ CHƯA BẢO VỆ BỀN VỮNG</span>
-            `}
+            <h1 class="view-title">⚙️ Cài Đặt Ứng Dụng</h1>
+            <p class="view-subtitle">${escapeHTML(shop.shopName || 'Cửa hàng diều')} • Cấu hình & Dữ liệu</p>
           </div>
-          ${!this.storageStatus.isPersisted ? `
-            <button id="btn-request-persist" class="btn btn-outline-primary btn-sm">Bật Bảo Vệ</button>
-          ` : ''}
-        </div>
-        <div class="text-xs text-muted mt-2">
-          Dung lượng app đã dùng: <b>${this.storageStatus.usageMB} MB</b> / Hạn mức trình duyệt: <b>${this.storageStatus.quotaMB} MB</b>
+          <span class="badge ${this.storageStatus.isPersisted ? 'badge-success' : 'badge-warning'} text-xs">
+            ${this.storageStatus.isPersisted ? '🛡️ Bộ nhớ an toàn' : '⚠️ Bộ nhớ chưa khóa'}
+          </span>
         </div>
       </div>
 
-      <!-- KHỐI 3: QUẢN LÝ MẶT HÀNG, LOẠI DIỀU & ĐƠN VỊ TÍNH -->
-      <div class="card p-3 mb-3 border-primary-subtle" id="catalog-management-card">
-        <h3 class="card-title">🏷️ Quản Lý Loại Diều & Sửa Mặt Hàng</h3>
-        <p class="text-muted text-xs mb-3">
-          Tùy chỉnh phân loại diều, đổi tên mặt hàng tức thì và cấu hình đơn vị tính
-        </p>
-
-        <!-- Sub Tabs -->
-        <div class="catalog-tabs-bar mb-3">
-          <button type="button" class="catalog-tab-btn ${this.catalogTab === 'categories' ? 'active' : ''}" data-tab="categories">
-            🪁 Loại Diều (${categories.length})
-          </button>
-          <button type="button" class="catalog-tab-btn ${this.catalogTab === 'products' ? 'active' : ''}" data-tab="products">
-            📦 Sửa Mặt Hàng (${products.length})
-          </button>
-          <button type="button" class="catalog-tab-btn ${this.catalogTab === 'units' ? 'active' : ''}" data-tab="units">
-            📏 Đơn Vị Tính (${units.length})
-          </button>
-        </div>
-
-        <!-- Tab 1: Loại Diều -->
-        <div id="catalog-tab-content-categories" style="display: ${this.catalogTab === 'categories' ? 'block' : 'none'};">
-          ${this.renderCategoriesTabHtml(categories, products)}
-        </div>
-
-        <!-- Tab 2: Sửa Mặt Hàng -->
-        <div id="catalog-tab-content-products" style="display: ${this.catalogTab === 'products' ? 'block' : 'none'};">
-          ${this.renderProductsTabHtml(products, categories)}
-        </div>
-
-        <!-- Tab 3: Đơn Vị Tính -->
-        <div id="catalog-tab-content-units" style="display: ${this.catalogTab === 'units' ? 'block' : 'none'};">
-          ${this.renderUnitsTabHtml(units)}
-        </div>
+      <!-- THANH ĐIỀU HƯỚNG TAB PHÂN NHÓM HIỆN ĐẠI (SEGMENTED TABS) -->
+      <div class="settings-tabs-scroll">
+        <button type="button" class="settings-pill-tab ${this.activeSettingSection === 'shop' ? 'active' : ''}" data-section="shop">
+          <span class="tab-icon">🏪</span> Cửa Hàng & QR
+        </button>
+        <button type="button" class="settings-pill-tab ${this.activeSettingSection === 'catalog' ? 'active' : ''}" data-section="catalog">
+          <span class="tab-icon">🏷️</span> Loại Diều & Hàng (${products.length})
+        </button>
+        <button type="button" class="settings-pill-tab ${this.activeSettingSection === 'backup' ? 'active' : ''}" data-section="backup">
+          <span class="tab-icon">🛡️</span> Sao Lưu Dữ Liệu
+        </button>
+        <button type="button" class="settings-pill-tab ${this.activeSettingSection === 'guide' ? 'active' : ''}" data-section="guide">
+          <span class="tab-icon">📲</span> Cài App & Trợ Giúp
+        </button>
       </div>
 
-      <!-- KHỐI 4: BẢN CHỤP HÀNG NGÀY NỘI BỘ (DISASTER RECOVERY) -->
-      <div class="card p-3 mb-3">
-        <h3 class="card-title">🕒 Bản Chụp Cứu Hộ Tự Động (7 Ngày Gần Nhất)</h3>
-        <p class="text-muted text-xs mb-2">
-          Hệ thống tự động chụp 1 bản mỗi ngày khi mở app để bạn cứu dữ liệu nếu bấm nhầm.
-          <i>(Lưu ý: Bản chụp này nằm trong máy, không thay thế việc sao lưu ra ngoài gửi Zalo/Drive).</i>
-        </p>
-        <div id="snapshots-container">
-          ${snapshotsHtml}
-        </div>
-      </div>
-
-      <!-- KHỐI 4: THÔNG TIN CỬA HÀNG & BÁO GIÁ -->
-      <div class="card p-3 mb-3">
-        <h3 class="card-title">🏪 Thông Tin Cửa Hàng & Báo Giá</h3>
+      <!-- ================= MỤC 1: CỬA HÀNG & MÃ QR ================= -->
+      <div id="settings-sec-shop" class="settings-section-pane" style="display: ${this.activeSettingSection === 'shop' ? 'block' : 'none'};">
         <form id="settings-shop-form">
-          <!-- Logo cửa hàng -->
-          <div class="logo-setting-section mb-3">
-            <label class="form-label">Logo cửa hàng (hiển thị trên báo giá PDF và hóa đơn):</label>
-            <div class="logo-preview-box" id="logo-preview-box">
-              ${shop.logo ? `
-                <img src="${shop.logo}" class="shop-logo-img" alt="Logo shop">
-                <button type="button" class="btn-remove-logo" id="btn-remove-logo">&times;</button>
-              ` : `
-                <div class="logo-placeholder" id="logo-placeholder">
-                  <span>📷 Chạm để chọn ảnh logo</span>
+          <!-- Logo & Mã QR -->
+          <div class="card p-3 mb-3">
+            <h3 class="card-title text-sm mb-2">🖼️ Nhận Diện & Thanh Toán</h3>
+            <div class="shop-media-row">
+              <!-- Logo -->
+              <div class="shop-media-col flex-1">
+                <label class="form-label text-bold text-xs mb-1">📷 Logo Cửa Hàng:</label>
+                <div class="logo-preview-box" id="logo-preview-box">
+                  ${shop.logo ? `
+                    <img src="${shop.logo}" class="shop-logo-img" alt="Logo shop">
+                    <button type="button" class="btn-remove-logo" id="btn-remove-logo" title="Xóa logo">&times;</button>
+                  ` : `
+                    <div class="logo-placeholder" id="logo-placeholder">
+                      <span style="font-size: 22px;">📷</span>
+                      <span class="text-xs">Chạm chọn ảnh</span>
+                    </div>
+                  `}
                 </div>
-              `}
-            </div>
-            <input type="file" id="logo-file-input" accept="image/*" style="display:none">
-          </div>
-
-          <div class="form-group">
-            <label class="form-label required">Tên cửa hàng diều</label>
-            <input type="text" id="set-shop-name" class="form-input" required value="${escapeHTML(shop.shopName || '')}">
-          </div>
-
-          <div class="form-row">
-            <div class="form-group flex-1">
-              <label class="form-label">Số điện thoại / Zalo</label>
-              <input type="tel" id="set-phone" class="form-input" value="${escapeHTML(shop.phone || '')}">
-            </div>
-            <div class="form-group flex-1">
-              <label class="form-label">Hạn báo giá mặc định (ngày)</label>
-              <input type="number" id="set-quote-days" class="form-input" min="1" max="90" value="${shop.quoteValidityDays || 7}">
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Địa chỉ cửa hàng / Điểm thả diều</label>
-            <input type="text" id="set-address" class="form-input" value="${escapeHTML(shop.address || '')}">
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Thông tin ngân hàng / STK / Chủ tài khoản</label>
-            <input type="text" id="set-bank" class="form-input" placeholder="VD: Vietcombank - STK: 123456789 - NGUYEN VAN A" value="${escapeHTML(shop.bankInfo || '')}">
-          </div>
-
-          <!-- MÃ QR THANH TOÁN (VIETQR / NGÂN HÀNG / VÍ ĐIỆN TỬ) -->
-          <div class="card p-3 mb-3 bg-light border-primary-subtle">
-            <label class="form-label text-bold text-primary mb-1">
-              📱 Mã QR Thanh Toán (Cho khách quét trả tiền):
-            </label>
-            <p class="text-xs text-muted mb-2">
-              Tải lên ảnh chụp mã QR tài khoản ngân hàng (Vietcombank, MB, Techcombank, MoMo,...). Mã này sẽ hiển thị to rõ trên hóa đơn và màn hình bán hàng để khách hàng quét trả tiền nhanh chóng!
-            </p>
-
-            <div class="qr-setting-container">
-              <div class="qr-preview-box" id="qr-preview-box">
-                ${shop.qrCode ? `
-                  <img src="${shop.qrCode}" class="shop-qr-img" id="shop-qr-preview-img" alt="Mã QR thanh toán">
-                  <div class="qr-preview-actions mt-2">
-                    <button type="button" class="btn btn-outline-danger btn-xs" id="btn-remove-qr">🗑️ Xóa mã QR</button>
-                    <button type="button" class="btn btn-outline-primary btn-xs" id="btn-zoom-settings-qr">🔍 Xem phóng to</button>
-                    <button type="button" class="btn btn-outline-secondary btn-xs" id="btn-change-qr">🔄 Đổi ảnh khác</button>
-                  </div>
-                ` : `
-                  <div class="qr-placeholder" id="qr-placeholder">
-                    <div style="font-size: 32px; margin-bottom: 4px;">📱</div>
-                    <span class="text-bold text-sm">Chạm vào đây để chọn ảnh mã QR</span>
-                    <span class="text-xs text-muted mt-1">(Tải ảnh chụp mã QR từ app ngân hàng hoặc MoMo của bạn)</span>
-                  </div>
-                `}
+                <input type="file" id="logo-file-input" accept="image/*" style="display:none">
+                <span class="text-xs text-muted mt-1 d-block text-center">In trên báo giá & hóa đơn</span>
               </div>
-              <input type="file" id="qr-file-input" accept="image/*" style="display:none">
-            </div>
-          </div>
 
-          <!-- Cài đặt thuế VAT -->
-          <div class="card p-2 mb-3 bg-light">
-            <div class="form-row align-center">
-              <div class="flex-2">
-                <label class="form-label mb-0 text-bold">Có áp dụng VAT trên hóa đơn/báo giá?</label>
-                <span class="text-xs text-muted">Nếu bật, hệ thống sẽ tự tính thêm thuế VAT vào tổng tiền</span>
-              </div>
-              <div class="flex-1 text-right">
-                <input type="checkbox" id="set-enable-vat" ${shop.enableVat ? 'checked' : ''} style="width: 20px; height: 20px;">
-              </div>
-            </div>
-            <div id="vat-rate-row" class="form-row mt-2" style="display: ${shop.enableVat ? 'flex' : 'none'}">
-              <div class="form-group flex-1">
-                <label class="form-label">Mức thuế VAT (%)</label>
-                <select id="set-vat-rate" class="form-select">
-                  <option value="8" ${shop.vatRate === 8 ? 'selected' : ''}>8%</option>
-                  <option value="10" ${shop.vatRate === 10 ? 'selected' : ''}>10%</option>
-                </select>
+              <!-- Mã QR -->
+              <div class="shop-media-col flex-1">
+                <label class="form-label text-bold text-xs mb-1">📱 Mã QR Trả Tiền:</label>
+                <div class="qr-preview-box" id="qr-preview-box">
+                  ${shop.qrCode ? `
+                    <img src="${shop.qrCode}" class="shop-qr-img" id="shop-qr-preview-img" alt="Mã QR thanh toán">
+                    <div class="qr-preview-actions mt-2">
+                      <button type="button" class="btn btn-outline-primary btn-xs" id="btn-zoom-settings-qr">🔍 Phóng to</button>
+                      <button type="button" class="btn btn-outline-secondary btn-xs" id="btn-change-qr">Đổi</button>
+                      <button type="button" class="btn btn-outline-danger btn-xs" id="btn-remove-qr">&times;</button>
+                    </div>
+                  ` : `
+                    <div class="qr-placeholder" id="qr-placeholder">
+                      <span style="font-size: 22px;">📱</span>
+                      <span class="text-xs">Chạm tải mã QR</span>
+                    </div>
+                  `}
+                </div>
+                <input type="file" id="qr-file-input" accept="image/*" style="display:none">
+                <span class="text-xs text-muted mt-1 d-block text-center">Cho khách quét trả tiền</span>
               </div>
             </div>
           </div>
 
-          <button type="submit" class="btn btn-primary btn-block btn-lg">
-            ✓ Lưu Cài Đặt Cửa Hàng
+          <!-- Thông tin cơ bản -->
+          <div class="card p-3 mb-3">
+            <h3 class="card-title text-sm mb-2">🏪 Thông Tin Cơ Bản</h3>
+
+            <div class="form-group mb-2">
+              <label class="form-label required text-xs text-bold">Tên cửa hàng diều</label>
+              <input type="text" id="set-shop-name" class="form-input" required value="${escapeHTML(shop.shopName || '')}" placeholder="VD: Cửa Hàng Sáo Diều Trâm Anh">
+            </div>
+
+            <div class="form-row mb-2">
+              <div class="form-group flex-1 mb-0">
+                <label class="form-label text-xs text-bold">Số điện thoại / Zalo</label>
+                <input type="tel" id="set-phone" class="form-input" value="${escapeHTML(shop.phone || '')}" placeholder="09xx xxx xxx">
+              </div>
+              <div class="form-group flex-1 mb-0">
+                <label class="form-label text-xs text-bold">Hạn báo giá (ngày)</label>
+                <input type="number" id="set-quote-days" class="form-input" min="1" max="90" value="${shop.quoteValidityDays || 7}">
+              </div>
+            </div>
+
+            <div class="form-group mb-2">
+              <label class="form-label text-xs text-bold">Địa chỉ cửa hàng / Bãi thả diều</label>
+              <input type="text" id="set-address" class="form-input" value="${escapeHTML(shop.address || '')}" placeholder="VD: Bến thả diều Quận 2, TP.HCM">
+            </div>
+
+            <div class="form-group mb-0">
+              <label class="form-label text-xs text-bold">Tài khoản ngân hàng / Nhận chuyển khoản</label>
+              <input type="text" id="set-bank" class="form-input" placeholder="VD: Vietcombank - STK: 123456789 - NGUYEN VAN A" value="${escapeHTML(shop.bankInfo || '')}">
+            </div>
+          </div>
+
+          <!-- Cài đặt VAT với iOS Switch Toggle -->
+          <div class="card p-3 mb-3">
+            <div class="d-flex justify-between align-center">
+              <div>
+                <div class="text-bold text-sm">Có áp dụng thuế VAT?</div>
+                <div class="text-xs text-muted">Tự động cộng thêm tiền VAT vào hóa đơn & báo giá</div>
+              </div>
+              <label class="ios-switch">
+                <input type="checkbox" id="set-enable-vat" ${shop.enableVat ? 'checked' : ''}>
+                <span class="ios-slider"></span>
+              </label>
+            </div>
+
+            <div id="vat-rate-row" class="mt-3 pt-2 border-top" style="display: ${shop.enableVat ? 'flex' : 'none'}; align-items:center; justify-content:space-between;">
+              <span class="text-xs text-bold">Mức thuế VAT áp dụng:</span>
+              <select id="set-vat-rate" class="form-select form-select-sm" style="width: 100px;">
+                <option value="8" ${shop.vatRate === 8 ? 'selected' : ''}>8%</option>
+                <option value="10" ${shop.vatRate === 10 ? 'selected' : ''}>10%</option>
+              </select>
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-block btn-lg shadow-sm" style="border-radius: var(--radius-full); font-weight: 700;">
+            💾 Lưu Cài Đặt Cửa Hàng
           </button>
         </form>
       </div>
 
-      <!-- KHỐI 5: HƯỚNG DẪN CÀI ĐẶT PWA LÊN ĐIỆN THOẠI -->
-      <div class="card p-3 mb-3">
-        <h3 class="card-title">📲 Hướng Dẫn Cài Đặt Lên Màn Hình Chính</h3>
-        <div class="install-guide-tabs">
-          <div class="guide-box mb-2">
-            <b>🍏 Dành cho iPhone / iPad (Safari):</b>
-            <ol class="guide-steps text-xs text-muted">
-              <li>Mở trang web bằng trình duyệt <b>Safari</b>.</li>
-              <li>Bấm vào nút <b>Chia sẻ</b> (biểu tượng hình vuông có mũi tên chỉ lên ở thanh dưới cùng).</li>
-              <li>Cuộn xuống và chọn <b>"Thêm vào Màn hình chính" (Add to Home Screen)</b>.</li>
-              <li><span class="text-danger text-bold">CỰC KỲ QUAN TRỌNG:</span> Sau khi cài, luôn bấm mở app từ biểu tượng con diều ngoài màn hình chính, <u>không dùng trong tab Safari thông thường</u> để iOS bảo vệ dữ liệu không bị xóa sau 7 ngày!</li>
-            </ol>
+      <!-- ================= MỤC 2: QUẢN LÝ LOẠI DIỀU, MẶT HÀNG & ĐVT ================= -->
+      <div id="settings-sec-catalog" class="settings-section-pane" style="display: ${this.activeSettingSection === 'catalog' ? 'block' : 'none'};">
+        <div class="card p-3 mb-3 border-primary-subtle" id="catalog-management-card">
+          <h3 class="card-title">🏷️ Quản Lý Loại Diều & Sửa Mặt Hàng</h3>
+          <p class="text-muted text-xs mb-3">
+            Tùy chỉnh phân loại diều, đổi tên mặt hàng tức thì và cấu hình đơn vị tính
+          </p>
+
+          <!-- Sub Tabs -->
+          <div class="catalog-tabs-bar mb-3">
+            <button type="button" class="catalog-tab-btn ${this.catalogTab === 'categories' ? 'active' : ''}" data-tab="categories">
+              🪁 Loại Diều (${categories.length})
+            </button>
+            <button type="button" class="catalog-tab-btn ${this.catalogTab === 'products' ? 'active' : ''}" data-tab="products">
+              📦 Sửa Mặt Hàng (${products.length})
+            </button>
+            <button type="button" class="catalog-tab-btn ${this.catalogTab === 'units' ? 'active' : ''}" data-tab="units">
+              📏 Đơn Vị Tính (${units.length})
+            </button>
           </div>
 
-          <div class="guide-box">
-            <b>🤖 Dành cho Android (Google Chrome):</b>
-            <ol class="guide-steps text-xs text-muted">
-              <li>Mở trang web bằng trình duyệt <b>Chrome</b>.</li>
-              <li>Bấm nút <b>Menu 3 chấm</b> ở góc trên bên phải.</li>
-              <li>Chọn <b>"Cài đặt ứng dụng"</b> hoặc <b>"Thêm vào Màn hình chính"</b>.</li>
-              <li>App sẽ xuất hiện như ứng dụng bình thường, mở dùng offline hoàn toàn mọi lúc.</li>
-            </ol>
+          <!-- Tab 1: Loại Diều -->
+          <div id="catalog-tab-content-categories" style="display: ${this.catalogTab === 'categories' ? 'block' : 'none'};">
+            ${this.renderCategoriesTabHtml(categories, products)}
+          </div>
+
+          <!-- Tab 2: Sửa Mặt Hàng -->
+          <div id="catalog-tab-content-products" style="display: ${this.catalogTab === 'products' ? 'block' : 'none'};">
+            ${this.renderProductsTabHtml(products, categories)}
+          </div>
+
+          <!-- Tab 3: Đơn Vị Tính -->
+          <div id="catalog-tab-content-units" style="display: ${this.catalogTab === 'units' ? 'block' : 'none'};">
+            ${this.renderUnitsTabHtml(units)}
           </div>
         </div>
       </div>
 
-      <!-- KHỐI 6: DỮ LIỆU MẪU & KHỞI TẠO -->
-      <div class="card p-3 mb-4">
-        <h3 class="card-title">🧪 Dữ Liệu Mẫu & Khởi Tạo</h3>
-        <p class="text-muted text-xs mb-3">
-          Nếu bạn mới bắt đầu, bạn có thể nạp dữ liệu mẫu (gồm vài loại diều phổ biến, khách hàng, đơn mẫu) để dùng thử. Khi bắt đầu bán thật, hãy bấm xóa dữ liệu mẫu.
-        </p>
-        <div class="sample-actions-row">
-          <button id="btn-load-sample-data" class="btn btn-outline-primary btn-sm">
-            Nạp Dữ Liệu Mẫu Diều
-          </button>
-          <button id="btn-clear-sample-data" class="btn btn-outline-danger btn-sm">
-            Xóa Trắng Dữ Liệu Thử
-          </button>
+      <!-- ================= MỤC 3: SAO LƯU DỮ LIỆU & BỘ NHỚ ================= -->
+      <div id="settings-sec-backup" class="settings-section-pane" style="display: ${this.activeSettingSection === 'backup' ? 'block' : 'none'};">
+        <!-- Thẻ an toàn bộ nhớ -->
+        <div class="card p-3 mb-3" style="background: linear-gradient(135deg, #f0fdf4 0%, #e0f2fe 100%); border: 1px solid #bae6fd;">
+          <div class="d-flex justify-between align-center mb-2">
+            <div class="d-flex align-center gap-2">
+              <span style="font-size: 24px;">🛡️</span>
+              <div>
+                <div class="text-bold text-sm">Trạng Thái Lưu Trữ Trong Máy</div>
+                <div class="text-xs text-muted">
+                  ${this.storageStatus.isPersisted ? 'Đã bật lưu trữ bền vững (Trình duyệt không tự xóa)' : 'Chưa bật khóa lưu trữ bền vững'}
+                </div>
+              </div>
+            </div>
+            ${!this.storageStatus.isPersisted ? `
+              <button id="btn-request-persist" class="btn btn-outline-primary btn-xs">Bật Khóa</button>
+            ` : `
+              <span class="badge badge-success text-xs">An Toàn</span>
+            `}
+          </div>
+          <div class="text-xs text-muted">
+            Sao lưu gần nhất: <b>${shop.lastBackupTime ? formatDateTime(shop.lastBackupTime) : 'Chưa sao lưu'}</b>
+            ${shop.unbackedChangesCount > 0 ? `• <span class="text-danger text-bold">Có ${shop.unbackedChangesCount} thay đổi mới</span>` : ''}
+            • Dung lượng: <b>${this.storageStatus.usageMB} MB</b> / ${this.storageStatus.quotaMB} MB
+          </div>
+        </div>
+
+        <!-- 4 Nút Hành Động Sao Lưu -->
+        <div class="card p-3 mb-3">
+          <h3 class="card-title text-sm mb-3">💾 Thao Tác Sao Lưu & Khôi Phục</h3>
+          <div class="backup-actions-grid">
+            <div id="btn-do-backup" class="backup-btn-card">
+              <span class="backup-btn-icon">💾</span>
+              <span class="backup-btn-title text-primary">SAO LƯU FILE</span>
+              <span class="backup-btn-sub">Gửi Zalo / Drive</span>
+            </div>
+            <div id="btn-do-restore" class="backup-btn-card">
+              <span class="backup-btn-icon">🔄</span>
+              <span class="backup-btn-title text-warning-dark">KHÔI PHỤC</span>
+              <span class="backup-btn-sub">Từ file JSON</span>
+            </div>
+            <div id="btn-do-excel-all" class="backup-btn-card">
+              <span class="backup-btn-icon">📊</span>
+              <span class="backup-btn-title text-success-dark">XUẤT EXCEL</span>
+              <span class="backup-btn-sub">Toàn bộ dữ liệu</span>
+            </div>
+            <div id="btn-open-trash" class="backup-btn-card">
+              <span class="backup-btn-icon">🗑️</span>
+              <span class="backup-btn-title text-muted">THÙNG RÁC</span>
+              <span class="backup-btn-sub">Mục đã xóa</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Lối tắt nghiệp vụ -->
+        <div class="card p-3 mb-3">
+          <h3 class="card-title text-sm mb-2">⚡ Lối Tắt Nhanh</h3>
+          <div class="d-flex gap-2">
+            <button id="btn-shortcut-reports" class="btn btn-outline-primary btn-sm flex-1 text-left" style="display:flex; justify-content:space-between; align-items:center;">
+              <span>📊 Báo Cáo Doanh Thu</span>
+              <span>➔</span>
+            </button>
+            <button id="btn-shortcut-inventory" class="btn btn-outline-secondary btn-sm flex-1 text-left" style="display:flex; justify-content:space-between; align-items:center;">
+              <span>📦 Kho Diều & Nhập</span>
+              <span>➔</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Bản chụp cứu hộ 7 ngày -->
+        <div class="card p-3 mb-3">
+          <h3 class="card-title text-sm mb-1">🕒 Bản Chụp Cứu Hộ Tự Động (7 Ngày)</h3>
+          <p class="text-xs text-muted mb-2">
+            Tự động chụp mỗi ngày khi mở app để bạn cứu dữ liệu nếu bấm nhầm:
+          </p>
+          <div id="snapshots-container">
+            ${snapshotsHtml}
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= MỤC 4: HƯỚNG DẪN CÀI ĐẶT & TRỢ GIÚP ================= -->
+      <div id="settings-sec-guide" class="settings-section-pane" style="display: ${this.activeSettingSection === 'guide' ? 'block' : 'none'};">
+        <!-- Hướng dẫn Cài App -->
+        <div class="card p-3 mb-3">
+          <h3 class="card-title text-sm mb-2">📲 Cài Đặt Ra Màn Hình Chính (PWA)</h3>
+          <p class="text-xs text-muted mb-3">
+            Cài app ra màn hình chính giúp mở dùng tức thì như ứng dụng gốc, bảo vệ dữ liệu bền vững và chạy offline 100% không cần mạng:
+          </p>
+
+          <!-- Tab chọn nền tảng -->
+          <div class="guide-platform-tabs mb-3">
+            <button type="button" class="guide-tab-btn ${this.guidePlatform === 'ios' ? 'active' : ''}" data-platform="ios">
+              <span>🍏</span> iPhone / iPad (Safari)
+            </button>
+            <button type="button" class="guide-tab-btn ${this.guidePlatform === 'android' ? 'active' : ''}" data-platform="android">
+              <span>🤖</span> Android (Chrome)
+            </button>
+          </div>
+
+          <!-- Các bước iOS -->
+          <div id="guide-platform-ios" style="display: ${this.guidePlatform === 'ios' ? 'block' : 'none'};">
+            <div class="guide-steps-grid">
+              <div class="guide-step-card">
+                <div class="guide-step-num">1</div>
+                <div class="guide-step-content">
+                  Mở trình duyệt <b>Safari</b> trên iPhone / iPad và vào trang web bán diều này.
+                </div>
+              </div>
+              <div class="guide-step-card">
+                <div class="guide-step-num">2</div>
+                <div class="guide-step-content">
+                  Bấm nút <b>Chia sẻ</b> <i>(biểu tượng hình vuông có mũi tên hướng lên ở thanh dưới)</i>.
+                </div>
+              </div>
+              <div class="guide-step-card">
+                <div class="guide-step-num">3</div>
+                <div class="guide-step-content">
+                  Cuộn xuống và chọn <b>"Thêm vào Màn hình chính" (Add to Home Screen)</b>.
+                </div>
+              </div>
+              <div class="guide-step-card" style="border-left: 3px solid #10b981;">
+                <div class="guide-step-num" style="background: #d1fae5; color: #059669;">✓</div>
+                <div class="guide-step-content">
+                  <b>Hoàn tất!</b> Luôn mở app từ biểu tượng con diều ngoài màn hình chính để iOS giữ dữ liệu vĩnh viễn không bị dọn dẹp.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Các bước Android -->
+          <div id="guide-platform-android" style="display: ${this.guidePlatform === 'android' ? 'block' : 'none'};">
+            <div class="guide-steps-grid">
+              <div class="guide-step-card">
+                <div class="guide-step-num">1</div>
+                <div class="guide-step-content">
+                  Mở trình duyệt <b>Google Chrome</b> trên điện thoại Android của bạn.
+                </div>
+              </div>
+              <div class="guide-step-card">
+                <div class="guide-step-num">2</div>
+                <div class="guide-step-content">
+                  Bấm vào <b>menu 3 chấm (⋮)</b> ở góc trên bên phải màn hình Chrome.
+                </div>
+              </div>
+              <div class="guide-step-card">
+                <div class="guide-step-num">3</div>
+                <div class="guide-step-content">
+                  Chọn <b>"Cài đặt ứng dụng"</b> hoặc <b>"Thêm vào Màn hình chính"</b>.
+                </div>
+              </div>
+              <div class="guide-step-card" style="border-left: 3px solid #10b981;">
+                <div class="guide-step-num" style="background: #d1fae5; color: #059669;">✓</div>
+                <div class="guide-step-content">
+                  <b>Thành công!</b> Biểu tượng ứng dụng diều sẽ nằm ngoài màn hình, bấm mở dùng siêu mượt mọi lúc.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dữ liệu mẫu & Khởi tạo -->
+        <div class="card p-3 mb-3">
+          <h3 class="card-title text-sm mb-2">🧪 Dữ Liệu Mẫu & Khởi Tạo</h3>
+          <p class="text-xs text-muted mb-3">
+            Nạp sẵn 6 loại diều, 3 khách hàng và đơn mẫu để làm quen cách dùng app. Khi bắt đầu bán thật hãy bấm xóa trắng dữ liệu thử.
+          </p>
+          <div class="d-flex gap-2">
+            <button type="button" id="btn-load-sample-data" class="btn btn-outline-primary btn-sm flex-1">
+              Nạp Dữ Liệu Mẫu
+            </button>
+            <button type="button" id="btn-clear-sample-data" class="btn btn-outline-danger btn-sm flex-1">
+              Xóa Dữ Liệu Thử
+            </button>
+          </div>
         </div>
       </div>
     `;
@@ -345,17 +427,38 @@ export class SettingsModule {
   }
 
   bindEvents(shop, categories, products, units) {
-    // 0. Gán sự kiện Quản lý Loại diều, Sửa mặt hàng, Đơn vị tính
-    this.bindCatalogEvents(categories, products, units);
+    // 1. Chuyển đổi các mục cài đặt chính (Cửa hàng, Loại & Hàng, Sao lưu, Cài App)
+    document.querySelectorAll('.settings-pill-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const sec = btn.dataset.section;
+        this.activeSettingSection = sec;
+        document.querySelectorAll('.settings-pill-tab').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
 
-    // Lối tắt cuộn đến Quản lý Loại diều & Mặt hàng
-    const btnShortcutCatalog = document.getElementById('btn-shortcut-catalog');
-    if (btnShortcutCatalog) {
-      btnShortcutCatalog.addEventListener('click', () => {
-        const el = document.getElementById('catalog-management-card');
-        if (el) el.scrollIntoView({ behavior: 'smooth' });
+        ['shop', 'catalog', 'backup', 'guide'].forEach(s => {
+          const el = document.getElementById(`settings-sec-${s}`);
+          if (el) el.style.display = (s === sec) ? 'block' : 'none';
+        });
       });
-    }
+    });
+
+    // 2. Chuyển đổi nền tảng hướng dẫn (iOS / Android)
+    document.querySelectorAll('.guide-tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const platform = btn.dataset.platform;
+        this.guidePlatform = platform;
+        document.querySelectorAll('.guide-tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        const iosEl = document.getElementById('guide-platform-ios');
+        const androidEl = document.getElementById('guide-platform-android');
+        if (iosEl) iosEl.style.display = (platform === 'ios') ? 'block' : 'none';
+        if (androidEl) androidEl.style.display = (platform === 'android') ? 'block' : 'none';
+      });
+    });
+
+    // 3. Quản lý Loại diều, Sửa mặt hàng, Đơn vị tính
+    this.bindCatalogEvents(categories, products, units);
 
     // Lưu thông tin shop
     const form = document.getElementById('settings-shop-form');
