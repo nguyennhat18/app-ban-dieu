@@ -18,6 +18,7 @@ export const DEFAULT_SHOP_SETTINGS = {
   address: '123 Đường Cánh Diều, Phường Gió Lộng, TP. Hồ Chí Minh',
   bankInfo: 'Vietcombank - STK: 0123456789 - NGUYEN VAN A',
   logo: '', // Base64 image
+  qrCode: '', // Base64 image mã QR thanh toán (VietQR / Ngân hàng / Momo)
   quoteValidityDays: 7, // Số ngày hiệu lực báo giá
   enableVat: false, // Mặc định không có VAT
   vatRate: 8, // 8% nếu bật
@@ -47,6 +48,7 @@ export const PRODUCT_UNITS = [
 
 export const PAYMENT_METHODS = {
   cash: 'Tiền mặt',
+  qr: 'Quét mã QR',
   transfer: 'Chuyển khoản',
   debt: 'Ghi nợ',
   partial: 'Trả một phần'

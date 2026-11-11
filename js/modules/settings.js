@@ -194,6 +194,36 @@ export class SettingsModule {
             <input type="text" id="set-bank" class="form-input" placeholder="VD: Vietcombank - STK: 123456789 - NGUYEN VAN A" value="${escapeHTML(shop.bankInfo || '')}">
           </div>
 
+          <!-- MÃ QR THANH TOÁN (VIETQR / NGÂN HÀNG / VÍ ĐIỆN TỬ) -->
+          <div class="card p-3 mb-3 bg-light border-primary-subtle">
+            <label class="form-label text-bold text-primary mb-1">
+              📱 Mã QR Thanh Toán (Cho khách quét trả tiền):
+            </label>
+            <p class="text-xs text-muted mb-2">
+              Tải lên ảnh chụp mã QR tài khoản ngân hàng (Vietcombank, MB, Techcombank, MoMo,...). Mã này sẽ hiển thị to rõ trên hóa đơn và màn hình bán hàng để khách hàng quét trả tiền nhanh chóng!
+            </p>
+
+            <div class="qr-setting-container">
+              <div class="qr-preview-box" id="qr-preview-box">
+                ${shop.qrCode ? `
+                  <img src="${shop.qrCode}" class="shop-qr-img" id="shop-qr-preview-img" alt="Mã QR thanh toán">
+                  <div class="qr-preview-actions mt-2">
+                    <button type="button" class="btn btn-outline-danger btn-xs" id="btn-remove-qr">🗑️ Xóa mã QR</button>
+                    <button type="button" class="btn btn-outline-primary btn-xs" id="btn-zoom-settings-qr">🔍 Xem phóng to</button>
+                    <button type="button" class="btn btn-outline-secondary btn-xs" id="btn-change-qr">🔄 Đổi ảnh khác</button>
+                  </div>
+                ` : `
+                  <div class="qr-placeholder" id="qr-placeholder">
+                    <div style="font-size: 32px; margin-bottom: 4px;">📱</div>
+                    <span class="text-bold text-sm">Chạm vào đây để chọn ảnh mã QR</span>
+                    <span class="text-xs text-muted mt-1">(Tải ảnh chụp mã QR từ app ngân hàng hoặc MoMo của bạn)</span>
+                  </div>
+                `}
+              </div>
+              <input type="file" id="qr-file-input" accept="image/*" style="display:none">
+            </div>
+          </div>
+
           <!-- Cài đặt thuế VAT -->
           <div class="card p-2 mb-3 bg-light">
             <div class="form-row align-center">
@@ -272,7 +302,9 @@ export class SettingsModule {
     // Lưu thông tin shop
     const form = document.getElementById('settings-shop-form');
     let logoBase64 = shop.logo || '';
+    let qrCodeBase64 = shop.qrCode || '';
 
+    // 1. Quản lý ảnh Logo
     const logoPreviewBox = document.getElementById('logo-preview-box');
     const logoFileInput = document.getElementById('logo-file-input');
 
@@ -314,6 +346,86 @@ export class SettingsModule {
       });
     }
 
+    // 2. Quản lý ảnh Mã QR Thanh Toán
+    const qrPreviewBox = document.getElementById('qr-preview-box');
+    const qrFileInput = document.getElementById('qr-file-input');
+
+    const renderQrPreview = () => {
+      if (!qrPreviewBox) return;
+      if (qrCodeBase64) {
+        qrPreviewBox.innerHTML = `
+          <img src="${qrCodeBase64}" class="shop-qr-img" id="shop-qr-preview-img" alt="Mã QR thanh toán">
+          <div class="qr-preview-actions mt-2">
+            <button type="button" class="btn btn-outline-danger btn-xs" id="btn-remove-qr">🗑️ Xóa mã QR</button>
+            <button type="button" class="btn btn-outline-primary btn-xs" id="btn-zoom-settings-qr">🔍 Xem phóng to</button>
+            <button type="button" class="btn btn-outline-secondary btn-xs" id="btn-change-qr">🔄 Đổi ảnh khác</button>
+          </div>
+        `;
+        document.getElementById('btn-remove-qr')?.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          qrCodeBase64 = '';
+          renderQrPreview();
+        });
+        document.getElementById('btn-zoom-settings-qr')?.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          this.app.salesModule.showFullScreenQrModal(qrCodeBase64, shop.bankInfo || '', 0);
+        });
+        document.getElementById('btn-change-qr')?.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          qrFileInput.click();
+        });
+      } else {
+        qrPreviewBox.innerHTML = `
+          <div class="qr-placeholder" id="qr-placeholder">
+            <div style="font-size: 32px; margin-bottom: 4px;">📱</div>
+            <span class="text-bold text-sm">Chạm vào đây để chọn ảnh mã QR</span>
+            <span class="text-xs text-muted mt-1">(Tải ảnh chụp mã QR từ app ngân hàng hoặc MoMo của bạn)</span>
+          </div>
+        `;
+        document.getElementById('qr-placeholder')?.addEventListener('click', () => {
+          qrFileInput.click();
+        });
+      }
+    };
+
+    if (qrPreviewBox) {
+      qrPreviewBox.addEventListener('click', (e) => {
+        if (e.target.closest('#btn-remove-qr') || e.target.closest('#btn-zoom-settings-qr') || e.target.closest('#btn-change-qr')) {
+          return;
+        }
+        qrFileInput.click();
+      });
+    }
+
+    if (qrFileInput) {
+      qrFileInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          try {
+            qrCodeBase64 = await compressImage(file, 600, 0.85);
+            renderQrPreview();
+          } catch (err) {
+            alert('Lỗi nén ảnh mã QR: ' + err.message);
+          }
+        }
+      });
+    }
+
+    // Gán sự kiện ban đầu cho nút QR (nếu đã có QR từ trước)
+    document.getElementById('btn-remove-qr')?.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      qrCodeBase64 = '';
+      renderQrPreview();
+    });
+    document.getElementById('btn-zoom-settings-qr')?.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      this.app.salesModule.showFullScreenQrModal(qrCodeBase64, shop.bankInfo || '', 0);
+    });
+    document.getElementById('btn-change-qr')?.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      qrFileInput.click();
+    });
+
     // Toggle VAT
     const vatCheckbox = document.getElementById('set-enable-vat');
     const vatRateRow = document.getElementById('vat-rate-row');
@@ -338,11 +450,12 @@ export class SettingsModule {
           quoteValidityDays: parseInt(document.getElementById('set-quote-days').value, 10) || 7,
           enableVat: vatCheckbox ? vatCheckbox.checked : false,
           vatRate: parseInt(document.getElementById('set-vat-rate').value, 10) || 8,
-          logo: logoBase64
+          logo: logoBase64,
+          qrCode: qrCodeBase64
         };
 
         await db.saveSetting('shop_info', updatedShop);
-        alert('✓ Đã lưu cài đặt cửa hàng thành công!');
+        alert('✓ Đã lưu cài đặt cửa hàng & mã QR thành công!');
         this.app.updateHeaderBrand();
       });
     }

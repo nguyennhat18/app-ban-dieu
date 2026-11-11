@@ -45,7 +45,7 @@ export class ReportsModule {
       // Phân bổ phương thức thanh toán
       if (o.paymentMethod === 'cash') {
         totalCash += (o.paidAmount || 0);
-      } else if (o.paymentMethod === 'transfer') {
+      } else if (o.paymentMethod === 'transfer' || o.paymentMethod === 'qr') {
         totalTransfer += (o.paidAmount || 0);
       } else if (o.paymentMethod === 'partial') {
         totalCash += (o.paidAmount || 0);

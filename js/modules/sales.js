@@ -241,11 +241,37 @@ export class SalesModule {
                 <label class="form-label-xs">Phương thức thanh toán:</label>
                 <div class="payment-pills">
                   <button class="pay-pill ${this.paymentMethod === 'cash' ? 'active' : ''}" data-method="cash">💵 Tiền mặt</button>
+                  <button class="pay-pill ${this.paymentMethod === 'qr' ? 'active' : ''}" data-method="qr">📱 Quét mã QR</button>
                   <button class="pay-pill ${this.paymentMethod === 'transfer' ? 'active' : ''}" data-method="transfer">🏦 Chuyển khoản</button>
                   <button class="pay-pill ${this.paymentMethod === 'debt' ? 'active' : ''}" data-method="debt">📝 Ghi nợ</button>
                   <button class="pay-pill ${this.paymentMethod === 'partial' ? 'active' : ''}" data-method="partial">💳 Trả 1 phần</button>
                 </div>
               </div>
+
+              <!-- Khung Quét mã QR thanh toán nếu chọn QR hoặc Chuyển khoản -->
+              ${(this.paymentMethod === 'qr' || this.paymentMethod === 'transfer') ? `
+                <div class="pos-qr-payment-card card p-2 mt-2 bg-light text-center border-primary-subtle">
+                  ${shopSettings.qrCode ? `
+                    <div class="text-xs text-bold text-primary mb-1">📱 MÃ QR THANH TOÁN (VIETQR / NGÂN HÀNG)</div>
+                    <div class="pos-qr-img-wrap" style="position:relative; display:inline-block; margin: 4px auto;">
+                      <img src="${shopSettings.qrCode}" class="pos-qr-img" alt="Mã QR thanh toán">
+                    </div>
+                    <div class="text-xs text-muted mt-1">Số tiền cần thanh toán: <b class="text-success text-sm">${formatVND(totals.totalAmount)}</b></div>
+                    ${shopSettings.bankInfo ? `<div class="text-xs text-bold text-muted mt-1">${escapeHTML(shopSettings.bankInfo)}</div>` : ''}
+                    <button type="button" class="btn btn-primary btn-block btn-sm mt-2" id="btn-open-fullscreen-qr">
+                      🔍 Mở QR Toàn Màn Hình Cho Khách Quét
+                    </button>
+                  ` : `
+                    <div class="text-xs text-bold text-warning mb-1">⚠️ Chưa có ảnh mã QR thanh toán</div>
+                    <p class="text-xs text-muted mb-2">Thêm ảnh mã QR ngân hàng để khách quét trả tiền trên điện thoại</p>
+                    ${shopSettings.bankInfo ? `<div class="text-xs text-bold mb-2">${escapeHTML(shopSettings.bankInfo)}</div>` : ''}
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="btn-quick-upload-qr">
+                      ➕ Thêm Ảnh Mã QR Ngay
+                    </button>
+                    <input type="file" id="pos-qr-file-input" accept="image/*" style="display:none">
+                  `}
+                </div>
+              ` : ''}
 
               ${this.paymentMethod === 'partial' ? `
                 <div class="partial-pay-box card p-2 bg-light mt-1">
@@ -343,7 +369,7 @@ export class SalesModule {
 
                 <div class="order-card-bottom">
                   <div class="order-pay-info text-xs">
-                    <span>${o.paymentMethod === 'cash' ? '💵 Tiền mặt' : o.paymentMethod === 'transfer' ? '🏦 Chuyển khoản' : '📝 Ghi nợ'}</span>
+                    <span>${o.paymentMethod === 'cash' ? '💵 Tiền mặt' : o.paymentMethod === 'qr' ? '📱 Quét mã QR' : o.paymentMethod === 'transfer' ? '🏦 Chuyển khoản' : o.paymentMethod === 'debt' ? '📝 Ghi nợ' : '💳 Trả một phần'}</span>
                   </div>
                   <div class="order-total-price">
                     Tổng: <span class="text-bold text-primary">${formatVND(o.totalAmount)}</span>
@@ -645,6 +671,38 @@ export class SalesModule {
     const completeBtn = document.getElementById('btn-complete-order');
     if (completeBtn) {
       completeBtn.addEventListener('click', () => this.handleCompleteOrder());
+    }
+
+    // Mở QR toàn màn hình cho khách quét từ giỏ hàng
+    const openFullscreenQrBtn = document.getElementById('btn-open-fullscreen-qr');
+    if (openFullscreenQrBtn) {
+      openFullscreenQrBtn.addEventListener('click', async () => {
+        const shop = (await db.getSetting('shop_info')) || {};
+        const totals = this.calculateTotals(shop);
+        this.showFullScreenQrModal(shop.qrCode, shop.bankInfo, totals.totalAmount);
+      });
+    }
+
+    // Tải ảnh QR nhanh ngay trong giỏ hàng nếu chưa có
+    const quickUploadQrBtn = document.getElementById('btn-quick-upload-qr');
+    const posQrFileInput = document.getElementById('pos-qr-file-input');
+    if (quickUploadQrBtn && posQrFileInput) {
+      quickUploadQrBtn.addEventListener('click', () => posQrFileInput.click());
+      posQrFileInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          try {
+            const qrBase64 = await compressImage(file, 600, 0.85);
+            const shop = (await db.getSetting('shop_info')) || {};
+            shop.qrCode = qrBase64;
+            await db.saveSetting('shop_info', shop);
+            alert('✓ Đã thêm ảnh mã QR thành công!');
+            this.render();
+          } catch (err) {
+            alert('Lỗi nén ảnh QR: ' + err.message);
+          }
+        }
+      });
     }
   }
 
@@ -984,6 +1042,10 @@ export class SalesModule {
     if (!order) return;
 
     const shopSettings = (await db.getSetting('shop_info')) || {};
+    const ptttText = order.paymentMethod === 'cash' ? '💵 Tiền mặt' :
+                     order.paymentMethod === 'qr' ? '📱 Quét mã QR' :
+                     order.paymentMethod === 'transfer' ? '🏦 Chuyển khoản' :
+                     order.paymentMethod === 'debt' ? '📝 Ghi nợ' : '💳 Trả một phần';
 
     const modalHtml = `
       <div class="modal-backdrop" id="order-detail-modal">
@@ -1002,14 +1064,14 @@ export class SalesModule {
               <h2 class="receipt-shop-name">${escapeHTML(shopSettings.shopName || 'CỬA HÀNG DIỀU')}</h2>
               <p class="receipt-shop-meta text-xs">${escapeHTML(shopSettings.address || '')}</p>
               <p class="receipt-shop-meta text-xs">Hotline: ${escapeHTML(shopSettings.phone || '')}</p>
-              <div class="receipt-divider text-muted">--------------------------------</div>
+              <div class="receipt-divider"></div>
             </div>
 
             <div class="receipt-meta-grid text-xs mt-2 mb-2">
               <div><b>Khách hàng:</b> ${escapeHTML(order.customerName || 'Khách lẻ')}</div>
               <div><b>Ngày:</b> ${formatDateTime(order.createdAt)}</div>
               ${order.customerPhone ? `<div><b>SĐT:</b> ${escapeHTML(order.customerPhone)}</div>` : ''}
-              <div><b>PTTT:</b> ${order.paymentMethod === 'cash' ? 'Tiền mặt' : order.paymentMethod === 'transfer' ? 'Chuyển khoản' : 'Ghi nợ'}</div>
+              <div><b>PTTT:</b> ${ptttText}</div>
             </div>
 
             <table class="receipt-table">
@@ -1024,7 +1086,7 @@ export class SalesModule {
               <tbody>
                 ${(order.items || []).map(i => `
                   <tr>
-                    <td>${escapeHTML(i.productName)}</td>
+                    <td><b>${escapeHTML(i.productName)}</b></td>
                     <td class="text-center">${i.quantity}</td>
                     <td class="text-right">${formatVND(i.unitPrice)}</td>
                     <td class="text-right">${formatVND(i.subtotal)}</td>
@@ -1058,7 +1120,7 @@ export class SalesModule {
               ` : ''}
               <div class="receipt-total-row text-bold receipt-grand-total">
                 <span>TỔNG CỘNG:</span>
-                <span>${formatVND(order.totalAmount)}</span>
+                <span class="text-primary">${formatVND(order.totalAmount)}</span>
               </div>
               <div class="receipt-total-row">
                 <span>Đã thanh toán:</span>
@@ -1072,12 +1134,30 @@ export class SalesModule {
               ` : ''}
             </div>
 
-            ${shopSettings.bankInfo ? `
+            ${shopSettings.qrCode ? `
+              <div class="receipt-qr-payment-box mt-3 text-center">
+                <div class="receipt-qr-badge">📱 QUÉT MÃ QR ĐỂ THANH TOÁN</div>
+                <div class="receipt-qr-img-wrap my-2">
+                  <img src="${shopSettings.qrCode}" class="receipt-qr-img" alt="Mã QR thanh toán">
+                </div>
+                <div class="receipt-qr-amount-text">
+                  Số tiền cần trả: <b class="text-success text-bold">${formatVND(order.debtAmount > 0 ? order.debtAmount : order.totalAmount)}</b>
+                </div>
+                ${shopSettings.bankInfo ? `
+                  <div class="receipt-qr-bank-text">${escapeHTML(shopSettings.bankInfo)}</div>
+                ` : ''}
+                <div class="receipt-qr-actions mt-2 no-print">
+                  <button type="button" class="btn btn-outline-primary btn-xs" id="btn-zoom-receipt-qr">
+                    🔍 Phóng to mã QR cho khách quét
+                  </button>
+                </div>
+              </div>
+            ` : (shopSettings.bankInfo ? `
               <div class="receipt-bank-box card p-2 bg-light mt-2">
                 <div class="text-xs text-muted">Thông tin chuyển khoản:</div>
                 <div class="text-xs text-bold">${escapeHTML(shopSettings.bankInfo)}</div>
               </div>
-            ` : ''}
+            ` : '')}
 
             <div class="receipt-footer text-center mt-3 text-xs text-muted">
               <p>Cảm ơn quý khách và hẹn gặp lại! 🪁</p>
@@ -1086,6 +1166,9 @@ export class SalesModule {
 
           <div class="modal-footer">
             <button class="btn btn-outline-primary btn-sm" id="btn-print-receipt">🖨️ In Hóa Đơn</button>
+            ${shopSettings.qrCode ? `
+              <button class="btn btn-outline-success btn-sm" id="btn-footer-zoom-qr">📱 Mã QR</button>
+            ` : ''}
             <div style="flex:1"></div>
             <button class="btn btn-secondary btn-sm" id="btn-close-odmodal2">Đóng</button>
           </div>
@@ -1105,5 +1188,62 @@ export class SalesModule {
     document.getElementById('btn-print-receipt').addEventListener('click', () => {
       window.print();
     });
+
+    const openQrZoom = () => {
+      this.showFullScreenQrModal(shopSettings.qrCode, shopSettings.bankInfo, (order.debtAmount > 0 ? order.debtAmount : order.totalAmount));
+    };
+
+    document.getElementById('btn-zoom-receipt-qr')?.addEventListener('click', openQrZoom);
+    document.getElementById('btn-footer-zoom-qr')?.addEventListener('click', openQrZoom);
+  }
+
+  // Modal phóng to mã QR toàn màn hình sáng rõ cho khách quét
+  showFullScreenQrModal(qrImageBase64, bankInfo, amount = 0) {
+    if (!qrImageBase64) {
+      alert('Chưa có ảnh mã QR! Vui lòng vào Cài Đặt để tải ảnh mã QR ngân hàng hoặc MoMo lên.');
+      return;
+    }
+
+    const modalHtml = `
+      <div class="modal-backdrop fullscreen-qr-backdrop" id="fullscreen-qr-modal">
+        <div class="fullscreen-qr-container">
+          <div class="fullscreen-qr-header">
+            <h3 class="fullscreen-qr-title">📱 QUÉT MÃ QR THANH TOÁN</h3>
+            <button class="fullscreen-qr-close" id="btn-close-fsqr">&times;</button>
+          </div>
+          <div class="fullscreen-qr-body">
+            <div class="fullscreen-qr-card">
+              <img src="${qrImageBase64}" class="fullscreen-qr-img" alt="Mã QR thanh toán">
+              ${amount > 0 ? `
+                <div class="fullscreen-qr-amount">
+                  <span class="text-xs text-muted">Số tiền cần thanh toán:</span>
+                  <div class="amount-val">${formatVND(amount)}</div>
+                </div>
+              ` : ''}
+              ${bankInfo ? `
+                <div class="fullscreen-qr-bank-info">
+                  ${escapeHTML(bankInfo)}
+                </div>
+              ` : ''}
+              <div class="fullscreen-qr-hint">
+                Dùng camera điện thoại hoặc app ngân hàng / MoMo / ZaloPay để quét
+              </div>
+            </div>
+          </div>
+          <div class="fullscreen-qr-footer">
+            <button class="btn btn-secondary btn-block btn-lg" id="btn-close-fsqr2">✕ Đóng Lại</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const old = document.getElementById('fullscreen-qr-modal');
+    if (old) old.remove();
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+    const modal = document.getElementById('fullscreen-qr-modal');
+    const close = () => modal.remove();
+    document.getElementById('btn-close-fsqr')?.addEventListener('click', close);
+    document.getElementById('btn-close-fsqr2')?.addEventListener('click', close);
   }
 }

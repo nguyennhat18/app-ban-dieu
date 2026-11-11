@@ -687,12 +687,18 @@ export class QuotationsModule {
               </div>
             </div>
 
-            ${shop.bankInfo ? `
+            ${shop.qrCode ? `
+              <div class="doc-bank-box mt-3 p-2 bg-light text-center">
+                <div class="text-xs text-bold text-primary mb-1">📱 Quét mã QR thanh toán đặt cọc / chuyển khoản:</div>
+                <img src="${shop.qrCode}" style="width: 120px; height: 120px; object-fit: contain; background:#fff; padding:4px; border:1px solid #cbd5e1; border-radius:6px;" alt="QR Code">
+                ${shop.bankInfo ? `<div class="text-xs text-bold text-muted mt-1">${escapeHTML(shop.bankInfo)}</div>` : ''}
+              </div>
+            ` : (shop.bankInfo ? `
               <div class="doc-bank-box mt-3 p-2 bg-light">
                 <div class="text-xs text-muted">Thông tin thanh toán qua ngân hàng:</div>
                 <div class="text-sm text-bold">${escapeHTML(shop.bankInfo)}</div>
               </div>
-            ` : ''}
+            ` : '')}
 
             ${q.notes ? `
               <div class="doc-notes-box mt-2 text-xs text-muted">
@@ -899,18 +905,28 @@ export class QuotationsModule {
       const inWords = `Bằng chữ: ${numberToVietnameseWords(q.totalAmount)}`;
       doc.text(inWords, 14, finalY);
 
-      // 6. Thông tin chuyển khoản & Ghi chú
-      if (shop.bankInfo) {
+      // 6. Thông tin chuyển khoản & Ghi chú & Mã QR
+      if (shop.bankInfo || shop.qrCode) {
         finalY += 8;
+        const boxHeight = shop.qrCode ? 36 : 14;
         doc.setFillColor(248, 250, 252);
         doc.setDrawColor(203, 213, 225);
-        doc.roundedRect(14, finalY, 182, 14, 2, 2, 'FD');
+        doc.roundedRect(14, finalY, 182, boxHeight, 2, 2, 'FD');
         doc.setFont('Roboto', 'bold');
         doc.setFontSize(8.5);
         doc.text('Thông tin thanh toán chuyển khoản:', 18, finalY + 5);
-        doc.setFont('Roboto', 'normal');
-        doc.text(shop.bankInfo, 18, finalY + 10);
-        finalY += 16;
+        if (shop.bankInfo) {
+          doc.setFont('Roboto', 'normal');
+          doc.text(shop.bankInfo, 18, finalY + 10);
+        }
+        if (shop.qrCode) {
+          try {
+            doc.addImage(shop.qrCode, 'JPEG', 158, finalY + 3, 30, 30);
+          } catch {
+            // Ignored if image format issue
+          }
+        }
+        finalY += (boxHeight + 2);
       }
 
       if (q.notes) {
