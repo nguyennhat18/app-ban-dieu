@@ -410,7 +410,7 @@ export class SalesModule {
                 </div>
 
                 <div class="order-card-actions mt-2" style="display:flex; justify-content: flex-end; gap:6px;">
-                  <button class="btn btn-outline-primary btn-xs btn-view-order-detail" data-id="${o.id}">👁️ Hóa đơn</button>
+                  <button class="btn btn-outline-primary btn-xs btn-view-order-detail" data-id="${o.id}">👁️ Phiếu thu</button>
                   ${!isCancelled ? `
                     <button class="btn btn-outline-danger btn-xs btn-cancel-order" data-id="${o.id}">❌ Hủy đơn & hoàn kho</button>
                   ` : ''}
@@ -1104,13 +1104,13 @@ export class SalesModule {
         <div class="modal-content modal-lg">
           <div class="modal-header">
             <div>
-              <h2 class="modal-title">📑 Hóa Đơn Bán Hàng</h2>
+              <h2 class="modal-title">📑 Phiếu Thu</h2>
               <div class="modal-subtitle">Mã đơn: ${escapeHTML(order.id)}</div>
             </div>
             <button class="modal-close" id="btn-close-odmodal">&times;</button>
           </div>
 
-          <!-- KHU VỰC CUỘN XEM HÓA ĐƠN TRANG GIẤY -->
+          <!-- KHU VỰC CUỘN XEM PHIẾU THU TRANG GIẤY -->
           <div class="modal-body invoice-paper-scroll">
             <div class="standard-invoice-paper" id="printable-invoice">
               <div class="invoice-box-border">
@@ -1130,9 +1130,9 @@ export class SalesModule {
                   </div>
                 </div>
 
-                <!-- TIÊU ĐỀ HÓA ĐƠN CHÍNH GIỮA (Image 3) -->
+                <!-- TIÊU ĐỀ PHIẾU THU CHÍNH GIỮA -->
                 <div class="invoice-title-block text-center mt-2 mb-2">
-                  <h1 class="invoice-main-heading">HÓA ĐƠN BÁN HÀNG</h1>
+                  <h1 class="invoice-main-heading">PHIẾU THU</h1>
                   <div class="invoice-sub-heading text-xs"><i>Liên 2: Giao cho người mua</i></div>
                   <div class="invoice-date-text text-xs mt-1">${dateVietnamese}</div>
                 </div>
@@ -1252,7 +1252,7 @@ export class SalesModule {
                 </div>
 
                 <div class="invoice-footnote text-center text-xs text-muted mt-3">
-                  <i>(Cần kiểm tra, đối chiếu khi lập, giao, nhận hóa đơn)</i>
+                  <i>(Cần kiểm tra, đối chiếu khi lập, giao, nhận phiếu thu)</i>
                 </div>
               </div>
             </div>
@@ -1261,10 +1261,10 @@ export class SalesModule {
           <!-- FOOTER MODAL VỚI NÚT XUẤT FILE PDF & IN -->
           <div class="modal-footer">
             <button class="btn btn-primary btn-sm" id="btn-export-order-pdf">
-              📄 Xuất File Hóa Đơn PDF (Gửi Zalo)
+              📄 Xuất File Phiếu Thu PDF (Gửi Zalo)
             </button>
             <button class="btn btn-outline-primary btn-sm" id="btn-print-receipt">
-              🖨️ In Hóa Đơn
+              🖨️ In Phiếu Thu
             </button>
             <div style="flex:1"></div>
             <button class="btn btn-secondary btn-sm" id="btn-close-odmodal2">Đóng</button>
@@ -1356,10 +1356,10 @@ export class SalesModule {
 
       curY += 6;
 
-      // 3. Tiêu đề HÓA ĐƠN BÁN HÀNG chính giữa
+      // 3. Tiêu đề PHIẾU THU chính giữa
       doc.setFont('Roboto', 'bold');
       doc.setFontSize(15);
-      doc.text('HÓA ĐƠN BÁN HÀNG', 105, curY, { align: 'center' });
+      doc.text('PHIẾU THU', 105, curY, { align: 'center' });
 
       doc.setFont('Roboto', 'normal');
       doc.setFontSize(8.5);
@@ -1542,11 +1542,11 @@ export class SalesModule {
       doc.setFont('Roboto', 'italic');
       doc.setFontSize(7.5);
       doc.setTextColor(156, 163, 175);
-      doc.text('(Cần kiểm tra, đối chiếu khi lập, giao, nhận hóa đơn)', 105, 281, { align: 'center' });
+      doc.text('(Cần kiểm tra, đối chiếu khi lập, giao, nhận phiếu thu)', 105, 281, { align: 'center' });
 
       const pdfBlob = doc.output('blob');
-      const filename = `HoaDon-${order.id}.pdf`;
-      await shareFileOrDownload(pdfBlob, filename, `Hóa đơn bán hàng ${order.id}`);
+      const filename = `PhieuThu-${order.id}.pdf`;
+      await shareFileOrDownload(pdfBlob, filename, `Phiếu thu ${order.id}`);
     } catch (err) {
       console.error('Lỗi xuất PDF hóa đơn:', err);
       alert('Lỗi tạo file PDF: ' + err.message);
