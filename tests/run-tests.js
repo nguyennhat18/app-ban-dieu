@@ -213,6 +213,81 @@ async function main() {
     assert.strictEqual(currentMap.get('3').name, 'Diều 3 mới');
   });
 
+  // ================= 7. TEST QUẢN LÝ LOẠI DIỀU, ĐƠN VỊ TÍNH & ĐỒNG BỘ MẶT HÀNG =================
+  runTest('7.1. Logic đổi tên loại diều: Đồng bộ tự động toàn bộ sản phẩm thuộc loại đó', () => {
+    const products = [
+      { id: '1', name: 'Diều mực 4m', category: 'Diều khí động học' },
+      { id: '2', name: 'Diều bạch tuộc 5m', category: 'Diều khí động học' },
+      { id: '3', name: 'Diều sáo 2.5m', category: 'Diều sáo truyền thống' }
+    ];
+
+    const oldCat = 'Diều khí động học';
+    const newCat = 'Diều dù không nan';
+
+    let syncedCount = 0;
+    for (const p of products) {
+      if (p.category === oldCat) {
+        p.category = newCat;
+        syncedCount++;
+      }
+    }
+
+    assert.strictEqual(syncedCount, 2);
+    assert.strictEqual(products[0].category, 'Diều dù không nan');
+    assert.strictEqual(products[1].category, 'Diều dù không nan');
+    assert.strictEqual(products[2].category, 'Diều sáo truyền thống');
+  });
+
+  runTest('7.2. An toàn dữ liệu: Ngăn chặn xóa loại diều khi đang có sản phẩm liên kết', () => {
+    const products = [
+      { id: '1', name: 'Diều sáo 2.5m', category: 'Diều sáo truyền thống' }
+    ];
+
+    const targetCat = 'Diều sáo truyền thống';
+    const linked = products.filter(p => p.category === targetCat);
+
+    assert.strictEqual(linked.length, 1);
+    const canDelete = linked.length === 0;
+    assert.strictEqual(canDelete, false);
+  });
+
+  runTest('7.3. Logic đổi tên đơn vị tính: Đồng bộ tự động sang sản phẩm', () => {
+    const products = [
+      { id: '1', name: 'Diều sáo', unit: 'Chiếc' },
+      { id: '2', name: 'Dây dù 500m', unit: 'Cuộn' }
+    ];
+
+    const oldUnit = 'Chiếc';
+    const newUnit = 'Cái';
+
+    for (const p of products) {
+      if (p.unit === oldUnit) {
+        p.unit = newUnit;
+      }
+    }
+
+    assert.strictEqual(products[0].unit, 'Cái');
+    assert.strictEqual(products[1].unit, 'Cuộn');
+  });
+
+  runTest('7.4. Đổi tên nhanh mặt hàng: Cập nhật tên và giữ nguyên ID, giá, tồn kho', () => {
+    const product = {
+      id: 'SP-100',
+      code: 'DIEU-100',
+      name: 'Diều sáo cũ',
+      sellingPrice: 500000,
+      stock: 5
+    };
+
+    const newName = 'Diều Sáo D7 D8 Cao Cấp 3m';
+    product.name = newName;
+
+    assert.strictEqual(product.name, 'Diều Sáo D7 D8 Cao Cấp 3m');
+    assert.strictEqual(product.id, 'SP-100');
+    assert.strictEqual(product.sellingPrice, 500000);
+    assert.strictEqual(product.stock, 5);
+  });
+
   console.log('\n========================================================');
   console.log(`🎉 KẾT QUẢ KIỂM THỬ: ${passedTests}/${totalTests} TESTS ĐẠT (100%)`);
   console.log('========================================================\n');

@@ -1,5 +1,5 @@
 // Quản lý cơ sở dữ liệu IndexedDB (Offline-First, Transactional, Versioned, Snapshot)
-import { APP_CONFIG, DEFAULT_SHOP_SETTINGS } from './config.js';
+import { APP_CONFIG, DEFAULT_SHOP_SETTINGS, PRODUCT_CATEGORIES, PRODUCT_UNITS } from './config.js';
 import { calculateChecksum } from './utils.js';
 
 class KiteDatabase {
@@ -305,6 +305,136 @@ class KiteDatabase {
       req.onsuccess = () => resolve(value);
       req.onerror = () => reject(req.error);
     });
+  }
+
+  // ================= QUẢN LÝ LOẠI DIỀU (CATEGORIES) =================
+  async getCategories() {
+    const cats = await this.getSetting('product_categories');
+    if (Array.isArray(cats) && cats.length > 0) return cats;
+    return [...PRODUCT_CATEGORIES];
+  }
+
+  async saveCategories(categories) {
+    await this.saveSetting('product_categories', categories);
+  }
+
+  async addCategory(name) {
+    const trimmed = name.trim();
+    if (!trimmed) throw new Error('Tên loại diều không được để trống');
+    const cats = await this.getCategories();
+    if (cats.some(c => c.toLowerCase() === trimmed.toLowerCase())) {
+      throw new Error(`Loại diều "${trimmed}" đã tồn tại!`);
+    }
+    cats.push(trimmed);
+    await this.saveCategories(cats);
+    return cats;
+  }
+
+  async renameCategory(oldName, newName) {
+    const trimmedOld = oldName.trim();
+    const trimmedNew = newName.trim();
+    if (!trimmedNew) throw new Error('Tên loại diều mới không được để trống');
+    if (trimmedOld === trimmedNew) return { updatedProductsCount: 0 };
+
+    const cats = await this.getCategories();
+    const idx = cats.indexOf(trimmedOld);
+    if (idx === -1) throw new Error(`Không tìm thấy loại diều "${trimmedOld}"`);
+
+    if (cats.some((c, i) => i !== idx && c.toLowerCase() === trimmedNew.toLowerCase())) {
+      throw new Error(`Tên loại diều "${trimmedNew}" đã tồn tại!`);
+    }
+
+    cats[idx] = trimmedNew;
+    await this.saveCategories(cats);
+
+    // Tự động đồng bộ loại mới sang tất cả sản phẩm
+    const products = await this.getAll('products', true); // Bao gồm cả xóa mềm
+    let updatedProductsCount = 0;
+    for (const p of products) {
+      if (p.category === trimmedOld) {
+        p.category = trimmedNew;
+        await this.put('products', p);
+        updatedProductsCount++;
+      }
+    }
+    return { updatedProductsCount };
+  }
+
+  async deleteCategory(catName) {
+    const trimmed = catName.trim();
+    const products = await this.getAll('products');
+    const linked = products.filter(p => p.category === trimmed);
+    if (linked.length > 0) {
+      throw new Error(`Không thể xóa vì đang có ${linked.length} sản phẩm thuộc loại "${trimmed}". Vui lòng đổi loại cho các sản phẩm này trước khi xóa!`);
+    }
+
+    let cats = await this.getCategories();
+    if (cats.length <= 1) {
+      throw new Error('Cửa hàng phải có ít nhất 1 loại diều!');
+    }
+    cats = cats.filter(c => c !== trimmed);
+    await this.saveCategories(cats);
+    return cats;
+  }
+
+  async resetDefaultCategories() {
+    await this.saveCategories([...PRODUCT_CATEGORIES]);
+    return [...PRODUCT_CATEGORIES];
+  }
+
+  // ================= QUẢN LÝ ĐƠN VỊ TÍNH (UNITS) =================
+  async getUnits() {
+    const units = await this.getSetting('product_units');
+    if (Array.isArray(units) && units.length > 0) return units;
+    return [...PRODUCT_UNITS];
+  }
+
+  async saveUnits(units) {
+    await this.saveSetting('product_units', units);
+  }
+
+  async addUnit(name) {
+    const trimmed = name.trim();
+    if (!trimmed) throw new Error('Tên đơn vị tính không được để trống');
+    const units = await this.getUnits();
+    if (units.some(u => u.toLowerCase() === trimmed.toLowerCase())) {
+      throw new Error(`Đơn vị tính "${trimmed}" đã tồn tại!`);
+    }
+    units.push(trimmed);
+    await this.saveUnits(units);
+    return units;
+  }
+
+  async renameUnit(oldName, newName) {
+    const trimmedOld = oldName.trim();
+    const trimmedNew = newName.trim();
+    if (!trimmedNew) throw new Error('Tên đơn vị tính mới không được để trống');
+    if (trimmedOld === trimmedNew) return;
+
+    const units = await this.getUnits();
+    const idx = units.indexOf(trimmedOld);
+    if (idx === -1) throw new Error(`Không tìm thấy đơn vị tính "${trimmedOld}"`);
+
+    units[idx] = trimmedNew;
+    await this.saveUnits(units);
+
+    // Đồng bộ sang sản phẩm
+    const products = await this.getAll('products', true);
+    for (const p of products) {
+      if (p.unit === trimmedOld) {
+        p.unit = trimmedNew;
+        await this.put('products', p);
+      }
+    }
+  }
+
+  async deleteUnit(unitName) {
+    const trimmed = unitName.trim();
+    let units = await this.getUnits();
+    if (units.length <= 1) throw new Error('Phải có ít nhất 1 đơn vị tính!');
+    units = units.filter(u => u !== trimmed);
+    await this.saveUnits(units);
+    return units;
   }
 
   async _incrementUnbackedChanges() {

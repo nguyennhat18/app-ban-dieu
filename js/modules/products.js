@@ -14,13 +14,14 @@ export class ProductModule {
   async render() {
     const container = document.getElementById('view-container');
     const products = await db.getAll('products');
+    const categories = await db.getCategories();
 
     // Lọc theo tìm kiếm, danh mục và trạng thái tồn kho
     const filtered = products.filter(p => {
       const matchCat = this.currentCategory === 'all' || p.category === this.currentCategory;
       const q = this.searchQuery.toLowerCase().trim();
       const matchSearch = !q ||
-        p.name.toLowerCase().includes(query) ||
+        p.name.toLowerCase().includes(q) ||
         (p.code && p.code.toLowerCase().includes(q)) ||
         (p.size && p.size.toLowerCase().includes(q)) ||
         (p.color && p.color.toLowerCase().includes(q));
@@ -75,7 +76,7 @@ export class ProductModule {
           <!-- Lọc theo danh mục diều -->
           <div class="category-tabs-scroll">
             <button class="cat-pill ${this.currentCategory === 'all' ? 'active' : ''}" data-cat="all">Tất cả loại</button>
-            ${PRODUCT_CATEGORIES.map(cat => `
+            ${categories.map(cat => `
               <button class="cat-pill ${this.currentCategory === cat ? 'active' : ''}" data-cat="${escapeHTML(cat)}">${escapeHTML(cat)}</button>
             `).join('')}
           </div>
@@ -219,6 +220,8 @@ export class ProductModule {
   async showProductModal(productId = null) {
     let product = null;
     let isEdit = false;
+    const categories = await db.getCategories();
+    const units = await db.getUnits();
 
     if (productId) {
       product = await db.getById('products', productId);
@@ -232,10 +235,10 @@ export class ProductModule {
         id: 'SP-' + Date.now(),
         code,
         name: '',
-        category: PRODUCT_CATEGORIES[0],
+        category: categories[0] || 'Diều khí động học',
         size: '',
         color: '',
-        unit: 'Chiếc',
+        unit: units[0] || 'Chiếc',
         costPrice: 0,
         sellingPrice: 0,
         stock: 10,
@@ -289,7 +292,7 @@ export class ProductModule {
               <div class="form-group flex-2">
                 <label class="form-label">Loại diều</label>
                 <select id="p-category" class="form-select">
-                  ${PRODUCT_CATEGORIES.map(c => `
+                  ${categories.map(c => `
                     <option value="${escapeHTML(c)}" ${product.category === c ? 'selected' : ''}>${escapeHTML(c)}</option>
                   `).join('')}
                 </select>
@@ -297,7 +300,7 @@ export class ProductModule {
               <div class="form-group flex-1">
                 <label class="form-label">Đơn vị</label>
                 <select id="p-unit" class="form-select">
-                  ${PRODUCT_UNITS.map(u => `
+                  ${units.map(u => `
                     <option value="${escapeHTML(u)}" ${product.unit === u ? 'selected' : ''}>${escapeHTML(u)}</option>
                   `).join('')}
                 </select>
@@ -435,7 +438,11 @@ export class ProductModule {
         if (confirm(`Bạn có chắc muốn chuyển "${product.name}" vào Thùng rác không?\n(Bạn luôn có thể khôi phục lại trong Cài đặt > Thùng rác)`)) {
           await db.softDelete('products', product.id);
           closeModal();
-          this.render();
+          if (this.app.currentView === 'settings') {
+            this.app.settingsModule.render();
+          } else {
+            this.render();
+          }
         }
       });
     }
@@ -472,7 +479,11 @@ export class ProductModule {
 
       await db.put('products', updated);
       closeModal();
-      this.render();
+      if (this.app.currentView === 'settings') {
+        this.app.settingsModule.render();
+      } else {
+        this.render();
+      }
     });
   }
 }

@@ -62,6 +62,7 @@ export class SalesModule {
     const products = await db.getAll('products');
     const customers = await db.getAll('customers');
     const shopSettings = (await db.getSetting('shop_info')) || {};
+    const categories = await db.getCategories();
 
     const filteredProducts = products.filter(p => {
       const matchCat = this.posCategory === 'all' || p.category === this.posCategory;
@@ -84,7 +85,7 @@ export class SalesModule {
             </div>
             <div class="category-tabs-scroll">
               <button class="cat-pill ${this.posCategory === 'all' ? 'active' : ''}" data-cat="all">Tất cả diều</button>
-              ${PRODUCT_CATEGORIES.map(c => `
+              ${categories.map(c => `
                 <button class="cat-pill ${this.posCategory === c ? 'active' : ''}" data-cat="${escapeHTML(c)}">${escapeHTML(c)}</button>
               `).join('')}
             </div>

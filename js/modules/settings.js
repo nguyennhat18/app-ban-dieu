@@ -11,6 +11,9 @@ import { DEFAULT_SHOP_SETTINGS } from '../config.js';
 export class SettingsModule {
   constructor(app) {
     this.app = app;
+    this.catalogTab = 'categories'; // 'categories' | 'products' | 'units'
+    this.productSearchQuery = '';
+    this.productCatFilter = 'all';
     this.storageStatus = {
       isPersisted: false,
       usageMB: 0,
@@ -60,6 +63,9 @@ export class SettingsModule {
     const container = document.getElementById('view-container');
     const shop = (await db.getSetting('shop_info')) || { ...DEFAULT_SHOP_SETTINGS };
     const snapshotsHtml = await this.app.backupModule.renderSnapshotsSection();
+    const categories = await db.getCategories();
+    const units = await db.getUnits();
+    const products = await db.getAll('products');
 
     container.innerHTML = `
       <div class="view-header">
@@ -80,6 +86,10 @@ export class SettingsModule {
       <div class="card p-3 mb-3">
         <h3 class="card-title">⚡ Lối Tắt Nghiệp Vụ</h3>
         <div class="quick-shortcuts-grid">
+          <button id="btn-shortcut-catalog" class="btn btn-outline-info btn-block text-left" style="display:flex; align-items:center; justify-content:space-between; padding: 12px 14px; margin-bottom: 8px; font-weight:600;">
+            <span>🏷️ Quản Lý Loại Diều & Sửa Mặt Hàng</span>
+            <span>➔</span>
+          </button>
           <button id="btn-shortcut-reports" class="btn btn-outline-primary btn-block text-left" style="display:flex; align-items:center; justify-content:space-between; padding: 12px 14px; margin-bottom: 8px; font-weight:600;">
             <span>📊 Báo Cáo Doanh Thu & Lợi Nhuận Gộp</span>
             <span>➔</span>
@@ -136,7 +146,43 @@ export class SettingsModule {
         </div>
       </div>
 
-      <!-- KHỐI 3: BẢN CHỤP HÀNG NGÀY NỘI BỘ (DISASTER RECOVERY) -->
+      <!-- KHỐI 3: QUẢN LÝ MẶT HÀNG, LOẠI DIỀU & ĐƠN VỊ TÍNH -->
+      <div class="card p-3 mb-3 border-primary-subtle" id="catalog-management-card">
+        <h3 class="card-title">🏷️ Quản Lý Loại Diều & Sửa Mặt Hàng</h3>
+        <p class="text-muted text-xs mb-3">
+          Tùy chỉnh phân loại diều, đổi tên mặt hàng tức thì và cấu hình đơn vị tính
+        </p>
+
+        <!-- Sub Tabs -->
+        <div class="catalog-tabs-bar mb-3">
+          <button type="button" class="catalog-tab-btn ${this.catalogTab === 'categories' ? 'active' : ''}" data-tab="categories">
+            🪁 Loại Diều (${categories.length})
+          </button>
+          <button type="button" class="catalog-tab-btn ${this.catalogTab === 'products' ? 'active' : ''}" data-tab="products">
+            📦 Sửa Mặt Hàng (${products.length})
+          </button>
+          <button type="button" class="catalog-tab-btn ${this.catalogTab === 'units' ? 'active' : ''}" data-tab="units">
+            📏 Đơn Vị Tính (${units.length})
+          </button>
+        </div>
+
+        <!-- Tab 1: Loại Diều -->
+        <div id="catalog-tab-content-categories" style="display: ${this.catalogTab === 'categories' ? 'block' : 'none'};">
+          ${this.renderCategoriesTabHtml(categories, products)}
+        </div>
+
+        <!-- Tab 2: Sửa Mặt Hàng -->
+        <div id="catalog-tab-content-products" style="display: ${this.catalogTab === 'products' ? 'block' : 'none'};">
+          ${this.renderProductsTabHtml(products, categories)}
+        </div>
+
+        <!-- Tab 3: Đơn Vị Tính -->
+        <div id="catalog-tab-content-units" style="display: ${this.catalogTab === 'units' ? 'block' : 'none'};">
+          ${this.renderUnitsTabHtml(units)}
+        </div>
+      </div>
+
+      <!-- KHỐI 4: BẢN CHỤP HÀNG NGÀY NỘI BỘ (DISASTER RECOVERY) -->
       <div class="card p-3 mb-3">
         <h3 class="card-title">🕒 Bản Chụp Cứu Hộ Tự Động (7 Ngày Gần Nhất)</h3>
         <p class="text-muted text-xs mb-2">
@@ -295,10 +341,22 @@ export class SettingsModule {
       </div>
     `;
 
-    this.bindEvents(shop);
+    this.bindEvents(shop, categories, products, units);
   }
 
-  bindEvents(shop) {
+  bindEvents(shop, categories, products, units) {
+    // 0. Gán sự kiện Quản lý Loại diều, Sửa mặt hàng, Đơn vị tính
+    this.bindCatalogEvents(categories, products, units);
+
+    // Lối tắt cuộn đến Quản lý Loại diều & Mặt hàng
+    const btnShortcutCatalog = document.getElementById('btn-shortcut-catalog');
+    if (btnShortcutCatalog) {
+      btnShortcutCatalog.addEventListener('click', () => {
+        const el = document.getElementById('catalog-management-card');
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+      });
+    }
+
     // Lưu thông tin shop
     const form = document.getElementById('settings-shop-form');
     let logoBase64 = shop.logo || '';
@@ -516,6 +574,485 @@ export class SettingsModule {
         alert('Đã xóa trắng dữ liệu thành công!');
         window.location.reload();
       }
+    });
+  }
+
+  // ================= QUẢN LÝ LOẠI DIỀU, SỬA MẶT HÀNG & ĐVT =================
+  renderCategoriesTabHtml(categories, products) {
+    return `
+      <div class="catalog-tab-pane">
+        <div class="catalog-intro-box mb-3">
+          <div class="text-xs text-muted">
+            💡 <b>Quy tắc đồng bộ thông minh:</b> Khi bạn đổi tên một loại diều (ví dụ từ <i>"Diều khí động học"</i> sang <i>"Diều dù không xương"</i>), toàn bộ các mặt hàng đang thuộc loại này sẽ được hệ thống <b>tự động cập nhật</b> theo tên mới ngay lập tức.
+          </div>
+        </div>
+
+        <div class="catalog-add-form mb-3">
+          <label class="form-label text-bold">Thêm loại diều mới:</label>
+          <div class="input-with-button-row">
+            <input type="text" id="input-new-category" class="form-input" placeholder="VD: Diều nan carbon, Diều led đêm, Diều mini..." maxlength="50">
+            <button type="button" id="btn-add-category" class="btn btn-primary">
+              <span>+</span> Thêm Loại
+            </button>
+          </div>
+        </div>
+
+        <div class="categories-list-header mb-2 d-flex justify-between align-center">
+          <span class="text-xs text-muted text-bold">DANH SÁCH LOẠI DIỀU (${categories.length})</span>
+          <button type="button" id="btn-reset-categories" class="btn btn-link text-xs text-muted p-0">
+            🔄 Khôi phục mặc định
+          </button>
+        </div>
+
+        <div class="categories-list-container">
+          ${categories.map(cat => {
+            const prodCount = products.filter(p => p.category === cat).length;
+            return `
+              <div class="catalog-item-card">
+                <div class="catalog-item-info">
+                  <span class="catalog-item-icon">🪁</span>
+                  <div class="catalog-item-main">
+                    <div class="catalog-item-title">${escapeHTML(cat)}</div>
+                    <div class="catalog-item-subtitle text-xs text-muted">
+                      ${prodCount > 0 ? `<b>${prodCount}</b> sản phẩm đang dùng` : 'Chưa có sản phẩm'}
+                    </div>
+                  </div>
+                </div>
+                <div class="catalog-item-actions">
+                  <button type="button" class="btn btn-outline-primary btn-xs btn-rename-cat" data-name="${escapeHTML(cat)}">
+                    ✏️ Đổi tên
+                  </button>
+                  <button type="button" class="btn btn-outline-danger btn-xs btn-delete-cat" data-name="${escapeHTML(cat)}" data-count="${prodCount}">
+                    🗑️ Xóa
+                  </button>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  renderProductsTabHtml(products, categories) {
+    const q = (this.productSearchQuery || '').toLowerCase().trim();
+    const catFilter = this.productCatFilter || 'all';
+
+    const filtered = products.filter(p => {
+      const matchCat = catFilter === 'all' || p.category === catFilter;
+      const matchQuery = !q ||
+        p.name.toLowerCase().includes(q) ||
+        (p.code && p.code.toLowerCase().includes(q)) ||
+        (p.size && p.size.toLowerCase().includes(q));
+      return matchCat && matchQuery;
+    });
+
+    return `
+      <div class="catalog-tab-pane">
+        <div class="catalog-intro-box mb-3">
+          <div class="text-xs text-muted">
+            ⚡ <b>Sửa nhanh mặt hàng:</b> Chạm vào nút <b>"✏️ Đổi tên nhanh"</b> để sửa ngay tên mặt hàng mà không cần mở nhiều bước, hoặc bấm <b>"⚙️ Sửa chi tiết"</b> để sửa ảnh, giá bán, giá vốn và tồn kho.
+          </div>
+        </div>
+
+        <!-- Thanh tìm kiếm & lọc nhanh -->
+        <div class="catalog-prod-toolbar mb-3">
+          <div class="catalog-search-wrap mb-2">
+            <input type="text" id="settings-prod-search" class="form-input" placeholder="🔍 Tìm mặt hàng theo tên hoặc mã..." value="${escapeHTML(this.productSearchQuery || '')}">
+          </div>
+          <div class="form-row align-center">
+            <div class="flex-2">
+              <select id="settings-prod-cat-filter" class="form-select text-sm">
+                <option value="all">-- Tất cả loại diều (${products.length}) --</option>
+                ${categories.map(c => `
+                  <option value="${escapeHTML(c)}" ${this.productCatFilter === c ? 'selected' : ''}>
+                    ${escapeHTML(c)} (${products.filter(p => p.category === c).length})
+                  </option>
+                `).join('')}
+              </select>
+            </div>
+            <div class="flex-1 text-right">
+              <button type="button" id="btn-settings-add-prod" class="btn btn-primary btn-sm btn-block">
+                <span>+</span> Thêm Mới
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="catalog-prod-count text-xs text-muted mb-2">
+          Hiển thị <b>${filtered.length}</b> / ${products.length} mặt hàng
+        </div>
+
+        <div id="catalog-products-list" class="catalog-products-list">
+          ${this.renderProductCardsHtml(filtered)}
+        </div>
+      </div>
+    `;
+  }
+
+  renderProductCardsHtml(productsList) {
+    if (productsList.length === 0) {
+      return `
+        <div class="card p-4 text-center text-muted">
+          <div style="font-size: 32px; margin-bottom: 6px;">🪁</div>
+          <p class="mb-0 text-sm">Không tìm thấy mặt hàng nào phù hợp.</p>
+        </div>
+      `;
+    }
+
+    return productsList.map(p => `
+      <div class="quick-prod-card" data-id="${p.id}">
+        <div class="quick-prod-header">
+          <div class="quick-prod-thumb">
+            ${p.photo ? `
+              <img src="${p.photo}" alt="${escapeHTML(p.name)}" class="quick-prod-img">
+            ` : `
+              <div class="quick-prod-img-placeholder">🪁</div>
+            `}
+          </div>
+          <div class="quick-prod-info">
+            <div class="quick-prod-title-line">
+              <span class="quick-prod-name" id="text-pname-${p.id}">${escapeHTML(p.name)}</span>
+            </div>
+            <div class="quick-prod-badge-line mt-1">
+              <span class="badge badge-primary-subtle text-xs">${escapeHTML(p.category || 'Chưa phân loại')}</span>
+              <span class="badge badge-light text-xs">${escapeHTML(p.code || '')}</span>
+              <span class="text-xs text-muted">ĐVT: <b>${escapeHTML(p.unit || 'Chiếc')}</b></span>
+            </div>
+            <div class="quick-prod-price-line mt-1">
+              <span class="text-primary text-bold text-sm">${formatVND(p.sellingPrice || 0)}</span>
+              <span class="text-xs text-muted ml-2">• Tồn kho: <b class="${p.stock <= (p.lowStockThreshold || 5) ? 'text-danger' : 'text-success'}">${p.stock}</b></span>
+            </div>
+          </div>
+        </div>
+        <div class="quick-prod-actions mt-2 pt-2 border-top">
+          <button type="button" class="btn btn-outline-primary btn-xs btn-quick-rename-prod" data-id="${p.id}" data-name="${escapeHTML(p.name)}">
+            ✏️ Đổi tên nhanh
+          </button>
+          <button type="button" class="btn btn-outline-secondary btn-xs btn-quick-edit-full" data-id="${p.id}">
+            ⚙️ Sửa chi tiết
+          </button>
+          <button type="button" class="btn btn-outline-danger btn-xs btn-quick-delete-prod" data-id="${p.id}" data-name="${escapeHTML(p.name)}">
+            🗑️ Xóa
+          </button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  renderUnitsTabHtml(units) {
+    return `
+      <div class="catalog-tab-pane">
+        <div class="catalog-intro-box mb-3">
+          <div class="text-xs text-muted">
+            📏 <b>Đơn vị tính:</b> Dùng để chỉ đơn vị cho các mặt hàng (ví dụ: Chiếc diều, Bộ sáo, Cuộn dây...). Khi đổi tên ĐVT, toàn bộ mặt hàng dùng ĐVT đó sẽ tự động được cập nhật.
+          </div>
+        </div>
+
+        <div class="catalog-add-form mb-3">
+          <label class="form-label text-bold">Thêm đơn vị tính mới:</label>
+          <div class="input-with-button-row">
+            <input type="text" id="input-new-unit" class="form-input" placeholder="VD: Mét, Cây, Cặp, Túi..." maxlength="20">
+            <button type="button" id="btn-add-unit" class="btn btn-primary">
+              <span>+</span> Thêm ĐVT
+            </button>
+          </div>
+        </div>
+
+        <div class="text-xs text-muted text-bold mb-2">DANH SÁCH ĐƠN VỊ TÍNH HIỆN CÓ (${units.length})</div>
+
+        <div class="units-grid">
+          ${units.map(u => `
+            <div class="unit-badge-card">
+              <div class="unit-badge-name">
+                <span class="unit-icon">📐</span>
+                <b>${escapeHTML(u)}</b>
+              </div>
+              <div class="unit-badge-actions">
+                <button type="button" class="btn btn-outline-primary btn-xs btn-rename-unit" data-unit="${escapeHTML(u)}" title="Đổi tên ĐVT">✏️</button>
+                <button type="button" class="btn btn-outline-danger btn-xs btn-delete-unit" data-unit="${escapeHTML(u)}" title="Xóa ĐVT">🗑️</button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  bindCatalogEvents(categories, products, units) {
+    // 1. Chuyển đổi tab con (Loại diều, Mặt hàng, ĐVT)
+    document.querySelectorAll('.catalog-tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tab = btn.dataset.tab;
+        this.catalogTab = tab;
+        document.querySelectorAll('.catalog-tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        ['categories', 'products', 'units'].forEach(t => {
+          const el = document.getElementById(`catalog-tab-content-${t}`);
+          if (el) el.style.display = (t === tab) ? 'block' : 'none';
+        });
+      });
+    });
+
+    // 2. Tab Loại Diều
+    const addCatBtn = document.getElementById('btn-add-category');
+    const newCatInput = document.getElementById('input-new-category');
+    if (addCatBtn && newCatInput) {
+      const handleAddCat = async () => {
+        const val = newCatInput.value.trim();
+        if (!val) {
+          alert('Vui lòng nhập tên loại diều mới!');
+          newCatInput.focus();
+          return;
+        }
+        try {
+          await db.addCategory(val);
+          alert(`✅ Đã thêm loại diều "${val}" thành công!`);
+          await this.render();
+        } catch (err) {
+          alert('Lỗi: ' + err.message);
+        }
+      };
+
+      addCatBtn.addEventListener('click', handleAddCat);
+      newCatInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          handleAddCat();
+        }
+      });
+    }
+
+    // Đổi tên loại diều
+    document.querySelectorAll('.btn-rename-cat').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const oldName = btn.dataset.name;
+        const newName = prompt(`Nhập tên mới cho loại diều "${oldName}":`, oldName);
+        if (newName !== null) {
+          const trimmed = newName.trim();
+          if (!trimmed) {
+            alert('Tên loại diều không được để trống!');
+            return;
+          }
+          if (trimmed === oldName) return;
+
+          try {
+            const res = await db.renameCategory(oldName, trimmed);
+            alert(`✅ Đã đổi tên loại diều thành "${trimmed}"!\nCó ${res.updatedProductsCount} sản phẩm liên quan đã tự động cập nhật.`);
+            await this.render();
+          } catch (err) {
+            alert('Lỗi đổi tên: ' + err.message);
+          }
+        }
+      });
+    });
+
+    // Xóa loại diều
+    document.querySelectorAll('.btn-delete-cat').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const name = btn.dataset.name;
+        const count = parseInt(btn.dataset.count, 10) || 0;
+        if (count > 0) {
+          alert(`⚠️ Không thể xóa loại diều "${name}" vì đang có ${count} sản phẩm thuộc loại này!\n\nVui lòng vào tab "Sửa Mặt Hàng" hoặc "Kho Diều" để đổi sang loại khác trước khi xóa.`);
+          return;
+        }
+        if (confirm(`Bạn có chắc muốn xóa loại diều "${name}" không?`)) {
+          try {
+            await db.deleteCategory(name);
+            alert(`✅ Đã xóa loại diều "${name}" thành công!`);
+            await this.render();
+          } catch (err) {
+            alert('Lỗi xóa: ' + err.message);
+          }
+        }
+      });
+    });
+
+    // Khôi phục mặc định loại diều
+    const resetCatsBtn = document.getElementById('btn-reset-categories');
+    if (resetCatsBtn) {
+      resetCatsBtn.addEventListener('click', async () => {
+        if (confirm('Khôi phục danh sách loại diều về mặc định ban đầu?\n(Lưu ý: Các sản phẩm hiện có vẫn được giữ nguyên)')) {
+          try {
+            await db.resetDefaultCategories();
+            alert('✅ Đã khôi phục danh mục loại diều mặc định!');
+            await this.render();
+          } catch (err) {
+            alert('Lỗi: ' + err.message);
+          }
+        }
+      });
+    }
+
+    // 3. Tab Sửa Mặt Hàng
+    const searchInput = document.getElementById('settings-prod-search');
+    const catFilterSelect = document.getElementById('settings-prod-cat-filter');
+    const addProdBtn = document.getElementById('btn-settings-add-prod');
+
+    if (addProdBtn) {
+      addProdBtn.addEventListener('click', () => {
+        this.app.productModule.showProductModal();
+      });
+    }
+
+    const filterAndRenderProducts = () => {
+      const q = (this.productSearchQuery || '').toLowerCase().trim();
+      const cat = this.productCatFilter || 'all';
+
+      const filtered = products.filter(p => {
+        const matchCat = cat === 'all' || p.category === cat;
+        const matchQuery = !q ||
+          p.name.toLowerCase().includes(q) ||
+          (p.code && p.code.toLowerCase().includes(q)) ||
+          (p.size && p.size.toLowerCase().includes(q));
+        return matchCat && matchQuery;
+      });
+
+      const listEl = document.getElementById('catalog-products-list');
+      const countEl = document.querySelector('.catalog-prod-count');
+      if (listEl) {
+        listEl.innerHTML = this.renderProductCardsHtml(filtered);
+        this.bindProductListActions();
+      }
+      if (countEl) {
+        countEl.innerHTML = `Hiển thị <b>${filtered.length}</b> / ${products.length} mặt hàng`;
+      }
+    };
+
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => {
+        this.productSearchQuery = e.target.value;
+        filterAndRenderProducts();
+      });
+    }
+
+    if (catFilterSelect) {
+      catFilterSelect.addEventListener('change', (e) => {
+        this.productCatFilter = e.target.value;
+        filterAndRenderProducts();
+      });
+    }
+
+    // Gán action cho danh sách sản phẩm ban đầu
+    this.bindProductListActions();
+
+    // 4. Tab Đơn Vị Tính
+    const addUnitBtn = document.getElementById('btn-add-unit');
+    const newUnitInput = document.getElementById('input-new-unit');
+    if (addUnitBtn && newUnitInput) {
+      const handleAddUnit = async () => {
+        const val = newUnitInput.value.trim();
+        if (!val) {
+          alert('Vui lòng nhập tên đơn vị tính!');
+          newUnitInput.focus();
+          return;
+        }
+        try {
+          await db.addUnit(val);
+          alert(`✅ Đã thêm đơn vị tính "${val}"!`);
+          await this.render();
+        } catch (err) {
+          alert('Lỗi: ' + err.message);
+        }
+      };
+
+      addUnitBtn.addEventListener('click', handleAddUnit);
+      newUnitInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          handleAddUnit();
+        }
+      });
+    }
+
+    // Đổi tên ĐVT
+    document.querySelectorAll('.btn-rename-unit').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const oldUnit = btn.dataset.unit;
+        const newUnit = prompt(`Nhập tên mới cho đơn vị tính "${oldUnit}":`, oldUnit);
+        if (newUnit !== null) {
+          const trimmed = newUnit.trim();
+          if (!trimmed) return alert('Tên ĐVT không được để trống!');
+          if (trimmed === oldUnit) return;
+
+          try {
+            await db.renameUnit(oldUnit, trimmed);
+            alert(`✅ Đã đổi đơn vị tính thành "${trimmed}"! Các mặt hàng liên quan đã được đồng bộ.`);
+            await this.render();
+          } catch (err) {
+            alert('Lỗi: ' + err.message);
+          }
+        }
+      });
+    });
+
+    // Xóa ĐVT
+    document.querySelectorAll('.btn-delete-unit').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const unit = btn.dataset.unit;
+        if (confirm(`Bạn có chắc muốn xóa đơn vị tính "${unit}"?`)) {
+          try {
+            await db.deleteUnit(unit);
+            alert(`✅ Đã xóa đơn vị tính "${unit}"!`);
+            await this.render();
+          } catch (err) {
+            alert('Lỗi: ' + err.message);
+          }
+        }
+      });
+    });
+  }
+
+  bindProductListActions() {
+    // Đổi tên nhanh mặt hàng
+    document.querySelectorAll('.btn-quick-rename-prod').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.id;
+        const oldName = btn.dataset.name;
+        const newName = prompt(`Nhập tên mới cho mặt hàng:\n"${oldName}"`, oldName);
+        if (newName !== null) {
+          const trimmed = newName.trim();
+          if (!trimmed) {
+            alert('Tên mặt hàng không được để trống!');
+            return;
+          }
+          if (trimmed === oldName) return;
+
+          try {
+            const p = await db.getById('products', id);
+            if (p) {
+              p.name = trimmed;
+              await db.put('products', p);
+              alert(`✅ Đã đổi tên mặt hàng thành công:\n"${trimmed}"`);
+              await this.render();
+            }
+          } catch (err) {
+            alert('Lỗi: ' + err.message);
+          }
+        }
+      });
+    });
+
+    // Sửa đầy đủ chi tiết
+    document.querySelectorAll('.btn-quick-edit-full').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.id;
+        this.app.productModule.showProductModal(id);
+      });
+    });
+
+    // Xóa mặt hàng
+    document.querySelectorAll('.btn-quick-delete-prod').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.id;
+        const name = btn.dataset.name;
+        if (confirm(`Chuyển "${name}" vào Thùng rác?\n(Bạn có thể khôi phục lại bất kỳ lúc nào trong Thùng rác)`)) {
+          await db.softDelete('products', id);
+          alert(`✅ Đã chuyển "${name}" vào Thùng rác!`);
+          await this.render();
+        }
+      });
     });
   }
 
