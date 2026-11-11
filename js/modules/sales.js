@@ -125,23 +125,27 @@ export class SalesModule {
 
               return `
                 <div class="pos-item-card ${isOutOfStock ? 'out-of-stock' : ''}" data-id="${p.id}">
+                  <!-- Tag kho hàng nổi góc trên bên trái ảnh -->
+                  <span class="pos-card-wh-chip ${isStockWh ? 'wh-chip-stock' : 'wh-chip-new'}">
+                    ${isStockWh ? '📦 Kho Tồn' : '✨ Diều Mới'}
+                  </span>
+
                   ${p.photo ? `
                     <img src="${p.photo}" class="pos-item-img" alt="${escapeHTML(p.name)}" loading="lazy">
                   ` : `
                     <div class="pos-item-img-placeholder">🪁</div>
                   `}
+
                   <div class="pos-item-body">
-                    <div class="pos-item-name">${escapeHTML(p.name)}</div>
-                    <div class="pos-item-meta">
-                      <span class="pos-stock-tag ${isOutOfStock ? 'text-danger text-bold' : isLowStock ? 'text-danger' : 'text-muted'}">
-                        ${isOutOfStock ? 'Hết hàng' : `Tồn: ${p.stock}`}
+                    <div class="pos-item-name" title="${escapeHTML(p.name)}">${escapeHTML(p.name)}</div>
+                    <div class="pos-item-price">${formatVND(p.sellingPrice)}</div>
+                    <div class="pos-item-stock-row">
+                      <span class="pos-stock-tag ${isOutOfStock ? 'stock-out' : isLowStock ? 'stock-low' : 'stock-ok'}">
+                        ${isOutOfStock ? '⚠️ Hết hàng' : `Kho còn: ${p.stock} ${escapeHTML(p.unit || '')}`}
                       </span>
-                      <span class="pos-wh-badge ${isStockWh ? 'badge-stock' : 'badge-new'}">
-                        ${isStockWh ? '📦 Kho Tồn' : '✨ Mới'}
-                      </span>
-                      <span class="pos-item-price">${formatVND(p.sellingPrice)}</span>
                     </div>
                   </div>
+
                   ${qtyInCart > 0 ? `
                     <div class="pos-item-badge">+${qtyInCart}</div>
                   ` : ''}

@@ -866,32 +866,66 @@ input, textarea, select {
 
 .pos-item-card {
   background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-lg);
   padding: 8px;
   display: flex;
   flex-direction: column;
   position: relative;
   cursor: pointer;
-  transition: transform 0.1s, border-color 0.15s, box-shadow 0.15s;
+  transition: transform 0.12s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .pos-item-card:active {
-  transform: scale(0.95);
+  transform: scale(0.96);
   border-color: var(--primary);
+}
+
+.pos-item-card.out-of-stock {
+  opacity: 0.82;
+}
+
+/* Tag Kho hàng nổi ở góc trên bên trái ảnh sản phẩm */
+.pos-card-wh-chip {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 2;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  white-space: nowrap;
+  pointer-events: none;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.pos-card-wh-chip.wh-chip-new {
+  background: rgba(255, 255, 255, 0.95);
+  color: #0284c7;
+  border: 1px solid #bae6fd;
+}
+
+.pos-card-wh-chip.wh-chip-stock {
+  background: rgba(255, 251, 235, 0.95);
+  color: #b45309;
+  border: 1px solid #fde68a;
 }
 
 .pos-item-img {
   width: 100%;
-  height: 85px;
+  height: 90px;
   object-fit: cover;
   border-radius: var(--radius-sm);
 }
 
 .pos-item-img-placeholder {
   width: 100%;
-  height: 85px;
-  background: #e0f2fe;
+  height: 90px;
+  background: #f1f5f9;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -899,39 +933,73 @@ input, textarea, select {
   border-radius: var(--radius-sm);
 }
 
+.pos-item-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  padding-top: 6px;
+}
+
 .pos-item-name {
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 700;
-  margin: 6px 0 2px 0;
+  color: #0f172a;
+  line-height: 1.35;
+  height: 34px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  height: 32px;
+  margin-bottom: 4px;
 }
 
-.pos-item-meta {
+.pos-item-price {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--primary);
+  white-space: nowrap;
+  line-height: 1.2;
+  margin-bottom: 4px;
+}
+
+.pos-item-stock-row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
   margin-top: auto;
 }
 
 .pos-stock-tag {
-  font-size: 10px;
-  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1.2;
 }
 
-.pos-item-price {
-  font-size: 13px;
-  font-weight: 800;
-  color: var(--primary);
+.pos-stock-tag.stock-ok {
+  color: #475569;
+  background: #f1f5f9;
+}
+
+.pos-stock-tag.stock-low {
+  color: #b45309;
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+}
+
+.pos-stock-tag.stock-out {
+  color: #dc2626;
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  font-weight: 700;
 }
 
 .pos-item-badge {
   position: absolute;
-  top: 4px;
-  right: 4px;
+  top: 6px;
+  right: 6px;
+  z-index: 3;
   background: var(--danger);
   color: #ffffff;
   border-radius: var(--radius-full);
@@ -942,7 +1010,7 @@ input, textarea, select {
   justify-content: center;
   font-size: 11px;
   font-weight: 800;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 /* ================= BOTTOM SHEET GIỎ HÀNG (MOBILE DRAWER) ================= */
@@ -2593,46 +2661,31 @@ input, textarea, select {
 .pos-warehouse-pill-row {
   display: flex;
   gap: 6px;
-  overflow-x: auto;
-  padding-bottom: 4px;
+  background: #f1f5f9;
+  padding: 4px;
+  border-radius: var(--radius-lg);
+  margin-bottom: 8px;
 }
 
 .warehouse-filter-pill {
-  padding: 6px 12px;
+  flex: 1;
+  text-align: center;
+  padding: 8px 6px;
   font-size: 12px;
-  font-weight: 600;
-  border-radius: var(--radius-full);
-  border: 1px solid var(--border);
-  background: #ffffff;
-  color: var(--text-main);
+  font-weight: 700;
+  border-radius: var(--radius-md);
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
   cursor: pointer;
   white-space: nowrap;
+  transition: all 0.15s ease;
 }
 
 .warehouse-filter-pill.active {
-  background: var(--primary);
-  color: #ffffff;
-  border-color: var(--primary);
-}
-
-.pos-wh-badge {
-  display: inline-block;
-  font-size: 10px;
-  font-weight: 700;
-  padding: 1px 6px;
-  border-radius: 4px;
-}
-
-.pos-wh-badge.badge-stock {
-  background: #fef3c7;
-  color: #b45309;
-  border: 1px solid #fde68a;
-}
-
-.pos-wh-badge.badge-new {
-  background: #e0f2fe;
-  color: #0369a1;
-  border: 1px solid #bae6fd;
+  background: #ffffff;
+  color: var(--primary);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
 }
 
 /* ================= PRINT STYLES ================= */

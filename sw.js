@@ -1,5 +1,5 @@
 // Service Worker cho ứng dụng Bán Diều (Offline-First)
-const CACHE_VERSION = 'kite-store-v1.0.9';
+const CACHE_VERSION = 'kite-store-v1.1.0';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
