@@ -17,7 +17,8 @@ import {
   verifyLicenseKey,
   getDeviceId,
   sha256Hex,
-  LICENSE_CONFIG
+  LICENSE_CONFIG,
+  formatRemainingCountdown
 } from '../js/modules/license.js';
 
 console.log('========================================================');
@@ -463,6 +464,16 @@ async function main() {
     const tamperedSig = origKey.slice(0, -1) + (origKey.slice(-1) === 'A' ? 'B' : 'A');
     const checkTampered = await verifyLicenseKey(tamperedSig, dev);
     assert.strictEqual(checkTampered.valid, false, 'Chữ ký sai lệch phải bị từ chối');
+  });
+
+  runTest('9.6. formatRemainingCountdown: Định dạng chính xác chi tiết ngày, giờ, phút, giây', () => {
+    const future = new Date(Date.now() + (3 * 86400 + 4 * 3600 + 15 * 60 + 30) * 1000);
+    const formatted = formatRemainingCountdown(future);
+    assert.ok(formatted.includes('03 ngày 04 giờ 15 phút'));
+
+    const past = new Date(Date.now() - 10000);
+    const expiredText = formatRemainingCountdown(past);
+    assert.ok(expiredText.includes('Hết hạn'));
   });
 
   console.log('\n========================================================');

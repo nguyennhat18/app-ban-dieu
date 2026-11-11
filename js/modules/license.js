@@ -65,6 +65,26 @@ export function getDeviceId() {
 }
 
 /**
+ * Định dạng thời gian còn lại thành chuỗi chi tiết: Ngày, Giờ, Phút, Giây
+ * @param {string|Date} targetDate Ngày hết hạn
+ * @returns {string} Chuỗi hiển thị (VD: "06 ngày 23 giờ 45 phút 12 giây")
+ */
+export function formatRemainingCountdown(targetDate) {
+  if (!targetDate) return '';
+  const target = new Date(targetDate).getTime();
+  const diffMs = target - Date.now();
+  if (diffMs <= 0) return '00 ngày 00 giờ 00 phút 00 giây (Hết hạn)';
+
+  const totalSec = Math.floor(diffMs / 1000);
+  const days = Math.floor(totalSec / 86400);
+  const hours = Math.floor((totalSec % 86400) / 3600);
+  const minutes = Math.floor((totalSec % 3600) / 60);
+  const seconds = totalSec % 60;
+
+  return `${String(days).padStart(2, '0')} ngày ${String(hours).padStart(2, '0')} giờ ${String(minutes).padStart(2, '0')} phút ${String(seconds).padStart(2, '0')} giây`;
+}
+
+/**
  * Tạo mã kích hoạt (License Key) cho một thiết bị cụ thể
  * @param {string} deviceId Mã thiết bị của khách (VD: KITE-A1B2-C3D4-E5F6)
  * @param {string} plan Loại gói: 'LIFE' | '1Y' | '6M' | '1M' | 'TRIAL'
@@ -231,16 +251,18 @@ export class LicenseService {
    */
   async getTrialStatus() {
     const installDate = await this.getInstallTime();
-    const now = new Date();
-    const diffMs = now.getTime() - installDate.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    const remainingDays = Math.max(0, LICENSE_CONFIG.TRIAL_DAYS - diffDays);
+    const expiresAt = new Date(installDate.getTime() + LICENSE_CONFIG.TRIAL_DAYS * 24 * 60 * 60 * 1000);
+    const diffMs = expiresAt.getTime() - Date.now();
+    const isTrialActive = diffMs > 0;
+    const remainingDays = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
 
     return {
-      isTrialActive: remainingDays > 0,
+      isTrialActive,
       daysLeft: remainingDays,
       totalTrialDays: LICENSE_CONFIG.TRIAL_DAYS,
-      installedAt: installDate.toISOString()
+      installedAt: installDate.toISOString(),
+      expiresAt: expiresAt.toISOString(),
+      diffMs
     };
   }
 
@@ -298,6 +320,10 @@ export class LicenseService {
         }
 
         const planName = (LICENSE_CONFIG.PLANS[check.plan] && LICENSE_CONFIG.PLANS[check.plan].name) || check.plan;
+        const countdownText = check.isLifetime
+          ? 'Vĩnh viễn (Trọn đời không giới hạn)'
+          : formatRemainingCountdown(check.expiresAt);
+
         return {
           status: 'licensed',
           plan: check.plan,
@@ -306,6 +332,7 @@ export class LicenseService {
           expiresAt: check.expiresAt,
           expiryText: check.expiryDisplay,
           daysLeft,
+          countdownText,
           licenseKey: saved.licenseKey,
           activatedAt: saved.activatedAt || null,
           customerName: saved.customerName || '',
@@ -320,10 +347,12 @@ export class LicenseService {
       return {
         status: 'trial',
         plan: 'TRIAL',
-        planName: `Dùng Thử Miễn Phí (${trial.daysLeft} ngày còn lại)`,
+        planName: `Dùng Thử Miễn Phí (${trial.daysLeft} ngày)`,
         isLifetime: false,
         daysLeft: trial.daysLeft,
-        expiryText: `Còn ${trial.daysLeft} ngày dùng thử`,
+        expiresAt: trial.expiresAt,
+        expiryText: `Hết hạn: ${new Date(trial.expiresAt).toLocaleDateString('vi-VN')}`,
+        countdownText: formatRemainingCountdown(trial.expiresAt),
         licenseKey: '',
         deviceId: this.deviceId
       };
@@ -336,7 +365,9 @@ export class LicenseService {
       planName: 'Đã Hết Hạn Bản Quyền',
       isLifetime: false,
       daysLeft: 0,
+      expiresAt: null,
       expiryText: 'Hết hạn dùng thử',
+      countdownText: '00 ngày 00 giờ 00 phút 00 giây (Hết hạn)',
       licenseKey: saved ? saved.licenseKey : '',
       deviceId: this.deviceId
     };
@@ -423,6 +454,13 @@ export class LicenseService {
             <button type="button" class="btn btn-success btn-block btn-lg" id="btn-submit-license-key" style="font-weight: 800; font-size: 16px;">
               🚀 KÍCH HOẠT PHẦN MỀM
             </button>
+
+            <!-- Nút DEV KEY -->
+            <div class="mt-3 pt-2 text-center" style="border-top: 1px dashed #cbd5e1;">
+              <button type="button" class="btn btn-link btn-xs text-muted" id="btn-lock-dev-key" style="font-size: 11px; text-decoration: none; font-family: monospace; font-weight: 700;">
+                ⚙️ DEV KEY
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -496,6 +534,23 @@ export class LicenseService {
             }
           });
         }
+      });
+    }
+
+    // Nút DEV KEY trên màn hình khóa
+    const btnLockDev = document.getElementById('btn-lock-dev-key');
+    if (btnLockDev) {
+      btnLockDev.addEventListener('click', () => {
+        const pin = prompt('Nhập mã xác thực DEV KEY:');
+        if (!pin) return;
+        this.checkAdminPin(pin).then(ok => {
+          if (ok) {
+            modalEl.remove();
+            this.showAdminKeygenModal();
+          } else {
+            alert('Mã xác thực DEV KEY không hợp lệ.');
+          }
+        });
       });
     }
   }

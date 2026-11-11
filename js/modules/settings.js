@@ -7,7 +7,7 @@ import {
   escapeHTML
 } from '../utils.js';
 import { DEFAULT_SHOP_SETTINGS } from '../config.js';
-import { licenseService, LICENSE_CONFIG, generateLicenseKey } from './license.js';
+import { licenseService, LICENSE_CONFIG, generateLicenseKey, formatRemainingCountdown } from './license.js';
 
 export class SettingsModule {
   constructor(app) {
@@ -724,17 +724,31 @@ export class SettingsModule {
   renderLicenseSection(licStatus, shop) {
     const isLicensed = licStatus.status === 'licensed';
     const isTrial = licStatus.status === 'trial';
+    const countdownInitial = licStatus.countdownText || '';
 
     return `
       <!-- THÔNG TIN BẢN QUYỀN MÁY NÀY -->
       <div class="card p-3 mb-3" style="border: 1.5px solid ${isLicensed ? '#22c55e' : (isTrial ? '#f59e0b' : '#ef4444')}; border-radius: 14px;">
         <div class="d-flex justify-between align-center mb-2">
-          <h3 class="card-title text-sm mb-0" id="secret-admin-trigger" style="cursor: pointer; user-select: none;">
-            🔑 Trạng Thái Bản Quyền Máy
-          </h3>
+          <div class="d-flex align-center gap-2">
+            <h3 class="card-title text-sm mb-0">🔑 Trạng Thái Bản Quyền</h3>
+            <button type="button" class="btn btn-outline-secondary btn-xs" id="btn-settings-dev-key" style="font-weight: 800; font-family: monospace; font-size: 11px; padding: 2px 8px; border-radius: 6px; letter-spacing: 0.5px;">
+              DEV KEY
+            </button>
+          </div>
           <span class="badge ${isLicensed ? 'badge-success' : (isTrial ? 'badge-warning' : 'badge-danger')}">
-            ${isLicensed ? '✅ Đã Kích Hoạt' : (isTrial ? `🎁 Dùng Thử (${licStatus.daysLeft} ngày)` : '⚠️ Hết Hạn')}
+            ${isLicensed ? '✅ Đã Kích Hoạt' : (isTrial ? `🎁 Dùng Thử` : '⚠️ Hết Hạn')}
           </span>
+        </div>
+
+        <!-- ĐỒNG HỒ ĐẾM NGƯỢC THỜI HẠN CHI TIẾT ĐẾN TỪNG GIÂY (NGÀY - GIỜ - PHÚT - GIÂY) -->
+        <div class="card p-2 mb-2 text-center" style="border: 1.5px solid ${isLicensed ? '#86efac' : '#fed7aa'}; border-radius: 10px; background: ${isLicensed ? '#f0fdf4' : '#fffbeb'};">
+          <div class="text-xs text-muted mb-1 font-bold">
+            ${isLicensed && licStatus.isLifetime ? '🌟 THỜI HẠN BẢN QUYỀN:' : '⏳ THỜI GIAN CÒN LẠI (NGÀY - GIỜ - PHÚT - GIÂY):'}
+          </div>
+          <div class="text-bold text-primary" id="live-license-countdown" style="font-family: monospace; font-size: 15px; letter-spacing: 0.5px; color: ${isLicensed ? '#15803d' : '#c2410c'};">
+            ${countdownInitial}
+          </div>
         </div>
 
         <div class="card p-2 bg-light mb-2">
@@ -748,7 +762,7 @@ export class SettingsModule {
 
         <div class="text-xs mb-3" style="line-height: 1.7;">
           <div>• Gói bản quyền: <b>${escapeHTML(licStatus.planName)}</b></div>
-          <div>• Thời hạn sử dụng: <b>${escapeHTML(licStatus.expiryText)}</b></div>
+          <div>• Hạn dùng: <b>${escapeHTML(licStatus.expiryText)}</b></div>
           ${licStatus.licenseKey ? `<div>• Mã key: <code class="text-xs">${escapeHTML(licStatus.licenseKey)}</code></div>` : ''}
         </div>
 
@@ -788,28 +802,38 @@ export class SettingsModule {
       });
     }
 
-    // 3. Lối mở Admin Keygen bí mật (chạm tiêu đề 5 lần)
-    let secretTapCount = 0;
-    let secretTapTimer = null;
-    const trigger = document.getElementById('secret-admin-trigger');
-    if (trigger) {
-      trigger.addEventListener('click', () => {
-        secretTapCount++;
-        clearTimeout(secretTapTimer);
-        secretTapTimer = setTimeout(() => { secretTapCount = 0; }, 2000);
-        if (secretTapCount >= 5) {
-          secretTapCount = 0;
-          const pin = prompt('Nhập mã xác thực:');
-          if (!pin) return;
-          licenseService.checkAdminPin(pin).then(ok => {
-            if (ok) {
-              licenseService.showAdminKeygenModal();
-            } else {
-              alert('Mã xác thực không hợp lệ.');
-            }
-          });
-        }
+    // 3. Nút DEV KEY để mở bộ cấp key bản quyền
+    const btnDevKey = document.getElementById('btn-settings-dev-key');
+    if (btnDevKey) {
+      btnDevKey.addEventListener('click', () => {
+        const pin = prompt('Nhập mã xác thực DEV KEY:');
+        if (!pin) return;
+        licenseService.checkAdminPin(pin).then(ok => {
+          if (ok) {
+            licenseService.showAdminKeygenModal();
+          } else {
+            alert('Mã xác thực DEV KEY không hợp lệ.');
+          }
+        });
       });
+    }
+
+    // 4. Đồng hồ đếm ngược chạy chi tiết ngày, giờ, phút, giây trực tiếp
+    if (licStatus.expiresAt && !licStatus.isLifetime) {
+      if (this.countdownInterval) clearInterval(this.countdownInterval);
+      this.countdownInterval = setInterval(() => {
+        const cdEl = document.getElementById('live-license-countdown');
+        if (!cdEl) {
+          clearInterval(this.countdownInterval);
+          return;
+        }
+        const text = formatRemainingCountdown(licStatus.expiresAt);
+        cdEl.textContent = text;
+        if (text.includes('Hết hạn')) {
+          clearInterval(this.countdownInterval);
+          window.location.reload();
+        }
+      }, 1000);
     }
   }
 
