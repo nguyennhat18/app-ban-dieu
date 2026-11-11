@@ -2845,6 +2845,31 @@ input, textarea, select {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
 }
 
+/* ================= HỘP THÊM HÀNG NHẬP KHO & BÁO GIÁ ================= */
+.add-to-import-box,
+.add-to-quote-box {
+  background: #f8fafc;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 14px;
+}
+
+.add-to-import-box .form-label,
+.add-to-quote-box .form-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 5px;
+}
+
+.btn-remove-imp-item,
+.btn-remove-qitem {
+  padding: 4px 8px;
+  font-size: 13px;
+  line-height: 1;
+}
+
 /* ================= PRINT STYLES ================= */
 @media print {
   @page {

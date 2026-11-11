@@ -310,45 +310,57 @@ export class QuotationsModule {
             </div>
 
             <!-- Chọn diều thêm vào bảng báo giá -->
-            <div class="card p-2 mb-3 bg-light">
-              <div class="form-label text-bold mb-2">Thêm diều / Phụ kiện vào báo giá:</div>
+            <div class="card p-3 mb-3 bg-light" style="border: 1.5px solid #cbd5e1; border-radius: 12px;">
+              <h3 class="text-bold text-sm mb-2" style="color: #0284c7; display: flex; align-items: center; gap: 6px;">
+                📋 Chọn Diều / Phụ Kiện Đưa Vào Báo Giá
+              </h3>
+
+              <div class="form-group mb-2">
+                <label class="form-label required text-bold">1. Tên diều / Phụ kiện:</label>
+                <select id="q-add-product-select" class="form-select" style="font-weight: 600;">
+                  <option value="">-- Bấm để chọn diều / phụ kiện --</option>
+                  ${products.map(p => `
+                    <option value="${p.id}" data-price="${p.sellingPrice}" data-unit="${escapeHTML(p.unit || 'Chiếc')}">
+                      ${escapeHTML(p.name)} (${formatVND(p.sellingPrice)})
+                    </option>
+                  `).join('')}
+                </select>
+              </div>
+
               <div class="form-row">
-                <div class="form-group flex-2">
-                  <select id="q-add-product-select" class="form-select">
-                    <option value="">-- Chọn diều / phụ kiện --</option>
-                    ${products.map(p => `
-                      <option value="${p.id}" data-price="${p.sellingPrice}" data-unit="${p.unit || 'Chiếc'}">
-                        ${escapeHTML(p.name)} (${formatVND(p.sellingPrice)})
-                      </option>
-                    `).join('')}
-                  </select>
+                <div class="form-group flex-1 mb-2">
+                  <label class="form-label required text-bold" style="color: #0f172a;">2. SỐ LƯỢNG BÁO:</label>
+                  <div style="position: relative;">
+                    <input type="number" id="q-add-qty" class="form-input form-input-lg text-bold text-center" min="1" step="1" value="1" placeholder="Số lượng" style="font-size: 15px;">
+                    <span id="q-unit-hint" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 12px; color: #64748b; font-weight: 600; pointer-events: none;">chiếc</span>
+                  </div>
                 </div>
-                <div class="form-group flex-1">
-                  <input type="number" id="q-add-qty" class="form-input" placeholder="SL" min="1" value="1">
-                </div>
-                <div class="form-group flex-1">
-                  <input type="number" id="q-add-price" class="form-input" placeholder="Đơn giá">
-                </div>
-                <div class="form-group">
-                  <button type="button" class="btn btn-primary" id="btn-add-qitem">+ Thêm</button>
+
+                <div class="form-group flex-1 mb-2">
+                  <label class="form-label required text-bold" style="color: #0f172a;">3. ĐƠN GIÁ BÁO (VNĐ):</label>
+                  <input type="text" id="q-add-price" class="form-input form-input-lg text-bold text-primary text-right" placeholder="0 ₫" style="font-size: 15px;">
                 </div>
               </div>
+
+              <button type="button" class="btn btn-primary btn-block btn-lg mt-2" id="btn-add-qitem" style="font-weight: 700;">
+                ➕ Thêm Món Này Vào Báo Giá
+              </button>
             </div>
 
             <!-- Bảng danh sách hàng hóa trong báo giá -->
-            <div class="table-responsive">
-              <table class="table" id="quote-table-items">
+            <div class="table-responsive card p-2 mb-3" style="border: 1px solid var(--border);">
+              <table class="table mb-0" id="quote-table-items">
                 <thead>
-                  <tr>
+                  <tr style="background: #f8fafc;">
                     <th>Sản phẩm</th>
-                    <th class="text-center" style="width: 70px">SL</th>
-                    <th class="text-right" style="width: 120px">Đơn giá</th>
-                    <th class="text-right" style="width: 130px">Thành tiền</th>
-                    <th style="width: 40px"></th>
+                    <th class="text-center" style="width: 80px">SL</th>
+                    <th class="text-right" style="width: 110px">Đơn giá</th>
+                    <th class="text-right" style="width: 120px">Thành tiền</th>
+                    <th class="text-center" style="width: 50px">Xóa</th>
                   </tr>
                 </thead>
                 <tbody id="quote-tbody-items">
-                  <tr><td colspan="5" class="text-center text-muted">Chưa có sản phẩm nào</td></tr>
+                  <tr><td colspan="5" class="text-center text-muted p-3">Chưa có sản phẩm nào</td></tr>
                 </tbody>
               </table>
             </div>
@@ -360,12 +372,12 @@ export class QuotationsModule {
                 <span class="text-bold" id="q-calc-subtotal">0 ₫</span>
               </div>
               <div class="summary-line">
-                <span>Chiết khấu:</span>
-                <input type="number" id="q-calc-discount" class="form-input-sm text-right" style="width: 120px" value="${quote.discountAmount || 0}" placeholder="0 ₫">
+                <span class="text-bold text-xs">Chiết khấu giảm giá (VNĐ):</span>
+                <input type="number" id="q-calc-discount" class="form-input-sm text-right text-bold" style="width: 130px" value="${quote.discountAmount || 0}" placeholder="0 ₫">
               </div>
               <div class="summary-line">
-                <span>Phí vận chuyển:</span>
-                <input type="number" id="q-calc-shipping" class="form-input-sm text-right" style="width: 120px" value="${quote.shippingFee || 0}" placeholder="0 ₫">
+                <span class="text-bold text-xs">Phí vận chuyển (VNĐ):</span>
+                <input type="number" id="q-calc-shipping" class="form-input-sm text-right text-bold" style="width: 130px" value="${quote.shippingFee || 0}" placeholder="0 ₫">
               </div>
               ${shopSettings.enableVat ? `
                 <div class="summary-line text-muted">
@@ -426,34 +438,43 @@ export class QuotationsModule {
     const prodSelect = document.getElementById('q-add-product-select');
     const addQty = document.getElementById('q-add-qty');
     const addPrice = document.getElementById('q-add-price');
+    const unitHint = document.getElementById('q-unit-hint');
     const tbody = document.getElementById('quote-tbody-items');
 
     prodSelect.addEventListener('change', () => {
       const opt = prodSelect.options[prodSelect.selectedIndex];
-      if (opt.value) {
-        addPrice.value = opt.dataset.price || 0;
+      if (opt && opt.value) {
+        const pr = parseInt(opt.dataset.price, 10) || 0;
+        const un = opt.dataset.unit || 'chiếc';
+        if (unitHint) unitHint.textContent = un;
+        if (pr > 0) addPrice.value = formatVND(pr);
       }
+    });
+
+    addPrice.addEventListener('blur', () => {
+      const val = parseVND(addPrice.value);
+      addPrice.value = val > 0 ? formatVND(val) : '';
     });
 
     const updateItemsView = () => {
       if (items.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">Chưa có sản phẩm nào</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted p-3">Chưa có sản phẩm nào trong báo giá.</td></tr>`;
       } else {
         tbody.innerHTML = items.map((item, idx) => `
           <tr>
             <td>
               <div class="text-bold">${escapeHTML(item.productName)}</div>
-              <div class="text-muted text-xs">${escapeHTML(item.unit || 'Chiếc')}</div>
+              <div class="text-muted text-xs">Mã: ${escapeHTML(item.productCode || '---')} (${escapeHTML(item.unit || 'Chiếc')})</div>
             </td>
             <td class="text-center">
-              <input type="number" class="input-q-qty form-input-xs text-center" data-idx="${idx}" min="1" value="${item.quantity}" style="width: 55px">
+              <input type="number" class="input-q-qty form-input-xs text-center text-bold" data-idx="${idx}" min="1" value="${item.quantity}" style="width: 60px">
             </td>
             <td class="text-right">
-              <input type="number" class="input-q-price form-input-xs text-right" data-idx="${idx}" min="0" value="${item.unitPrice}" style="width: 100px">
+              <input type="number" class="input-q-price form-input-xs text-right" data-idx="${idx}" min="0" value="${item.unitPrice}" style="width: 105px">
             </td>
-            <td class="text-right text-bold">${formatVND(item.subtotal)}</td>
+            <td class="text-right text-bold text-primary">${formatVND(item.subtotal)}</td>
             <td class="text-center">
-              <button type="button" class="btn-remove-qitem text-danger" data-idx="${idx}">&times;</button>
+              <button type="button" class="btn btn-outline-danger btn-xs btn-remove-qitem" data-idx="${idx}" title="Xóa món này">🗑️</button>
             </td>
           </tr>
         `).join('');
@@ -509,10 +530,12 @@ export class QuotationsModule {
 
     document.getElementById('btn-add-qitem').addEventListener('click', () => {
       const pId = prodSelect.value;
-      if (!pId) return alert('Vui lòng chọn diều/phụ kiện');
+      if (!pId) return alert('Vui lòng chọn diều/phụ kiện cần báo giá!');
       const p = products.find(x => x.id === pId);
       const qty = parseInt(addQty.value, 10) || 1;
-      const price = parseInt(addPrice.value, 10) || 0;
+      const price = parseVND(addPrice.value);
+
+      if (qty <= 0) return alert('Số lượng báo giá phải lớn hơn 0!');
 
       items.push({
         productId: p.id,
@@ -523,6 +546,12 @@ export class QuotationsModule {
         unitPrice: price,
         subtotal: qty * price
       });
+
+      // Reset form chọn món để tiện thêm tiếp
+      prodSelect.value = '';
+      addPrice.value = '';
+      addQty.value = '1';
+      if (unitHint) unitHint.textContent = 'chiếc';
 
       updateItemsView();
     });

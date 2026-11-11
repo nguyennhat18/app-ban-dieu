@@ -287,18 +287,18 @@ export class SalesModule {
               <!-- Chiết khấu & Ship -->
               <div class="summary-line">
                 <div class="discount-label-row">
-                  <span>Chiết khấu:</span>
+                  <span class="text-bold text-xs">Chiết khấu (giảm giá):</span>
                   <div class="discount-toggle-group">
                     <button class="btn-toggle-disc ${this.discountType === 'amount' ? 'active' : ''}" id="disc-type-amt">₫</button>
                     <button class="btn-toggle-disc ${this.discountType === 'percent' ? 'active' : ''}" id="disc-type-pct">%</button>
                   </div>
                 </div>
-                <input type="number" id="input-discount-val" class="form-input-sm text-right" style="width: 100px" value="${this.discountValue || ''}" placeholder="0">
+                <input type="number" id="input-discount-val" class="form-input-sm text-right text-bold" style="width: 120px" value="${this.discountValue || ''}" placeholder="${this.discountType === 'percent' ? 'Nhập %' : '0 ₫'}">
               </div>
 
               <div class="summary-line">
-                <span>Phí ship:</span>
-                <input type="number" id="input-shipping-fee" class="form-input-sm text-right" style="width: 100px" value="${this.shippingFee || ''}" placeholder="0 ₫">
+                <span class="text-bold text-xs">Phí giao hàng (ship):</span>
+                <input type="number" id="input-shipping-fee" class="form-input-sm text-right text-bold" style="width: 120px" value="${this.shippingFee || ''}" placeholder="0 ₫">
               </div>
 
               ${shopSettings.enableVat ? `
@@ -353,11 +353,11 @@ export class SalesModule {
               ${this.paymentMethod === 'partial' ? `
                 <div class="partial-pay-box card p-2 bg-light mt-1">
                   <div class="summary-line">
-                    <span>Khách trả trước:</span>
-                    <input type="number" id="input-paid-amount" class="form-input-sm text-right" style="width: 120px" value="${this.paidAmount || 0}">
+                    <span class="text-bold text-xs">Khách trả trước (VNĐ):</span>
+                    <input type="number" id="input-paid-amount" class="form-input-sm text-right text-bold text-primary" style="width: 130px" value="${this.paidAmount || 0}" placeholder="Nhập tiền trả">
                   </div>
                   <div class="summary-line text-danger mt-1">
-                    <span>Ghi nợ lại:</span>
+                    <span class="text-bold text-xs">Còn nợ ghi sổ:</span>
                     <span class="text-bold">${formatVND(Math.max(0, totals.totalAmount - this.paidAmount))}</span>
                   </div>
                 </div>
