@@ -10,16 +10,19 @@
     .btn { background: #0284c7; color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 14px; margin-bottom: 16px; }
     .btn:active { background: #0369a1; }
     .test-box { background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-    .test-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
+    .test-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
     .test-item:last-child { border-bottom: none; }
-    .badge { padding: 4px 8px; border-radius: 9999px; font-size: 12px; font-weight: 700; }
+    .badge { padding: 4px 10px; border-radius: 9999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
     .badge-pass { background: #d1fae5; color: #059669; }
     .badge-fail { background: #fee2e2; color: #dc2626; }
+    .badge-running { background: #fef3c7; color: #b45309; }
     .badge-wait { background: #e2e8f0; color: #64748b; }
-    .summary-card { margin-top: 16px; padding: 12px; border-radius: 8px; background: #e0f2fe; color: #0369a1; font-weight: 700; text-align: center; }
+    .summary-card { margin-top: 16px; padding: 14px; border-radius: 8px; background: #e0f2fe; color: #0369a1; font-weight: 700; text-align: center; font-size: 16px; }
+    .back-link { display: inline-block; margin-bottom: 16px; color: #0284c7; text-decoration: none; font-size: 14px; font-weight: 600; }
   </style>
 </head>
 <body>
+  <a href="../index.html" class="back-link">⬅ Quay lại Ứng Dụng Bán Diều</a>
   <h1>🧪 Trình Kiểm Thử Trực Tiếp Trên Trình Duyệt</h1>
   <p style="font-size: 13px; color: #64748b; margin-bottom: 16px;">
     Kiểm tra IndexedDB, tính tiền, đọc số tiếng Việt, Checksum, font tiếng Việt cho jsPDF và SheetJS.
@@ -40,7 +43,7 @@
 
   <div id="test-summary" class="summary-card" style="display:none"></div>
 
-  <!-- Vendor -->
+  <!-- Vendor Libraries -->
   <script src="../js/vendor/jspdf.umd.min.js"></script>
   <script src="../js/vendor/jspdf.plugin.autotable.min.js"></script>
   <script src="../js/vendor/xlsx.full.min.js"></script>
@@ -54,33 +57,55 @@
       const el = document.getElementById(id);
       if (!el) return;
       const badge = el.querySelector('.badge');
-      if (pass) {
+      if (pass === 'running') {
+        badge.className = 'badge badge-running';
+        badge.textContent = '⏳ Đang chạy...';
+      } else if (pass) {
         badge.className = 'badge badge-pass';
         badge.textContent = '✓ ĐẠT';
       } else {
         badge.className = 'badge badge-fail';
         badge.textContent = '✗ LỖI: ' + msg;
+        console.error(`[Test ${id}] Lỗi:`, msg);
       }
     }
 
     async function runAll() {
+      const btn = document.getElementById('btn-run-all');
+      btn.disabled = true;
+      btn.textContent = '⏳ Đang kiểm thử...';
+
+      const sumEl = document.getElementById('test-summary');
+      sumEl.style.display = 'none';
+
       let passed = 0;
-      let total = 9;
+      const total = 9;
+
+      // Reset tất cả
+      ['t-db', 't-vnd', 't-words', 't-order', 't-stock', 't-checksum', 't-pdf', 't-xlsx', 't-restore'].forEach(id => {
+        setStatus(id, 'running');
+      });
 
       // 1. DB
       try {
         await db.init();
         setStatus('t-db', true);
         passed++;
-      } catch (e) { setStatus('t-db', false, e.message); }
+      } catch (e) {
+        setStatus('t-db', false, e.message);
+      }
 
       // 2. VND
       try {
         const f = formatVND(1250000);
         const p = parseVND(f);
-        if (p === 1250000) { setStatus('t-vnd', true); passed++; }
-        else throw new Error('parseVND lệch');
-      } catch (e) { setStatus('t-vnd', false, e.message); }
+        if (p === 1250000) {
+          setStatus('t-vnd', true);
+          passed++;
+        } else throw new Error(`parseVND(${f}) ra ${p}`);
+      } catch (e) {
+        setStatus('t-vnd', false, e.message);
+      }
 
       // 3. Words
       try {
@@ -89,8 +114,10 @@
         if (w1.includes('Một triệu hai trăm năm mươi nghìn đồng') && w2.includes('Một trăm linh năm đồng')) {
           setStatus('t-words', true);
           passed++;
-        } else throw new Error(`Lệch chữ: ${w1} | ${w2}`);
-      } catch (e) { setStatus('t-words', false, e.message); }
+        } else throw new Error(`Lệch chữ: "${w1}" | "${w2}"`);
+      } catch (e) {
+        setStatus('t-words', false, e.message);
+      }
 
       // 4. Order calc
       try {
@@ -99,9 +126,13 @@
         const ship = 20000;
         const vat = Math.round(((subtotal - disc + ship) * 8) / 100);
         const totalAmount = (subtotal - disc + ship) + vat;
-        if (totalAmount === 993600) { setStatus('t-order', true); passed++; }
-        else throw new Error(`Tổng sai: ${totalAmount}`);
-      } catch (e) { setStatus('t-order', false, e.message); }
+        if (totalAmount === 993600) {
+          setStatus('t-order', true);
+          passed++;
+        } else throw new Error(`Tổng tính ra: ${totalAmount}`);
+      } catch (e) {
+        setStatus('t-order', false, e.message);
+      }
 
       // 5. Stock
       try {
@@ -112,26 +143,35 @@
         if (stock !== 10) throw new Error('Hoàn kho sai');
         setStatus('t-stock', true);
         passed++;
-      } catch (e) { setStatus('t-stock', false, e.message); }
+      } catch (e) {
+        setStatus('t-stock', false, e.message);
+      }
 
       // 6. Checksum
       try {
         const c1 = await calculateChecksum('diều bay');
         const c2 = await calculateChecksum('diều bay');
         const c3 = await calculateChecksum('diều rách');
-        if (c1 === c2 && c1 !== c3) { setStatus('t-checksum', true); passed++; }
-        else throw new Error('Checksum sai');
-      } catch (e) { setStatus('t-checksum', false, e.message); }
+        if (c1 === c2 && c1 !== c3) {
+          setStatus('t-checksum', true);
+          passed++;
+        } else throw new Error('Mã Checksum tính không đồng nhất');
+      } catch (e) {
+        setStatus('t-checksum', false, e.message);
+      }
 
-      // 7. jsPDF & Font
+      // 7. jsPDF & Font tiếng Việt
       try {
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF();
+        const jsPdfClass = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+        if (!jsPdfClass) throw new Error('Thư viện jsPDF chưa được nạp');
+        const doc = new jsPdfClass();
         registerVietnameseFont(doc);
         doc.text('BÁO GIÁ DIỀU SÁO ĐẶC BIỆT', 10, 10);
         setStatus('t-pdf', true);
         passed++;
-      } catch (e) { setStatus('t-pdf', false, e.message); }
+      } catch (e) {
+        setStatus('t-pdf', false, e.message);
+      }
 
       // 8. XLSX
       try {
@@ -139,8 +179,10 @@
           const wb = window.XLSX.utils.book_new();
           setStatus('t-xlsx', true);
           passed++;
-        } else throw new Error('Thiếu window.XLSX');
-      } catch (e) { setStatus('t-xlsx', false, e.message); }
+        } else throw new Error('Thư viện window.XLSX chưa được nạp');
+      } catch (e) {
+        setStatus('t-xlsx', false, e.message);
+      }
 
       // 9. Restore
       try {
@@ -148,17 +190,34 @@
         if (backup && backup.checksum && backup.stores) {
           setStatus('t-restore', true);
           passed++;
-        } else throw new Error('Xuất backup rỗng');
-      } catch (e) { setStatus('t-restore', false, e.message); }
+        } else throw new Error('Xuất backup trả về rỗng');
+      } catch (e) {
+        setStatus('t-restore', false, e.message);
+      }
 
-      const sumEl = document.getElementById('test-summary');
+      btn.disabled = false;
+      btn.textContent = '▶ Chạy Lại Kiểm Thử';
+
       sumEl.style.display = 'block';
-      sumEl.textContent = `🎉 KẾT QUẢ: ${passed}/${total} KIỂM THỬ THÀNH CÔNG!`;
+      if (passed === total) {
+        sumEl.style.background = '#d1fae5';
+        sumEl.style.color = '#059669';
+        sumEl.textContent = `🎉 TOÀN BỘ ${passed}/${total} KIỂM THỬ ĐẠT 100%!`;
+      } else {
+        sumEl.style.background = '#fee2e2';
+        sumEl.style.color = '#dc2626';
+        sumEl.textContent = `⚠️ Kết quả: ${passed}/${total} kiểm thử đạt.`;
+      }
     }
 
     document.getElementById('btn-run-all').addEventListener('click', runAll);
-    // Tự động chạy
-    runAll();
+
+    // Tự động chạy ngay khi trang mở
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', runAll);
+    } else {
+      runAll();
+    }
   </script>
 </body>
 </html>

@@ -7,12 +7,14 @@ class KiteDatabase {
     this.db = null;
     this.snapshotDb = null;
     this.initPromise = null;
+    this._isReady = false;
   }
 
   /**
    * Khởi tạo và mở kết nối cơ sở dữ liệu IndexedDB
    */
   async init() {
+    if (this._isReady && this.db) return this;
     if (this.initPromise) return this.initPromise;
 
     this.initPromise = (async () => {
@@ -22,16 +24,26 @@ class KiteDatabase {
       // 2. Mở CSDL Snapshot KiteStoreSnapshotsDB
       this.snapshotDb = await this._openSnapshotDB();
 
+      // Đánh dấu DB đã mở xong để các hàm nội bộ không bị deadlock
+      this._isReady = true;
+
       // 3. Khởi tạo cài đặt mặc định nếu chưa có
       await this._ensureDefaultSettings();
 
-      // 4. Kiểm tra và chụp snapshot tự động mỗi ngày lần đầu
-      await this.checkAndCreateDailySnapshot();
+      // 4. Kiểm tra và chụp snapshot tự động mỗi ngày lần đầu (chạy nền, không block init)
+      this.checkAndCreateDailySnapshot().catch(err => {
+        console.warn('Lỗi kiểm tra snapshot hàng ngày:', err);
+      });
 
       return this;
     })();
 
     return this.initPromise;
+  }
+
+  async ensureReady() {
+    if (this._isReady && this.db) return;
+    await this.init();
   }
 
   _openMainDB() {
@@ -146,7 +158,7 @@ class KiteDatabase {
    * Chạy transaction an toàn với nhiều bảng
    */
   async runTransaction(storeNames, mode, callback) {
-    await this.init();
+    await this.ensureReady();
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction(storeNames, mode);
       let result = null;
@@ -166,7 +178,7 @@ class KiteDatabase {
 
   // ================= GENERIC CRUD =================
   async getAll(storeName, includeDeleted = false) {
-    await this.init();
+    await this.ensureReady();
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction(storeName, 'readonly');
       const store = tx.objectStore(storeName);
@@ -183,7 +195,7 @@ class KiteDatabase {
   }
 
   async getById(storeName, id) {
-    await this.init();
+    await this.ensureReady();
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction(storeName, 'readonly');
       const store = tx.objectStore(storeName);
@@ -194,7 +206,7 @@ class KiteDatabase {
   }
 
   async put(storeName, item, trackChange = true) {
-    await this.init();
+    await this.ensureReady();
     const now = new Date().toISOString();
     if (!item.createdAt) item.createdAt = now;
     item.updatedAt = now;
@@ -215,7 +227,7 @@ class KiteDatabase {
   }
 
   async softDelete(storeName, id) {
-    await this.init();
+    await this.ensureReady();
     const item = await this.getById(storeName, id);
     if (!item) throw new Error('Không tìm thấy bản ghi để xóa');
 
@@ -226,7 +238,7 @@ class KiteDatabase {
   }
 
   async restoreSoftDelete(storeName, id) {
-    await this.init();
+    await this.ensureReady();
     const item = await this.getById(storeName, id);
     if (!item) throw new Error('Không tìm thấy bản ghi để khôi phục');
 
@@ -237,7 +249,7 @@ class KiteDatabase {
   }
 
   async permanentDelete(storeName, id) {
-    await this.init();
+    await this.ensureReady();
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction([storeName], 'readwrite');
       const store = tx.objectStore(storeName);
@@ -251,7 +263,7 @@ class KiteDatabase {
   }
 
   async getTrashItems() {
-    await this.init();
+    await this.ensureReady();
     const stores = ['products', 'customers', 'orders', 'quotations'];
     const trash = [];
 
@@ -274,7 +286,7 @@ class KiteDatabase {
 
   // ================= SETTINGS =================
   async getSetting(key) {
-    await this.init();
+    await this.ensureReady();
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction('settings', 'readonly');
       const store = tx.objectStore('settings');
@@ -285,7 +297,7 @@ class KiteDatabase {
   }
 
   async saveSetting(key, value) {
-    await this.init();
+    await this.ensureReady();
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction('settings', 'readwrite');
       const store = tx.objectStore('settings');
@@ -317,7 +329,7 @@ class KiteDatabase {
    * Xuất toàn bộ CSDL ra JSON kèm Checksum & Version
    */
   async exportFullBackup() {
-    await this.init();
+    await this.ensureReady();
     const stores = ['products', 'customers', 'orders', 'inventory_logs', 'stock_imports', 'quotations', 'debt_payments'];
     const exportData = {
       app: APP_CONFIG.APP_NAME,
@@ -352,7 +364,7 @@ class KiteDatabase {
    * @param {'replace'|'merge'} mode Chế độ khôi phục
    */
   async restoreFromBackup(backupData, mode = 'replace') {
-    await this.init();
+    await this.ensureReady();
 
     // 1. Kiểm tra cấu trúc bắt buộc
     if (!backupData || !backupData.stores) {
@@ -500,7 +512,7 @@ class KiteDatabase {
 
   // ================= XÓA DỮ LIỆU MẪU / KHỞI TẠO =================
   async clearAllBusinessData() {
-    await this.init();
+    await this.ensureReady();
     // Tạo bản snapshot trước khi xóa sạch
     await this.createSnapshot('Bản chụp an toàn trước khi xóa trắng dữ liệu kinh doanh');
 

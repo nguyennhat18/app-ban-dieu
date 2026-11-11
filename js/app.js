@@ -22,11 +22,20 @@ class KiteApp {
   async init() {
     console.log(`[App] Khởi động ${APP_CONFIG.APP_NAME} v${APP_CONFIG.APP_VERSION}`);
 
-    // 1. Khởi tạo cơ sở dữ liệu IndexedDB
-    await db.init();
+    try {
+      // 1. Khởi tạo cơ sở dữ liệu IndexedDB
+      await db.init();
+      console.log('[App] DB khởi tạo thành công');
+    } catch (err) {
+      console.error('[App] Lỗi khởi tạo DB:', err);
+    }
 
-    // 2. Tự động xin cấp quyền lưu trữ bền vững khi khởi động (yêu cầu a trong đề bài)
-    this.requestStoragePersistenceOnStart();
+    try {
+      // 2. Tự động xin cấp quyền lưu trữ bền vững khi khởi động
+      this.requestStoragePersistenceOnStart();
+    } catch (err) {
+      console.warn('[App] Lỗi persist:', err);
+    }
 
     // 3. Khởi tạo các mô-đun nghiệp vụ
     this.productModule = new ProductModule(this);
@@ -39,20 +48,22 @@ class KiteApp {
     this.backupModule = new BackupModule(this);
     this.settingsModule = new SettingsModule(this);
 
-    // 4. Đăng ký Service Worker và cơ chế cập nhật phiên bản
-    this.registerServiceWorker();
-
-    // 5. Gán sự kiện điều hướng thanh Bottom Nav
+    // 4. Gán sự kiện điều hướng thanh Bottom Nav ngay để bấm được luôn
     this.bindNavigation();
 
-    // 6. Cập nhật Banner cảnh báo sao lưu
-    await this.updateBackupBanner();
-
-    // 7. Cập nhật thông tin cửa hàng trên header
-    await this.updateHeaderBrand();
-
-    // 8. Hiển thị màn hình mặc định
+    // 5. Hiển thị màn hình mặc định ngay lập tức (xóa loading spinner)
     this.navigateTo(this.currentView);
+
+    // 6. Đăng ký Service Worker (chạy nền)
+    this.registerServiceWorker();
+
+    // 7. Cập nhật Banner cảnh báo sao lưu & Header shop
+    try {
+      await this.updateBackupBanner();
+      await this.updateHeaderBrand();
+    } catch (err) {
+      console.warn('[App] Lỗi cập nhật banner/header:', err);
+    }
   }
 
   // Xin quyền lưu trữ bền vững ngay khi mở app
