@@ -12,6 +12,13 @@ import {
   detectUnit,
   SAMPLE_STOCK_INVENTORY
 } from '../js/excel-importer.js';
+import {
+  generateLicenseKey,
+  verifyLicenseKey,
+  getDeviceId,
+  sha256Hex,
+  LICENSE_CONFIG
+} from '../js/modules/license.js';
 
 console.log('========================================================');
 console.log('🧪 BẮT ĐẦU CHẠY BỘ TEST TỰ ĐỘNG CHO HỆ THỐNG BÁN DIỀU');
@@ -390,6 +397,72 @@ async function main() {
 
     decItem('SP-1');
     assert.strictEqual(cart.length, 0);
+  });
+
+  // ================= 9. TEST HỆ THỐNG BẢN QUYỀN KHÓA THEO MÁY =================
+  runTest('9.1. getDeviceId: Sinh mã thiết bị KITE-XXXX-YYYY-ZZZZ chuẩn định dạng', () => {
+    const devId = getDeviceId();
+    assert.ok(devId.startsWith('KITE-'), 'Mã máy phải bắt đầu bằng KITE-');
+    const parts = devId.split('-');
+    assert.strictEqual(parts.length, 4, 'Mã máy gồm 4 cụm');
+    assert.strictEqual(parts[1].length, 4, 'Cụm 1 gồm 4 ký tự hex');
+    assert.strictEqual(parts[2].length, 4, 'Cụm 2 gồm 4 ký tự hex');
+    assert.strictEqual(parts[3].length, 4, 'Cụm 3 gồm 4 ký tự hex');
+  });
+
+  await runAsyncTest('9.2. generateLicenseKey & verifyLicenseKey: Key Vĩnh Viễn hợp lệ trên chính máy', async () => {
+    const devA = 'KITE-A1B2-C3D4-E5F6';
+    const key = await generateLicenseKey(devA, 'LIFE');
+    assert.ok(key.startsWith('KITE-LIFE-99999999-'), 'Key vĩnh viễn có tiền tố chuẩn');
+
+    const result = await verifyLicenseKey(key, devA);
+    assert.strictEqual(result.valid, true);
+    assert.strictEqual(result.plan, 'LIFE');
+    assert.strictEqual(result.isLifetime, true);
+  });
+
+  await runAsyncTest('9.3. Device Lock: Key cấp cho Máy A đưa sang Máy B bị từ chối 100%', async () => {
+    const devA = 'KITE-A1B2-C3D4-E5F6';
+    const devB = 'KITE-9999-8888-7777';
+    const keyForA = await generateLicenseKey(devA, '1Y');
+
+    // Máy A dùng keyForA -> Hợp lệ
+    const checkA = await verifyLicenseKey(keyForA, devA);
+    assert.strictEqual(checkA.valid, true);
+
+    // Máy B dùng keyForA -> BỊ TỪ CHỐI
+    const checkB = await verifyLicenseKey(keyForA, devB);
+    assert.strictEqual(checkB.valid, false);
+    assert.ok(checkB.reason.includes('không khớp với máy này'));
+  });
+
+  await runAsyncTest('9.4. Thời hạn bản quyền: Key tương lai hợp lệ, Key quá hạn bị từ chối', async () => {
+    const dev = 'KITE-A1B2-C3D4-E5F6';
+    // Key hết hạn năm 2020
+    const expiredKey = await generateLicenseKey(dev, '1Y', '20200101');
+    const resExpired = await verifyLicenseKey(expiredKey, dev);
+    assert.strictEqual(resExpired.valid, false);
+    assert.ok(resExpired.reason.includes('đã hết hạn'));
+
+    // Key có hạn đến năm 2035
+    const futureKey = await generateLicenseKey(dev, '1Y', '20351231');
+    const resFuture = await verifyLicenseKey(futureKey, dev);
+    assert.strictEqual(resFuture.valid, true);
+    assert.strictEqual(resFuture.expiryDisplay, '31/12/2035');
+  });
+
+  await runAsyncTest('9.5. Tamper Resistance: Tự ý sửa đổi thông tin trong key bị phát hiện ngay', async () => {
+    const dev = 'KITE-A1B2-C3D4-E5F6';
+    const origKey = await generateLicenseKey(dev, '1M'); // Gói 1 tháng
+    // Gian lận đổi gói 1M thành LIFE
+    const fakeLifeKey = origKey.replace('-1M-', '-LIFE-');
+    const checkFake = await verifyLicenseKey(fakeLifeKey, dev);
+    assert.strictEqual(checkFake.valid, false, 'Key giả mạo phải bị từ chối');
+
+    // Gian lận sửa 1 ký tự trong mã xác nhận
+    const tamperedSig = origKey.slice(0, -1) + (origKey.slice(-1) === 'A' ? 'B' : 'A');
+    const checkTampered = await verifyLicenseKey(tamperedSig, dev);
+    assert.strictEqual(checkTampered.valid, false, 'Chữ ký sai lệch phải bị từ chối');
   });
 
   console.log('\n========================================================');

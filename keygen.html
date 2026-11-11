@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Công Cụ Cấp Key Bản Quyền - Quản Lý Bán Diều (Admin Generator)</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --border: #334155;
+      --primary: #0284c7;
+      --primary-hover: #0369a1;
+      --success: #22c55e;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+    body { background: var(--bg); color: var(--text); padding: 20px 14px; min-height: 100vh; display: flex; justify-content: center; align-items: flex-start; }
+    .container { max-width: 540px; width: 100%; }
+    .header { text-align: center; margin-bottom: 24px; }
+    .logo-badge { font-size: 44px; display: inline-block; margin-bottom: 6px; }
+    h1 { font-size: 20px; font-weight: 800; color: #38bdf8; letter-spacing: -0.5px; }
+    .sub { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+    .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; padding: 20px; margin-bottom: 16px; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4); }
+    .form-group { margin-bottom: 16px; }
+    label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 6px; color: #e2e8f0; }
+    .required::after { content: " *"; color: #ef4444; }
+    input, select { width: 100%; background: #0f172a; border: 1.5px solid var(--border); border-radius: 10px; padding: 12px 14px; color: #fff; font-size: 15px; outline: none; transition: border-color 0.15s; }
+    input:focus, select:focus { border-color: #38bdf8; }
+    .code-input { font-family: 'Courier New', monospace; letter-spacing: 1px; font-weight: 700; text-transform: uppercase; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; width: 100%; padding: 14px 16px; font-size: 15px; font-weight: 800; border: none; border-radius: 10px; cursor: pointer; transition: transform 0.1s, opacity 0.15s; }
+    .btn:active { transform: scale(0.98); }
+    .btn-primary { background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #fff; }
+    .btn-success { background: linear-gradient(135deg, #16a34a 0%, #15803d 100%); color: #fff; }
+    .result-box { display: none; margin-top: 18px; padding: 16px; background: rgba(34, 197, 94, 0.1); border: 1.5px solid #22c55e; border-radius: 12px; }
+    .result-key { font-family: 'Courier New', monospace; font-size: 16px; font-weight: 900; color: #4ade80; background: #064e3b; padding: 12px; border-radius: 8px; text-align: center; word-break: break-all; margin: 10px 0; letter-spacing: 1px; user-select: all; }
+    .btn-copy { margin-top: 8px; font-size: 14px; padding: 12px; }
+    .tabs-header { display: flex; gap: 8px; margin-bottom: 16px; }
+    .tab-btn { flex: 1; padding: 10px; background: #1e293b; border: 1px solid var(--border); border-radius: 8px; color: var(--text-muted); font-size: 13px; font-weight: 700; cursor: pointer; }
+    .tab-btn.active { background: #0284c7; color: #fff; border-color: #0284c7; }
+    .footer { text-align: center; font-size: 12px; color: #64748b; margin-top: 24px; }
+    .alert-offline { background: rgba(56, 189, 248, 0.1); border: 1px solid #0284c7; color: #bae6fd; font-size: 12px; border-radius: 8px; padding: 10px; margin-bottom: 16px; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo-badge">🪁</div>
+      <h1>CÔNG CỤ CẤP KEY BẢN QUYỀN</h1>
+      <div class="sub">Hệ thống cấp khóa theo thiết bị (Offline - An Toàn 100%)</div>
+    </div>
+
+    <div class="tabs-header">
+      <button class="tab-btn active" id="tab-gen" onclick="switchTab('gen')">⚡ Cấp Key Khách Hàng</button>
+      <button class="tab-btn" id="tab-verify" onclick="switchTab('verify')">🔍 Kiểm Tra Key Cũ</button>
+    </div>
+
+    <!-- TAB 1: CẤP KEY -->
+    <div id="view-gen" class="card">
+      <div class="alert-offline">
+        🔒 <b>CHẾ ĐỘ AN TOÀN:</b> Công cụ chạy offline 100% trên trình duyệt. Không gửi dữ liệu đi đâu. Hãy lưu file này vào máy tính hoặc điện thoại cá nhân của bạn để cấp key cho khách bất cứ khi nào!
+      </div>
+
+      <div class="form-group">
+        <label class="required">Mã Thiết Bị của khách (Device ID):</label>
+        <input type="text" id="inp-device-id" class="code-input" placeholder="VD: KITE-A1B2-C3D4-E5F6" autocomplete="off" spellcheck="false">
+        <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Khách mở app sẽ thấy mã này trên màn hình khóa.</div>
+      </div>
+
+      <div class="form-group">
+        <label>Tên khách hàng / Ghi chú:</label>
+        <input type="text" id="inp-cust-name" placeholder="VD: Anh Nam - Xưởng diều Hải Dương">
+      </div>
+
+      <div class="form-group">
+        <label class="required">Gói thời hạn bản quyền:</label>
+        <select id="inp-plan">
+          <option value="LIFE" selected>🌟 Gói Vĩnh Viễn (Trọn Đời - Không hết hạn)</option>
+          <option value="1Y">📅 Gói 1 Năm (365 ngày)</option>
+          <option value="6M">📅 Gói 6 Tháng (180 ngày)</option>
+          <option value="1M">📅 Gói 1 Tháng (30 ngày)</option>
+          <option value="TRIAL">🎁 Gói Dùng Thử (7 ngày)</option>
+        </select>
+      </div>
+
+      <button type="button" class="btn btn-primary" onclick="handleGenerateKey()">
+        ⚡ TẠO KEY BẢN QUYỀN
+      </button>
+
+      <!-- Khối hiển thị kết quả -->
+      <div id="gen-result" class="result-box">
+        <div style="font-size: 12px; color: #86efac; font-weight: 700;">✅ KEY BẢN QUYỀN ĐÃ ĐƯỢC TẠO:</div>
+        <div id="output-key" class="result-key"></div>
+        <button type="button" class="btn btn-success btn-copy" onclick="handleCopyZaloMessage()">
+          📋 Sao Chép Tin Nhắn Gửi Khách (Zalo)
+        </button>
+      </div>
+    </div>
+
+    <!-- TAB 2: KIỂM TRA KEY -->
+    <div id="view-verify" class="card" style="display:none;">
+      <div class="form-group">
+        <label class="required">Mã kích hoạt cần kiểm tra:</label>
+        <input type="text" id="inp-verify-key" class="code-input" placeholder="VD: KITE-1Y-20271111-25CAC28E5915">
+      </div>
+      <div class="form-group">
+        <label>Mã thiết bị khách (để đối chiếu):</label>
+        <input type="text" id="inp-verify-device" class="code-input" placeholder="VD: KITE-A1B2-C3D4-E5F6">
+      </div>
+      <button type="button" class="btn btn-primary" onclick="handleVerifyKey()">
+        🔍 Kiểm Tra Tính Hợp Lệ
+      </button>
+
+      <div id="verify-result" class="result-box" style="margin-top: 14px;">
+        <div id="verify-output-text" style="font-size: 13px; line-height: 1.6;"></div>
+      </div>
+    </div>
+
+    <div class="footer">
+      Dành riêng cho Quản trị viên &bull; Phần mềm Quản Lý Diều 2026
+    </div>
+  </div>
+
+  <script>
+    const MASTER_SALT = 'KITE_SALT_2026_XUONG_DIEU_VIETNAM_KEY_SECURE_v1';
+    const PLANS = {
+      'LIFE': { name: 'Vĩnh Viễn (Trọn Đời)', days: 0 },
+      '1Y': { name: 'Gói 1 Năm (365 ngày)', days: 365 },
+      '6M': { name: 'Gói 6 Tháng (180 ngày)', days: 180 },
+      '1M': { name: 'Gói 1 Tháng (30 ngày)', days: 30 },
+      'TRIAL': { name: 'Gói Dùng Thử (7 ngày)', days: 7 }
+    };
+
+    let curKey = '';
+    let curDev = '';
+    let curPlan = '';
+    let curCust = '';
+
+    async function sha256Hex(str) {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(str);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    function switchTab(tab) {
+      document.getElementById('tab-gen').classList.toggle('active', tab === 'gen');
+      document.getElementById('tab-verify').classList.toggle('active', tab === 'verify');
+      document.getElementById('view-gen').style.display = tab === 'gen' ? 'block' : 'none';
+      document.getElementById('view-verify').style.display = tab === 'verify' ? 'block' : 'none';
+    }
+
+    async function handleGenerateKey() {
+      const devInp = document.getElementById('inp-device-id');
+      const planInp = document.getElementById('inp-plan');
+      const custInp = document.getElementById('inp-cust-name');
+
+      const dev = (devInp.value || '').trim().toUpperCase();
+      if (!dev.startsWith('KITE-') || dev.length < 8) {
+        return alert('Mã thiết bị không đúng định dạng! Mẫu chuẩn bắt đầu bằng KITE- (Ví dụ: KITE-A1B2-C3D4-E5F6)');
+      }
+
+      const plan = planInp.value;
+      let expiryStr = '99999999';
+
+      if (plan !== 'LIFE') {
+        const days = PLANS[plan]?.days || 365;
+        const d = new Date();
+        d.setDate(d.getDate() + days);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        expiryStr = `${y}${m}${day}`;
+      }
+
+      const raw = `${dev}|${plan}|${expiryStr}|${MASTER_SALT}`;
+      const hash = await sha256Hex(raw);
+      const sig = hash.slice(0, 12).toUpperCase();
+      const key = `KITE-${plan}-${expiryStr}-${sig}`;
+
+      curKey = key;
+      curDev = dev;
+      curPlan = plan;
+      curCust = (custInp.value || '').trim();
+
+      document.getElementById('output-key').textContent = key;
+      document.getElementById('gen-result').style.display = 'block';
+    }
+
+    function handleCopyZaloMessage() {
+      if (!curKey) return;
+      const planName = PLANS[curPlan]?.name || curPlan;
+      const msg = 
+`🪁 KÍCH HOẠT BẢN QUYỀN PHẦN MỀM BÁN DIỀU 🪁
+----------------------------------------
+Kính gửi: ${curCust || 'Quý Khách Hàng'}
+Mã thiết bị: ${curDev}
+Gói bản quyền: ${planName}
+
+🔑 MÃ KÍCH HOẠT CỦA BẠN:
+👉 ${curKey} 👈
+
+📖 HƯỚNG DẪN KÍCH HOẠT:
+1. Mở phần mềm Quản Lý Diều trên máy của bạn.
+2. Sao chép và dán chính xác dòng mã kích hoạt ở trên vào ô "Mã kích hoạt".
+3. Bấm nút [🚀 KÍCH HOẠT PHẦN MỀM] là mở khóa thành công!
+
+Chúc bạn buôn may bán đắt!`;
+
+      navigator.clipboard.writeText(msg).then(() => {
+        alert('✓ Đã sao chép tin nhắn Zalo kèm key!\nBạn chỉ cần mở Zalo và dán gửi cho khách.');
+      }).catch(() => {
+        prompt('Sao chép nội dung gửi khách:', msg);
+      });
+    }
+
+    async function handleVerifyKey() {
+      const keyStr = (document.getElementById('inp-verify-key').value || '').trim().toUpperCase();
+      const devStr = (document.getElementById('inp-verify-device').value || '').trim().toUpperCase();
+      const resBox = document.getElementById('verify-result');
+      const outText = document.getElementById('verify-output-text');
+
+      if (!keyStr) return alert('Vui lòng nhập mã kích hoạt cần kiểm tra!');
+
+      const parts = keyStr.split('-');
+      if (parts.length !== 4 || parts[0] !== 'KITE') {
+        resBox.style.display = 'block';
+        resBox.style.borderColor = '#ef4444';
+        resBox.style.background = 'rgba(239, 68, 68, 0.1)';
+        outText.innerHTML = '<span style="color:#f87171; font-weight:700;">❌ ĐỊNH DẠNG SAI:</span> Mã phải có dạng <code>KITE-GÓI-HẠN-MÃXÁC</code>';
+        return;
+      }
+
+      const [, plan, expiry, sig] = parts;
+      const planName = PLANS[plan]?.name || plan;
+      const isLife = (expiry === '99999999' || plan === 'LIFE');
+      const expFormatted = isLife ? 'Vĩnh viễn' : `${expiry.slice(6, 8)}/${expiry.slice(4, 6)}/${expiry.slice(0, 4)}`;
+
+      let devMatchText = '';
+      let isDevMatch = false;
+
+      if (devStr) {
+        const raw = `${devStr}|${plan}|${expiry}|${MASTER_SALT}`;
+        const hash = await sha256Hex(raw);
+        const expectedSig = hash.slice(0, 12).toUpperCase();
+        isDevMatch = (sig === expectedSig);
+        devMatchText = isDevMatch
+          ? '<div style="color:#4ade80;">✅ Khớp chuẩn với mã máy: <b>' + devStr + '</b></div>'
+          : '<div style="color:#f87171;">❌ KHÔNG KHỚP với mã máy ' + devStr + ' (Key này được tạo cho máy khác!)</div>';
+      }
+
+      resBox.style.display = 'block';
+      resBox.style.borderColor = (isDevMatch || !devStr) ? '#22c55e' : '#ef4444';
+      resBox.style.background = (isDevMatch || !devStr) ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)';
+
+      outText.innerHTML = `
+        <div style="font-weight:700; margin-bottom: 6px;">📋 THÔNG TIN MÃ BẢN QUYỀN:</div>
+        <div>• Gói: <b>${planName}</b></div>
+        <div>• Hạn dùng: <b>${expFormatted}</b></div>
+        ${devMatchText}
+      `;
+    }
+  </script>
+</body>
+</html>

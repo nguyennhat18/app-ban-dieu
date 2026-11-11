@@ -7,15 +7,17 @@ import {
   escapeHTML
 } from '../utils.js';
 import { DEFAULT_SHOP_SETTINGS } from '../config.js';
+import { licenseService, LICENSE_CONFIG, generateLicenseKey } from './license.js';
 
 export class SettingsModule {
   constructor(app) {
     this.app = app;
-    this.activeSettingSection = 'shop'; // 'shop' | 'catalog' | 'backup' | 'guide'
+    this.activeSettingSection = 'shop'; // 'shop' | 'catalog' | 'backup' | 'guide' | 'license'
     this.guidePlatform = 'ios'; // 'ios' | 'android'
     this.catalogTab = 'categories'; // 'categories' | 'products' | 'units'
     this.productSearchQuery = '';
     this.productCatFilter = 'all';
+    this.isAdminKeygenUnlocked = false;
     this.storageStatus = {
       isPersisted: false,
       usageMB: 0,
@@ -68,6 +70,7 @@ export class SettingsModule {
     const categories = await db.getCategories();
     const units = await db.getUnits();
     const products = await db.getAll('products');
+    const licStatus = await licenseService.checkStatus();
 
     container.innerHTML = `
       <div class="view-header mb-2">
@@ -95,6 +98,9 @@ export class SettingsModule {
         </button>
         <button type="button" class="settings-pill-tab ${this.activeSettingSection === 'guide' ? 'active' : ''}" data-section="guide">
           <span class="tab-icon">📲</span> Cài App & Trợ Giúp
+        </button>
+        <button type="button" class="settings-pill-tab ${this.activeSettingSection === 'license' ? 'active' : ''}" data-section="license">
+          <span class="tab-icon">🔑</span> Bản Quyền & Key
         </button>
       </div>
 
@@ -440,13 +446,18 @@ export class SettingsModule {
           </div>
         </div>
       </div>
+
+      <!-- ================= MỤC 5: BẢN QUYỀN & CẤP KEY ================= -->
+      <div id="settings-sec-license" class="settings-section-pane" style="display: ${this.activeSettingSection === 'license' ? 'block' : 'none'};">
+        ${this.renderLicenseSection(licStatus, shop)}
+      </div>
     `;
 
-    this.bindEvents(shop, categories, products, units);
+    this.bindEvents(shop, categories, products, units, licStatus);
   }
 
-  bindEvents(shop, categories, products, units) {
-    // 1. Chuyển đổi các mục cài đặt chính (Cửa hàng, Loại & Hàng, Sao lưu, Cài App)
+  bindEvents(shop, categories, products, units, licStatus) {
+    // 1. Chuyển đổi các mục cài đặt chính (Cửa hàng, Loại & Hàng, Sao lưu, Cài App, Bản quyền)
     document.querySelectorAll('.settings-pill-tab').forEach(btn => {
       btn.addEventListener('click', () => {
         const sec = btn.dataset.section;
@@ -454,7 +465,7 @@ export class SettingsModule {
         document.querySelectorAll('.settings-pill-tab').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
 
-        ['shop', 'catalog', 'backup', 'guide'].forEach(s => {
+        ['shop', 'catalog', 'backup', 'guide', 'license'].forEach(s => {
           const el = document.getElementById(`settings-sec-${s}`);
           if (el) el.style.display = (s === sec) ? 'block' : 'none';
         });
@@ -704,6 +715,270 @@ export class SettingsModule {
         window.location.reload();
       }
     });
+
+    // 4. Sự kiện mục Bản quyền & Cấp key
+    this.bindLicenseEvents(licStatus);
+  }
+
+  // ================= MỤC 5: BẢN QUYỀN & CẤP KEY =================
+  renderLicenseSection(licStatus, shop) {
+    const isLicensed = licStatus.status === 'licensed';
+    const isTrial = licStatus.status === 'trial';
+
+    return `
+      <!-- THÔNG TIN BẢN QUYỀN MÁY NÀY -->
+      <div class="card p-3 mb-3" style="border: 1.5px solid ${isLicensed ? '#22c55e' : (isTrial ? '#f59e0b' : '#ef4444')}; border-radius: 14px;">
+        <div class="d-flex justify-between align-center mb-2">
+          <h3 class="card-title text-sm mb-0">🔑 Trạng Thái Bản Quyền Máy</h3>
+          <span class="badge ${isLicensed ? 'badge-success' : (isTrial ? 'badge-warning' : 'badge-danger')}">
+            ${isLicensed ? '✅ Đã Kích Hoạt' : (isTrial ? `🎁 Dùng Thử (${licStatus.daysLeft} ngày)` : '⚠️ Hết Hạn')}
+          </span>
+        </div>
+
+        <div class="card p-2 bg-light mb-2">
+          <div class="text-xs text-muted">MÃ THIẾT BỊ NÀY (DEVICE ID):</div>
+          <div class="d-flex align-center justify-between mt-1">
+            <span class="text-bold text-primary" style="font-family: monospace; font-size: 14px;">${licStatus.deviceId}</span>
+            <button type="button" class="btn btn-outline-primary btn-xs" id="btn-copy-settings-device-id">📋 Sao chép</button>
+          </div>
+        </div>
+
+        <div class="text-xs mb-3" style="line-height: 1.6;">
+          <div>• Gói bản quyền: <b>${escapeHTML(licStatus.planName)}</b></div>
+          <div>• Thời hạn sử dụng: <b>${escapeHTML(licStatus.expiryText)}</b></div>
+          ${licStatus.licenseKey ? `<div>• Mã key đang dùng: <code class="text-xs">${escapeHTML(licStatus.licenseKey)}</code></div>` : ''}
+        </div>
+
+        <button type="button" class="btn btn-outline-primary btn-block btn-sm" id="btn-open-activate-modal" style="font-weight: 700;">
+          🔑 Nhập Mã Kích Hoạt Mới / Gia Hạn
+        </button>
+      </div>
+
+      <!-- KHU VỰC QUẢN TRỊ CẤP KEY (DÀNH CHO NGƯỜI BÁN) -->
+      <div class="card p-3 mb-3 bg-light" style="border: 1.5px solid #64748b; border-radius: 14px;">
+        <div class="d-flex justify-between align-center mb-2">
+          <h3 class="card-title text-sm mb-0" style="color: #0f172a;">
+            🛡️ BỘ CẤP KEY (DÀNH CHO NGƯỜI BÁN)
+          </h3>
+          <span class="badge ${this.isAdminKeygenUnlocked ? 'badge-success' : 'badge-neutral'} text-xs">
+            ${this.isAdminKeygenUnlocked ? '🔓 Đã mở khóa' : '🔒 Khóa bảo mật'}
+          </span>
+        </div>
+
+        ${!this.isAdminKeygenUnlocked ? `
+          <p class="text-xs text-muted mb-3">
+            Khu vực bí mật dành riêng cho bạn (người bán) để tạo mã kích hoạt khóa theo máy cho khách hàng. Vui lòng nhập mã PIN quản trị (Mặc định: <b>1809</b>).
+          </p>
+          <div class="d-flex gap-2">
+            <input type="password" id="input-admin-pin" class="form-input-sm flex-1 text-center text-bold" placeholder="Nhập PIN Admin (1809)" maxlength="10">
+            <button type="button" class="btn btn-primary btn-sm" id="btn-unlock-admin-keygen" style="font-weight: 700;">
+              🔓 Mở Khóa Cấp Key
+            </button>
+          </div>
+        ` : `
+          <div class="alert alert-info text-xs mb-3">
+            💡 <b>CÁCH BÁN KEY:</b> Khách gửi Mã Máy (Device ID) -> Bạn dán vào ô dưới -> Chọn gói thời hạn -> Bấm <b>Tạo Key</b> -> Bấm <b>Sao Chép Tin Nhắn</b> và gửi Zalo cho khách.
+          </div>
+
+          <div class="form-group mb-2">
+            <label class="form-label required text-bold text-xs">1. Mã thiết bị của khách (Device ID):</label>
+            <div style="display: flex; gap: 6px;">
+              <input type="text" id="admin-kg-device" class="form-input form-input-sm text-bold" placeholder="VD: KITE-A1B2-C3D4-E5F6" style="font-family: monospace; text-transform: uppercase;">
+              <button type="button" class="btn btn-outline-secondary btn-xs" id="btn-admin-kg-this-device">Máy này</button>
+            </div>
+          </div>
+
+          <div class="form-group mb-2">
+            <label class="form-label text-bold text-xs">2. Tên khách / Ghi chú đơn:</label>
+            <input type="text" id="admin-kg-name" class="form-input form-input-sm" placeholder="VD: Anh Nam - Xưởng diều Hải Dương">
+          </div>
+
+          <div class="form-group mb-3">
+            <label class="form-label required text-bold text-xs">3. Gói bản quyền cấp cho khách:</label>
+            <select id="admin-kg-plan" class="form-select form-select-sm text-bold">
+              <option value="LIFE" selected>🌟 Gói Vĩnh Viễn (Trọn Đời - Không hết hạn)</option>
+              <option value="1Y">📅 Gói 1 Năm (365 ngày)</option>
+              <option value="6M">📅 Gói 6 Tháng (180 ngày)</option>
+              <option value="1M">📅 Gói 1 Tháng (30 ngày)</option>
+              <option value="TRIAL">🎁 Gói Dùng Thử (7 ngày)</option>
+            </select>
+          </div>
+
+          <button type="button" class="btn btn-primary btn-block btn-sm" id="btn-admin-kg-submit" style="font-weight: 800;">
+            ⚡ TẠO KEY BẢN QUYỀN CHO KHÁCH
+          </button>
+
+          <div id="admin-kg-result" class="card p-2 mt-2 bg-light" style="display:none; border: 1.5px solid #22c55e;">
+            <div class="text-xs text-success text-bold mb-1">🎉 KEY BẢN QUYỀN VỪA TẠO:</div>
+            <div id="admin-kg-result-key" class="text-bold text-sm" style="font-family: monospace; color: #15803d; word-break: break-all; background: #dcfce7; padding: 6px; border-radius: 6px; text-align: center;"></div>
+            <button type="button" class="btn btn-success btn-block btn-xs mt-2" id="btn-admin-kg-copy-zalo" style="font-weight: 700;">
+              📋 Sao Chép Tin Nhắn Gửi Khách (Zalo)
+            </button>
+          </div>
+
+          <!-- Lịch sử key đã cấp & Đổi PIN -->
+          <div class="mt-3 pt-2" style="border-top: 1px dashed #cbd5e1;">
+            <details>
+              <summary class="text-xs text-muted cursor-pointer text-bold">⚙️ Đổi Mã PIN Quản Trị & Công Cụ Riêng</summary>
+              <div class="mt-2">
+                <div class="form-row mb-2">
+                  <div class="form-group flex-2">
+                    <input type="password" id="admin-new-pin-input" class="form-input-sm" placeholder="Nhập PIN mới (tối thiểu 4 số)">
+                  </div>
+                  <div class="form-group flex-1">
+                    <button type="button" class="btn btn-secondary btn-sm" id="btn-admin-save-new-pin">Đổi PIN</button>
+                  </div>
+                </div>
+                <div class="mt-2 text-center">
+                  <a href="./keygen.html" target="_blank" class="btn btn-link btn-xs text-primary" style="text-decoration:none; font-weight:700;">
+                    🌐 Mở trang tạo key độc lập (keygen.html)
+                  </a>
+                </div>
+              </div>
+            </details>
+          </div>
+        `}
+      </div>
+    `;
+  }
+
+  bindLicenseEvents(licStatus) {
+    // 1. Sao chép mã máy
+    const btnCopyDev = document.getElementById('btn-copy-settings-device-id');
+    if (btnCopyDev) {
+      btnCopyDev.addEventListener('click', () => {
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText(licStatus.deviceId).then(() => {
+            alert('✓ Đã sao chép mã thiết bị: ' + licStatus.deviceId);
+          });
+        } else {
+          prompt('Mã thiết bị của bạn:', licStatus.deviceId);
+        }
+      });
+    }
+
+    // 2. Mở popup nhập key mới
+    const btnOpenAct = document.getElementById('btn-open-activate-modal');
+    if (btnOpenAct) {
+      btnOpenAct.addEventListener('click', () => {
+        licenseService.showLockModal(async () => {
+          await this.render();
+        });
+      });
+    }
+
+    // 3. Mở khóa Admin Keygen bằng PIN
+    const btnUnlock = document.getElementById('btn-unlock-admin-keygen');
+    if (btnUnlock) {
+      btnUnlock.addEventListener('click', async () => {
+        const pinInp = document.getElementById('input-admin-pin');
+        const pin = (pinInp?.value || '').trim();
+        if (!pin) return alert('Vui lòng nhập mã PIN quản trị!');
+        const ok = await licenseService.checkAdminPin(pin);
+        if (ok) {
+          this.isAdminKeygenUnlocked = true;
+          await this.render();
+        } else {
+          alert('❌ Mã PIN không chính xác! (Mặc định: 1809)');
+        }
+      });
+    }
+
+    // 4. Nếu đã mở khóa Admin Keygen
+    if (this.isAdminKeygenUnlocked) {
+      const btnThisDev = document.getElementById('btn-admin-kg-this-device');
+      const devInp = document.getElementById('admin-kg-device');
+      const nameInp = document.getElementById('admin-kg-name');
+      const planSel = document.getElementById('admin-kg-plan');
+      const btnSubmit = document.getElementById('admin-kg-submit');
+      const resultBox = document.getElementById('admin-kg-result');
+      const resultKeyEl = document.getElementById('admin-kg-result-key');
+      const btnCopyZalo = document.getElementById('btn-admin-kg-copy-zalo');
+
+      if (btnThisDev && devInp) {
+        btnThisDev.addEventListener('click', () => {
+          devInp.value = licStatus.deviceId;
+        });
+      }
+
+      let createdKey = '';
+      let targetDev = '';
+      let targetPlan = '';
+      let targetName = '';
+
+      if (btnSubmit) {
+        btnSubmit.addEventListener('click', async () => {
+          const d = (devInp.value || '').trim();
+          if (!d) return alert('Vui lòng nhập Mã máy (Device ID) của khách!');
+          const p = planSel.value;
+          const n = (nameInp.value || '').trim();
+
+          try {
+            const key = await generateLicenseKey(d, p);
+            createdKey = key;
+            targetDev = d;
+            targetPlan = p;
+            targetName = n;
+
+            resultKeyEl.textContent = key;
+            resultBox.style.display = 'block';
+
+            await licenseService.logIssuedKey({
+              licenseKey: key,
+              deviceId: d,
+              customerName: n,
+              plan: p,
+              planName: LICENSE_CONFIG.PLANS[p]?.name || p
+            });
+          } catch (err) {
+            alert('Lỗi tạo key: ' + err.message);
+          }
+        });
+      }
+
+      if (btnCopyZalo) {
+        btnCopyZalo.addEventListener('click', () => {
+          if (!createdKey) return;
+          const planName = LICENSE_CONFIG.PLANS[targetPlan]?.name || targetPlan;
+          const msg = 
+`🪁 KÍCH HOẠT BẢN QUYỀN PHẦN MỀM BÁN DIỀU 🪁
+----------------------------------------
+Kính gửi: ${targetName || 'Quý Khách Hàng'}
+Mã thiết bị: ${targetDev}
+Gói bản quyền: ${planName}
+
+🔑 MÃ KÍCH HOẠT CỦA BẠN:
+👉 ${createdKey} 👈
+
+📖 HƯỚNG DẪN KÍCH HOẠT:
+1. Mở phần mềm Quản Lý Diều trên máy của bạn.
+2. Sao chép và dán chính xác dòng mã kích hoạt ở trên vào ô "Mã kích hoạt".
+3. Bấm nút [🚀 KÍCH HOẠT PHẦN MỀM] là mở khóa thành công!
+
+Chúc bạn buôn may bán đắt!`;
+
+          if (navigator.clipboard) {
+            navigator.clipboard.writeText(msg).then(() => {
+              alert('✓ Đã sao chép tin nhắn Zalo kèm key!\nBạn chỉ cần mở Zalo và dán gửi cho khách.');
+            });
+          } else {
+            prompt('Sao chép tin nhắn gửi khách:', msg);
+          }
+        });
+      }
+
+      const btnSavePin = document.getElementById('btn-admin-save-new-pin');
+      if (btnSavePin) {
+        btnSavePin.addEventListener('click', async () => {
+          const pinInp = document.getElementById('admin-new-pin-input');
+          const p = (pinInp.value || '').trim();
+          if (!p || p.length < 4) return alert('Mã PIN phải từ 4 số trở lên!');
+          await licenseService.setAdminPin(p);
+          alert('✓ Đã đổi mã PIN Quản trị thành: ' + p);
+          pinInp.value = '';
+        });
+      }
+    }
   }
 
   // ================= QUẢN LÝ LOẠI DIỀU, SỬA MẶT HÀNG & ĐVT =================

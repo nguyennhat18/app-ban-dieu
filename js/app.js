@@ -10,6 +10,7 @@ import { DebtsModule } from './modules/debts.js';
 import { ReportsModule } from './modules/reports.js';
 import { BackupModule } from './modules/backup.js';
 import { SettingsModule } from './modules/settings.js';
+import { licenseService } from './modules/license.js';
 import { formatDateTime } from './utils.js';
 
 class KiteApp {
@@ -17,6 +18,7 @@ class KiteApp {
     this.currentView = 'sales'; // Mặc định mở ngay màn hình Bán hàng (POS)
     this.modules = {};
     this.swRegistration = null;
+    this.licenseService = licenseService;
   }
 
   async init() {
@@ -28,6 +30,19 @@ class KiteApp {
       console.log('[App] DB khởi tạo thành công');
     } catch (err) {
       console.error('[App] Lỗi khởi tạo DB:', err);
+    }
+
+    try {
+      // 2. Kiểm tra bản quyền thiết bị (Device-Locked License)
+      const licStatus = await this.licenseService.checkStatus();
+      console.log('[License] Trạng thái bản quyền:', licStatus);
+      if (licStatus.status === 'expired') {
+        this.licenseService.showLockModal(() => {
+          this.navigateTo(this.currentView);
+        });
+      }
+    } catch (err) {
+      console.warn('[License] Lỗi kiểm tra bản quyền:', err);
     }
 
     try {
