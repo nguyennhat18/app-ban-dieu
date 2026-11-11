@@ -5,7 +5,7 @@ import { db } from '../db.js';
 
 export const LICENSE_CONFIG = {
   MASTER_SALT: 'KITE_SALT_2026_XUONG_DIEU_VIETNAM_KEY_SECURE_v1',
-  DEFAULT_ADMIN_PIN: '1809',
+  DEFAULT_ADMIN_PIN: '202688',
   TRIAL_DAYS: 7, // 7 ngày dùng thử miễn phí cho máy mới
   PLANS: {
     'LIFE': { name: 'Vĩnh Viễn (Trọn Đời)', days: 0, code: 'LIFE' },
@@ -383,7 +383,7 @@ export class LicenseService {
         <div class="modal-content license-lock-card" style="max-width: 480px; width: 92%; border-radius: 20px; border: 2px solid #38bdf8; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
           
           <div class="text-center p-3" style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #fff; border-radius: 18px 18px 0 0;">
-            <div style="font-size: 40px; margin-bottom: 4px;">🪁</div>
+            <div id="lock-secret-trigger" style="font-size: 40px; margin-bottom: 4px; cursor: pointer; user-select: none;">🪁</div>
             <h2 style="font-size: 20px; font-weight: 900; margin: 0; color: #fff;">KÍCH HOẠT BẢN QUYỀN</h2>
             <div style="font-size: 12px; opacity: 0.9; margin-top: 3px;">Phần Mềm Quản Lý Bán Diều & Tồn Kho (Khóa Máy)</div>
           </div>
@@ -423,13 +423,6 @@ export class LicenseService {
             <button type="button" class="btn btn-success btn-block btn-lg" id="btn-submit-license-key" style="font-weight: 800; font-size: 16px;">
               🚀 KÍCH HOẠT PHẦN MỀM
             </button>
-
-            <!-- Lối vào Quản Trị Viên (Người bán) -->
-            <div class="mt-3 pt-3 text-center" style="border-top: 1px dashed #cbd5e1;">
-              <button type="button" class="btn btn-link btn-xs text-muted" id="btn-open-admin-from-lock" style="font-size: 11px; text-decoration: none;">
-                🛡️ Bạn là người bán? Mở bộ cấp key bản quyền
-              </button>
-            </div>
           </div>
         </div>
       </div>
@@ -481,19 +474,30 @@ export class LicenseService {
       }
     });
 
-    // Nút mở Admin Keygen từ màn hình khóa
-    document.getElementById('btn-open-admin-from-lock').addEventListener('click', () => {
-      const pin = prompt('Nhập mã PIN Quản trị viên người bán (Mặc định: 1809):');
-      if (!pin) return;
-      this.checkAdminPin(pin).then(ok => {
-        if (ok) {
-          modalEl.remove();
-          this.showAdminKeygenModal();
-        } else {
-          alert('❌ Mã PIN quản trị không chính xác!');
+    // Lối mở Admin Keygen bí mật dành riêng cho bạn (chạm biểu tượng con diều 5 lần)
+    let secretTapCount = 0;
+    let secretTapTimer = null;
+    const kiteLogo = document.getElementById('lock-secret-trigger');
+    if (kiteLogo) {
+      kiteLogo.addEventListener('click', () => {
+        secretTapCount++;
+        clearTimeout(secretTapTimer);
+        secretTapTimer = setTimeout(() => { secretTapCount = 0; }, 2000);
+        if (secretTapCount >= 5) {
+          secretTapCount = 0;
+          const pin = prompt('Nhập mã xác thực:');
+          if (!pin) return;
+          this.checkAdminPin(pin).then(ok => {
+            if (ok) {
+              modalEl.remove();
+              this.showAdminKeygenModal();
+            } else {
+              alert('Mã xác thực không hợp lệ.');
+            }
+          });
         }
       });
-    });
+    }
   }
 
   /**

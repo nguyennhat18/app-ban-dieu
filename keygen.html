@@ -48,72 +48,90 @@
     <div class="header">
       <div class="logo-badge">🪁</div>
       <h1>CÔNG CỤ CẤP KEY BẢN QUYỀN</h1>
-      <div class="sub">Hệ thống cấp khóa theo thiết bị (Offline - An Toàn 100%)</div>
+      <div class="sub">Hệ thống cấp khóa theo thiết bị (Offline - Bảo Mật Riêng)</div>
     </div>
 
-    <div class="tabs-header">
-      <button class="tab-btn active" id="tab-gen" onclick="switchTab('gen')">⚡ Cấp Key Khách Hàng</button>
-      <button class="tab-btn" id="tab-verify" onclick="switchTab('verify')">🔍 Kiểm Tra Key Cũ</button>
+    <!-- MÀN HÌNH KHÓA XÁC THỰC MÃ PIN BẢO MẬT -->
+    <div id="pin-gate-card" class="card" style="text-align: center; padding: 28px 18px;">
+      <div style="font-size: 40px; margin-bottom: 8px;">🔐</div>
+      <h2 style="font-size: 17px; color: #38bdf8; margin-bottom: 6px;">XÁC THỰC QUẢN TRỊ VIÊN</h2>
+      <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">Vui lòng nhập mã PIN quản trị để mở công cụ cấp key:</p>
+      
+      <div style="max-width: 260px; margin: 0 auto;">
+        <input type="password" id="gate-pin-input" class="code-input" style="text-align: center; font-size: 20px; margin-bottom: 12px;" placeholder="••••••" maxlength="12">
+        <button type="button" class="btn btn-primary" onclick="handleUnlockKeygen()">🔓 Mở Khóa Công Cụ</button>
+      </div>
+      <div id="gate-error" style="color: #ef4444; font-size: 13px; margin-top: 12px; display: none; font-weight: 700;">
+        ❌ Mã PIN không chính xác!
+      </div>
     </div>
 
-    <!-- TAB 1: CẤP KEY -->
-    <div id="view-gen" class="card">
-      <div class="alert-offline">
-        🔒 <b>CHẾ ĐỘ AN TOÀN:</b> Công cụ chạy offline 100% trên trình duyệt. Không gửi dữ liệu đi đâu. Hãy lưu file này vào máy tính hoặc điện thoại cá nhân của bạn để cấp key cho khách bất cứ khi nào!
+    <!-- NỘI DUNG CHÍNH (CHỈ HIỂN THỊ SAU KHI MỞ KHÓA) -->
+    <div id="keygen-main" style="display: none;">
+      <div class="tabs-header">
+        <button class="tab-btn active" id="tab-gen" onclick="switchTab('gen')">⚡ Cấp Key Khách Hàng</button>
+        <button class="tab-btn" id="tab-verify" onclick="switchTab('verify')">🔍 Kiểm Tra Key Cũ</button>
       </div>
 
-      <div class="form-group">
-        <label class="required">Mã Thiết Bị của khách (Device ID):</label>
-        <input type="text" id="inp-device-id" class="code-input" placeholder="VD: KITE-A1B2-C3D4-E5F6" autocomplete="off" spellcheck="false">
-        <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Khách mở app sẽ thấy mã này trên màn hình khóa.</div>
-      </div>
+      <!-- TAB 1: CẤP KEY -->
+      <div id="view-gen" class="card">
+        <div class="alert-offline">
+          🔒 <b>CHẾ ĐỘ AN TOÀN:</b> Công cụ chạy offline 100% trên trình duyệt. Không gửi dữ liệu đi đâu. Hãy lưu file này vào máy tính hoặc điện thoại cá nhân của bạn để cấp key cho khách bất cứ khi nào!
+        </div>
 
-      <div class="form-group">
-        <label>Tên khách hàng / Ghi chú:</label>
-        <input type="text" id="inp-cust-name" placeholder="VD: Anh Nam - Xưởng diều Hải Dương">
-      </div>
+        <div class="form-group">
+          <label class="required">Mã Thiết Bị của khách (Device ID):</label>
+          <input type="text" id="inp-device-id" class="code-input" placeholder="VD: KITE-A1B2-C3D4-E5F6" autocomplete="off" spellcheck="false">
+          <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Khách mở app sẽ thấy mã này trên màn hình khóa.</div>
+        </div>
 
-      <div class="form-group">
-        <label class="required">Gói thời hạn bản quyền:</label>
-        <select id="inp-plan">
-          <option value="LIFE" selected>🌟 Gói Vĩnh Viễn (Trọn Đời - Không hết hạn)</option>
-          <option value="1Y">📅 Gói 1 Năm (365 ngày)</option>
-          <option value="6M">📅 Gói 6 Tháng (180 ngày)</option>
-          <option value="1M">📅 Gói 1 Tháng (30 ngày)</option>
-          <option value="TRIAL">🎁 Gói Dùng Thử (7 ngày)</option>
-        </select>
-      </div>
+        <div class="form-group">
+          <label>Tên khách hàng / Ghi chú:</label>
+          <input type="text" id="inp-cust-name" placeholder="VD: Anh Nam - Xưởng diều Hải Dương">
+        </div>
 
-      <button type="button" class="btn btn-primary" onclick="handleGenerateKey()">
-        ⚡ TẠO KEY BẢN QUYỀN
-      </button>
+        <div class="form-group">
+          <label class="required">Gói thời hạn bản quyền:</label>
+          <select id="inp-plan">
+            <option value="LIFE" selected>🌟 Gói Vĩnh Viễn (Trọn Đời - Không hết hạn)</option>
+            <option value="1Y">📅 Gói 1 Năm (365 ngày)</option>
+            <option value="6M">📅 Gói 6 Tháng (180 ngày)</option>
+            <option value="1M">📅 Gói 1 Tháng (30 ngày)</option>
+            <option value="TRIAL">🎁 Gói Dùng Thử (7 ngày)</option>
+          </select>
+        </div>
 
-      <!-- Khối hiển thị kết quả -->
-      <div id="gen-result" class="result-box">
-        <div style="font-size: 12px; color: #86efac; font-weight: 700;">✅ KEY BẢN QUYỀN ĐÃ ĐƯỢC TẠO:</div>
-        <div id="output-key" class="result-key"></div>
-        <button type="button" class="btn btn-success btn-copy" onclick="handleCopyZaloMessage()">
-          📋 Sao Chép Tin Nhắn Gửi Khách (Zalo)
+        <button type="button" class="btn btn-primary" onclick="handleGenerateKey()">
+          ⚡ TẠO KEY BẢN QUYỀN
         </button>
-      </div>
-    </div>
 
-    <!-- TAB 2: KIỂM TRA KEY -->
-    <div id="view-verify" class="card" style="display:none;">
-      <div class="form-group">
-        <label class="required">Mã kích hoạt cần kiểm tra:</label>
-        <input type="text" id="inp-verify-key" class="code-input" placeholder="VD: KITE-1Y-20271111-25CAC28E5915">
+        <!-- Khối hiển thị kết quả -->
+        <div id="gen-result" class="result-box">
+          <div style="font-size: 12px; color: #86efac; font-weight: 700;">✅ KEY BẢN QUYỀN ĐÃ ĐƯỢC TẠO:</div>
+          <div id="output-key" class="result-key"></div>
+          <button type="button" class="btn btn-success btn-copy" onclick="handleCopyZaloMessage()">
+            📋 Sao Chép Tin Nhắn Gửi Khách (Zalo)
+          </button>
+        </div>
       </div>
-      <div class="form-group">
-        <label>Mã thiết bị khách (để đối chiếu):</label>
-        <input type="text" id="inp-verify-device" class="code-input" placeholder="VD: KITE-A1B2-C3D4-E5F6">
-      </div>
-      <button type="button" class="btn btn-primary" onclick="handleVerifyKey()">
-        🔍 Kiểm Tra Tính Hợp Lệ
-      </button>
 
-      <div id="verify-result" class="result-box" style="margin-top: 14px;">
-        <div id="verify-output-text" style="font-size: 13px; line-height: 1.6;"></div>
+      <!-- TAB 2: KIỂM TRA KEY -->
+      <div id="view-verify" class="card" style="display:none;">
+        <div class="form-group">
+          <label class="required">Mã kích hoạt cần kiểm tra:</label>
+          <input type="text" id="inp-verify-key" class="code-input" placeholder="VD: KITE-1Y-20271111-25CAC28E5915">
+        </div>
+        <div class="form-group">
+          <label>Mã thiết bị khách (để đối chiếu):</label>
+          <input type="text" id="inp-verify-device" class="code-input" placeholder="VD: KITE-A1B2-C3D4-E5F6">
+        </div>
+        <button type="button" class="btn btn-primary" onclick="handleVerifyKey()">
+          🔍 Kiểm Tra Tính Hợp Lệ
+        </button>
+
+        <div id="verify-result" class="result-box" style="margin-top: 14px;">
+          <div id="verify-output-text" style="font-size: 13px; line-height: 1.6;"></div>
+        </div>
       </div>
     </div>
 
@@ -124,6 +142,8 @@
 
   <script>
     const MASTER_SALT = 'KITE_SALT_2026_XUONG_DIEU_VIETNAM_KEY_SECURE_v1';
+    const MASTER_PIN = '202688';
+
     const PLANS = {
       'LIFE': { name: 'Vĩnh Viễn (Trọn Đời)', days: 0 },
       '1Y': { name: 'Gói 1 Năm (365 ngày)', days: 365 },
@@ -136,6 +156,25 @@
     let curDev = '';
     let curPlan = '';
     let curCust = '';
+
+    function handleUnlockKeygen() {
+      const pinInp = document.getElementById('gate-pin-input');
+      const entered = (pinInp.value || '').trim();
+      const errEl = document.getElementById('gate-error');
+
+      if (entered === MASTER_PIN) {
+        document.getElementById('pin-gate-card').style.display = 'none';
+        document.getElementById('keygen-main').style.display = 'block';
+      } else {
+        errEl.style.display = 'block';
+        pinInp.value = '';
+        pinInp.focus();
+      }
+    }
+
+    document.getElementById('gate-pin-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') handleUnlockKeygen();
+    });
 
     async function sha256Hex(str) {
       const encoder = new TextEncoder();
