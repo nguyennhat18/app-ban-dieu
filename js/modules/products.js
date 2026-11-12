@@ -101,7 +101,7 @@ export class ProductModule {
               <input type="file" id="stock-excel-file-input" accept=".xlsx, .xls, .csv" style="display:none">
             ` : ''}
             <button id="btn-add-product" class="btn btn-primary btn-sm">
-              <span>+</span> Thêm Mặt Hàng
+              <span>+</span> Thêm mới
             </button>
           </div>
         </div>
@@ -205,7 +205,7 @@ export class ProductModule {
                 <span>⚡</span> Nạp 69 Mặt Hàng Mẫu
               </button>
             ` : `
-              <button id="btn-add-product-empty" class="btn btn-primary btn-sm">+ Thêm Mặt Hàng</button>
+              <button id="btn-add-product-empty" class="btn btn-primary btn-sm">+ Thêm mới</button>
             `}
           </div>
         </div>
@@ -540,7 +540,7 @@ export class ProductModule {
       <div class="modal-backdrop" id="product-modal">
         <div class="modal-content modal-lg">
           <div class="modal-header">
-            <h2 class="modal-title">${isEdit ? '✏️ Chỉnh Sửa Mặt Hàng' : '➕ Thêm Mặt Hàng Mới'}</h2>
+            <h2 class="modal-title">${isEdit ? '✏️ Chỉnh Sửa Mặt Hàng' : '➕ Thêm mới'}</h2>
             <button class="modal-close" id="btn-modal-close">&times;</button>
           </div>
 
@@ -568,7 +568,7 @@ export class ProductModule {
                 <input type="text" id="p-name" class="form-input" required placeholder="VD: Diều Sáo Cánh Bầu 2.5m" value="${escapeHTML(product.name)}">
               </div>
               <div class="form-group flex-1">
-                <label class="form-label">Mã diều</label>
+                <label class="form-label">Mã</label>
                 <input type="text" id="p-code" class="form-input" placeholder="Tự sinh" value="${escapeHTML(product.code)}">
               </div>
             </div>
@@ -592,7 +592,7 @@ export class ProductModule {
             <!-- Nhóm & ĐVT -->
             <div class="form-row">
               <div class="form-group flex-2">
-                <label class="form-label">Loại diều</label>
+                <label class="form-label">Chủng loại</label>
                 <select id="p-category" class="form-select">
                   ${categories.map(c => `
                     <option value="${escapeHTML(c)}" ${product.category === c ? 'selected' : ''}>${escapeHTML(c)}</option>
