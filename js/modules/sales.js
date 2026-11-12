@@ -61,6 +61,7 @@ export class SalesModule {
   // ================= TAB 1: THU NGÂN POS =================
   async renderPosView() {
     const products = await db.getAll('products');
+    this._cachedPosProducts = products;
     const customers = await db.getAll('customers');
     const shopSettings = (await db.getSetting('shop_info')) || {};
     const categories = await db.getCategories();
@@ -99,7 +100,7 @@ export class SalesModule {
 
             <div class="search-input-wrap">
               <input type="text" id="pos-product-search" class="form-input" placeholder="🔍 Tìm tên, mã diều..." value="${escapeHTML(this.searchProductQuery)}">
-              ${this.searchProductQuery ? `<button id="btn-clear-pos-search" class="clear-search-btn">&times;</button>` : ''}
+              <button id="btn-clear-pos-search" class="clear-search-btn" style="display:${this.searchProductQuery ? 'flex' : 'none'}">&times;</button>
             </div>
             <div class="category-tabs-scroll">
               <button class="cat-pill ${this.posCategory === 'all' ? 'active' : ''}" data-cat="all">Tất cả diều</button>
@@ -109,66 +110,8 @@ export class SalesModule {
             </div>
           </div>
 
-          <div class="pos-product-grid">
-            ${filteredProducts.length === 0 ? `
-              <div class="empty-state" style="grid-column: 1 / -1;">
-                <p class="empty-icon">🪁</p>
-                <p class="empty-title">Không tìm thấy diều nào</p>
-                <p class="empty-desc">Thử tìm tên khác hoặc vào mục Kho Diều để thêm mới.</p>
-              </div>
-            ` : filteredProducts.map(p => {
-              const inCartItem = this.cart.find(i => i.productId === p.id);
-              const qtyInCart = inCartItem ? inCartItem.quantity : 0;
-              const isOutOfStock = p.stock <= 0;
-              const isLowStock = p.stock <= (p.lowStockThreshold || 5);
-              const isStockWh = p.warehouse === 'stock';
-
-              return `
-                <div class="pos-item-card ${isOutOfStock ? 'out-of-stock' : ''}" data-id="${p.id}">
-                  <!-- Tag kho hàng nổi góc trên bên trái ảnh -->
-                  <span class="pos-card-wh-chip ${isStockWh ? 'wh-chip-stock' : 'wh-chip-new'}">
-                    ${isStockWh ? '📦 Kho Tồn' : '✨ Diều Mới'}
-                  </span>
-
-                  ${p.photo ? `
-                    <img src="${p.photo}" class="pos-item-img" alt="${escapeHTML(p.name)}" loading="lazy">
-                  ` : `
-                    <div class="pos-item-img-placeholder">🪁</div>
-                  `}
-
-                  <div class="pos-item-body">
-                    <div class="pos-item-name" title="${escapeHTML(p.name)}">${escapeHTML(p.name)}</div>
-                    <div class="pos-item-price">${formatVND(p.sellingPrice)}</div>
-                    <div class="pos-item-stock-row">
-                      <span class="pos-stock-tag ${isOutOfStock ? 'stock-out' : isLowStock ? 'stock-low' : 'stock-ok'}">
-                        ${isOutOfStock ? '⚠️ Hết hàng' : `Kho còn: ${p.stock} ${escapeHTML(p.unit || '')}`}
-                      </span>
-                    </div>
-
-                    <!-- Nút thao tác Thêm / Xóa ngay trên thẻ mặt hàng -->
-                    <div class="pos-card-action-bar ${qtyInCart > 0 ? 'is-active' : ''}">
-                      ${qtyInCart === 0 ? `
-                        <button type="button" class="btn-pos-add" data-id="${p.id}" ${isOutOfStock ? 'disabled' : ''}>
-                          🛒 Chọn Bán
-                        </button>
-                      ` : `
-                        <div class="pos-card-qty-stepper">
-                          <button type="button" class="btn-card-qty-dec" data-id="${p.id}" title="${qtyInCart === 1 ? 'Xóa khỏi giỏ' : 'Bớt 1'}">
-                            ${qtyInCart === 1 ? '🗑️' : '−'}
-                          </button>
-                          <span class="card-qty-num">${qtyInCart} trong giỏ</span>
-                          <button type="button" class="btn-card-qty-inc" data-id="${p.id}" title="Thêm 1">+</button>
-                        </div>
-                      `}
-                    </div>
-                  </div>
-
-                  ${qtyInCart > 0 ? `
-                    <div class="pos-item-badge">+${qtyInCart}</div>
-                  ` : ''}
-                </div>
-              `;
-            }).join('')}
+          <div class="pos-product-grid" id="pos-product-grid">
+            ${this._renderPosGridHtml(filteredProducts)}
           </div>
         </div>
 
@@ -379,10 +322,77 @@ export class SalesModule {
     `;
   }
 
+  _renderPosGridHtml(filteredProducts) {
+    if (filteredProducts.length === 0) {
+      return `
+        <div class="empty-state" style="grid-column: 1 / -1;">
+          <p class="empty-icon">🪁</p>
+          <p class="empty-title">Không tìm thấy diều nào</p>
+          <p class="empty-desc">Thử tìm tên khác hoặc vào mục Kho Diều để thêm mới.</p>
+        </div>
+      `;
+    }
+
+    return filteredProducts.map(p => {
+      const inCartItem = this.cart.find(i => i.productId === p.id);
+      const qtyInCart = inCartItem ? inCartItem.quantity : 0;
+      const isOutOfStock = p.stock <= 0;
+      const isLowStock = p.stock <= (p.lowStockThreshold || 5);
+      const isStockWh = p.warehouse === 'stock';
+
+      return `
+        <div class="pos-item-card ${isOutOfStock ? 'out-of-stock' : ''}" data-id="${p.id}">
+          <!-- Tag kho hàng nổi góc trên bên trái ảnh -->
+          <span class="pos-card-wh-chip ${isStockWh ? 'wh-chip-stock' : 'wh-chip-new'}">
+            ${isStockWh ? '📦 Kho Tồn' : '✨ Diều Mới'}
+          </span>
+
+          ${p.photo ? `
+            <img src="${p.photo}" class="pos-item-img" alt="${escapeHTML(p.name)}" loading="lazy">
+          ` : `
+            <div class="pos-item-img-placeholder">🪁</div>
+          `}
+
+          <div class="pos-item-body">
+            <div class="pos-item-name" title="${escapeHTML(p.name)}">${escapeHTML(p.name)}</div>
+            <div class="pos-item-price">${formatVND(p.sellingPrice)}</div>
+            <div class="pos-item-stock-row">
+              <span class="pos-stock-tag ${isOutOfStock ? 'stock-out' : isLowStock ? 'stock-low' : 'stock-ok'}">
+                ${isOutOfStock ? '⚠️ Hết hàng' : `Kho còn: ${p.stock} ${escapeHTML(p.unit || '')}`}
+              </span>
+            </div>
+
+            <!-- Nút thao tác Thêm / Xóa ngay trên thẻ mặt hàng -->
+            <div class="pos-card-action-bar ${qtyInCart > 0 ? 'is-active' : ''}">
+              ${qtyInCart === 0 ? `
+                <button type="button" class="btn-pos-add" data-id="${p.id}" ${isOutOfStock ? 'disabled' : ''}>
+                  🛒 Chọn Bán
+                </button>
+              ` : `
+                <div class="pos-card-qty-stepper">
+                  <button type="button" class="btn-card-qty-dec" data-id="${p.id}" title="${qtyInCart === 1 ? 'Xóa khỏi giỏ' : 'Bớt 1'}">
+                    ${qtyInCart === 1 ? '🗑️' : '−'}
+                  </button>
+                  <span class="card-qty-num">${qtyInCart} trong giỏ</span>
+                  <button type="button" class="btn-card-qty-inc" data-id="${p.id}" title="Thêm 1">+</button>
+                </div>
+              `}
+            </div>
+          </div>
+
+          ${qtyInCart > 0 ? `
+            <div class="pos-item-badge">+${qtyInCart}</div>
+          ` : ''}
+        </div>
+      `;
+    }).join('');
+  }
+
   // ================= TAB 2: DANH SÁCH ĐƠN HÀNG =================
   async renderOrdersView() {
     const orders = await db.getAll('orders');
     orders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    this._cachedOrders = orders;
 
     const filtered = orders.filter(o => {
       const matchStatus = this.orderFilterStatus === 'all' || o.status === this.orderFilterStatus;
@@ -399,7 +409,7 @@ export class SalesModule {
         <div class="search-filter-bar">
           <div class="search-input-wrap">
             <input type="text" id="order-search" class="form-input" placeholder="🔍 Tìm theo mã đơn, khách, SĐT..." value="${escapeHTML(this.orderSearchQuery)}">
-            ${this.orderSearchQuery ? `<button id="btn-clear-order-search" class="clear-search-btn">&times;</button>` : ''}
+            <button id="btn-clear-order-search" class="clear-search-btn" style="display:${this.orderSearchQuery ? 'flex' : 'none'}">&times;</button>
           </div>
           <div class="category-tabs-scroll">
             <button class="cat-pill ${this.orderFilterStatus === 'all' ? 'active' : ''}" data-status="all">Tất cả (${orders.length})</button>
@@ -408,63 +418,71 @@ export class SalesModule {
           </div>
         </div>
 
-        <div class="orders-list">
-          ${filtered.length === 0 ? `
-            <div class="empty-state">
-              <p class="empty-icon">📦</p>
-              <p class="empty-title">Không tìm thấy đơn hàng nào</p>
-            </div>
-          ` : filtered.map(o => {
-            const isCancelled = o.status === 'cancelled';
-            return `
-              <div class="order-card ${isCancelled ? 'card-cancelled' : ''}" data-id="${o.id}">
-                <div class="order-card-top">
-                  <div>
-                    <span class="order-id-badge text-bold">${escapeHTML(o.id)}</span>
-                    <span class="order-time text-muted text-xs ml-2">${formatDateTime(o.createdAt)}</span>
-                  </div>
-                  <div>
-                    ${isCancelled ? `
-                      <span class="badge badge-danger">Đã hủy</span>
-                    ` : o.debtAmount > 0 ? `
-                      <span class="badge badge-warning">Còn nợ ${formatVND(o.debtAmount)}</span>
-                    ` : `
-                      <span class="badge badge-success">Đã thanh toán</span>
-                    `}
-                  </div>
-                </div>
-
-                <div class="order-card-mid">
-                  <div class="order-customer-line text-sm">
-                    <b>${escapeHTML(o.customerName || 'Khách lẻ')}</b>
-                    ${o.customerPhone ? `<span class="text-muted ml-2">📞 ${escapeHTML(o.customerPhone)}</span>` : ''}
-                  </div>
-                  <div class="order-items-snippet text-xs text-muted mt-1">
-                    ${(o.items || []).map(i => `${escapeHTML(i.productName)} (x${i.quantity})`).join(', ')}
-                  </div>
-                </div>
-
-                <div class="order-card-bottom">
-                  <div class="order-pay-info text-xs">
-                    <span>${o.paymentMethod === 'cash' ? '💵 Tiền mặt' : o.paymentMethod === 'qr' ? '📱 Quét mã QR' : o.paymentMethod === 'transfer' ? '🏦 Chuyển khoản' : o.paymentMethod === 'debt' ? '📝 Ghi nợ' : '💳 Trả một phần'}</span>
-                  </div>
-                  <div class="order-total-price">
-                    Tổng: <span class="text-bold text-primary">${formatVND(o.totalAmount)}</span>
-                  </div>
-                </div>
-
-                <div class="order-card-actions mt-2" style="display:flex; justify-content: flex-end; gap:6px;">
-                  <button class="btn btn-outline-primary btn-xs btn-view-order-detail" data-id="${o.id}">👁️ Phiếu thu</button>
-                  ${!isCancelled ? `
-                    <button class="btn btn-outline-danger btn-xs btn-cancel-order" data-id="${o.id}">❌ Hủy đơn & hoàn kho</button>
-                  ` : ''}
-                </div>
-              </div>
-            `;
-          }).join('')}
+        <div class="orders-list" id="orders-list-container">
+          ${this._renderOrdersListHtml(filtered)}
         </div>
       </div>
     `;
+  }
+
+  _renderOrdersListHtml(filtered) {
+    if (filtered.length === 0) {
+      return `
+        <div class="empty-state">
+          <p class="empty-icon">📦</p>
+          <p class="empty-title">Không tìm thấy đơn hàng nào</p>
+        </div>
+      `;
+    }
+
+    return filtered.map(o => {
+      const isCancelled = o.status === 'cancelled';
+      return `
+        <div class="order-card ${isCancelled ? 'card-cancelled' : ''}" data-id="${o.id}">
+          <div class="order-card-top">
+            <div>
+              <span class="order-id-badge text-bold">${escapeHTML(o.id)}</span>
+              <span class="order-time text-muted text-xs ml-2">${formatDateTime(o.createdAt)}</span>
+            </div>
+            <div>
+              ${isCancelled ? `
+                <span class="badge badge-danger">Đã hủy</span>
+              ` : o.debtAmount > 0 ? `
+                <span class="badge badge-warning">Còn nợ ${formatVND(o.debtAmount)}</span>
+              ` : `
+                <span class="badge badge-success">Đã thanh toán</span>
+              `}
+            </div>
+          </div>
+
+          <div class="order-card-mid">
+            <div class="order-customer-line text-sm">
+              <b>${escapeHTML(o.customerName || 'Khách lẻ')}</b>
+              ${o.customerPhone ? `<span class="text-muted ml-2">📞 ${escapeHTML(o.customerPhone)}</span>` : ''}
+            </div>
+            <div class="order-items-snippet text-xs text-muted mt-1">
+              ${(o.items || []).map(i => `${escapeHTML(i.productName)} (x${i.quantity})`).join(', ')}
+            </div>
+          </div>
+
+          <div class="order-card-bottom">
+            <div class="order-pay-info text-xs">
+              <span>${o.paymentMethod === 'cash' ? '💵 Tiền mặt' : o.paymentMethod === 'qr' ? '📱 Quét mã QR' : o.paymentMethod === 'transfer' ? '🏦 Chuyển khoản' : o.paymentMethod === 'debt' ? '📝 Ghi nợ' : '💳 Trả một phần'}</span>
+            </div>
+            <div class="order-total-price">
+              Tổng: <span class="text-bold text-primary">${formatVND(o.totalAmount)}</span>
+            </div>
+          </div>
+
+          <div class="order-card-actions mt-2" style="display:flex; justify-content: flex-end; gap:6px;">
+            <button class="btn btn-outline-primary btn-xs btn-view-order-detail" data-id="${o.id}">👁️ Phiếu thu</button>
+            ${!isCancelled ? `
+              <button class="btn btn-outline-danger btn-xs btn-cancel-order" data-id="${o.id}">❌ Hủy đơn & hoàn kho</button>
+            ` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
   }
 
   calculateTotals(shopSettings = {}) {
@@ -590,19 +608,38 @@ export class SalesModule {
     if (openDrawerBtn) openDrawerBtn.addEventListener('click', openDrawer);
     if (closeDrawerBtn) closeDrawerBtn.addEventListener('click', closeDrawer);
 
-    // Tìm sản phẩm
+    // Tìm sản phẩm (cập nhật lưới tại chỗ để KHÔNG làm mất bàn phím điện thoại)
+    const updatePosGridOnly = () => {
+      const clearBtn = document.getElementById('btn-clear-pos-search');
+      if (clearBtn) clearBtn.style.display = this.searchProductQuery ? 'flex' : 'none';
+      const gridEl = document.getElementById('pos-product-grid');
+      if (!gridEl) return;
+      const products = this._cachedPosProducts || [];
+      const q = this.searchProductQuery.toLowerCase().trim();
+      const filteredProducts = products.filter(p => {
+        const matchWh = this.posWarehouse === 'all' || (p.warehouse || 'new') === this.posWarehouse;
+        const matchCat = this.posCategory === 'all' || p.category === this.posCategory;
+        const matchQuery = !q || p.name.toLowerCase().includes(q) || (p.code && p.code.toLowerCase().includes(q));
+        return matchWh && matchCat && matchQuery;
+      });
+      gridEl.innerHTML = this._renderPosGridHtml(filteredProducts);
+      this.bindPosGridCardEvents();
+    };
+
     const searchInput = document.getElementById('pos-product-search');
     if (searchInput) {
       searchInput.addEventListener('input', (e) => {
         this.searchProductQuery = e.target.value;
-        this.render();
+        updatePosGridOnly();
       });
     }
     const clearSearch = document.getElementById('btn-clear-pos-search');
     if (clearSearch) {
       clearSearch.addEventListener('click', () => {
         this.searchProductQuery = '';
-        this.render();
+        if (searchInput) searchInput.value = '';
+        updatePosGridOnly();
+        if (searchInput) searchInput.focus();
       });
     }
 
@@ -623,38 +660,7 @@ export class SalesModule {
     });
 
     // 1. Thao tác ngay trên thẻ sản phẩm (Thêm / Tăng / Giảm / Xóa)
-    document.querySelectorAll('.btn-pos-add').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        const p = await db.getById('products', btn.dataset.id);
-        if (p) this.addItemToCart(p);
-      });
-    });
-
-    document.querySelectorAll('.btn-card-qty-inc').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        const p = await db.getById('products', btn.dataset.id);
-        if (p) this.addItemToCart(p);
-      });
-    });
-
-    document.querySelectorAll('.btn-card-qty-dec').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        this.decrementItemInCart(btn.dataset.id);
-      });
-    });
-
-    // Chạm vào thân thẻ (nếu chưa có trong giỏ thì thêm vào giỏ)
-    document.querySelectorAll('.pos-item-card').forEach(card => {
-      card.addEventListener('click', async (e) => {
-        // Tránh trigger khi bấm các nút con
-        if (e.target.closest('.pos-card-action-bar')) return;
-        const p = await db.getById('products', card.dataset.id);
-        if (p) this.addItemToCart(p);
-      });
-    });
+    this.bindPosGridCardEvents();
 
     // 2. Thao tác bên trong Giỏ Hàng Drawer
     // Nút xóa toàn bộ giỏ hàng
@@ -855,12 +861,64 @@ export class SalesModule {
     if (floatingTotalEl) floatingTotalEl.textContent = formatVND(totals.totalAmount);
   }
 
+  bindPosGridCardEvents() {
+    document.querySelectorAll('.btn-pos-add').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const p = await db.getById('products', btn.dataset.id);
+        if (p) this.addItemToCart(p);
+      });
+    });
+
+    document.querySelectorAll('.btn-card-qty-inc').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const p = await db.getById('products', btn.dataset.id);
+        if (p) this.addItemToCart(p);
+      });
+    });
+
+    document.querySelectorAll('.btn-card-qty-dec').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        this.decrementItemInCart(btn.dataset.id);
+      });
+    });
+
+    document.querySelectorAll('.pos-item-card').forEach(card => {
+      card.addEventListener('click', async (e) => {
+        if (e.target.closest('.pos-card-action-bar')) return;
+        const p = await db.getById('products', card.dataset.id);
+        if (p) this.addItemToCart(p);
+      });
+    });
+  }
+
   bindOrdersEvents() {
+    const updateOrdersListOnly = () => {
+      const clearBtn = document.getElementById('btn-clear-order-search');
+      if (clearBtn) clearBtn.style.display = this.orderSearchQuery ? 'flex' : 'none';
+      const listEl = document.getElementById('orders-list-container');
+      if (!listEl) return;
+      const orders = this._cachedOrders || [];
+      const q = this.orderSearchQuery.toLowerCase().trim();
+      const filtered = orders.filter(o => {
+        const matchStatus = this.orderFilterStatus === 'all' || o.status === this.orderFilterStatus;
+        const matchQ = !q ||
+          o.id.toLowerCase().includes(q) ||
+          (o.customerName && o.customerName.toLowerCase().includes(q)) ||
+          (o.customerPhone && o.customerPhone.includes(q));
+        return matchStatus && matchQ;
+      });
+      listEl.innerHTML = this._renderOrdersListHtml(filtered);
+      this.bindOrderCardEvents();
+    };
+
     const searchInput = document.getElementById('order-search');
     if (searchInput) {
       searchInput.addEventListener('input', (e) => {
         this.orderSearchQuery = e.target.value;
-        this.render();
+        updateOrdersListOnly();
       });
     }
 
@@ -868,7 +926,9 @@ export class SalesModule {
     if (clearSearch) {
       clearSearch.addEventListener('click', () => {
         this.orderSearchQuery = '';
-        this.render();
+        if (searchInput) searchInput.value = '';
+        updateOrdersListOnly();
+        if (searchInput) searchInput.focus();
       });
     }
 
@@ -879,6 +939,10 @@ export class SalesModule {
       });
     });
 
+    this.bindOrderCardEvents();
+  }
+
+  bindOrderCardEvents() {
     document.querySelectorAll('.btn-view-order-detail').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();

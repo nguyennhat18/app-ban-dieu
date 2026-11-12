@@ -24,16 +24,9 @@ export class QuotationsModule {
     const container = document.getElementById('view-container');
     const quotations = await db.getAll('quotations');
     quotations.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    this._cachedQuotations = quotations;
 
-    const filtered = quotations.filter(q => {
-      const matchStatus = this.filterStatus === 'all' || q.status === this.filterStatus;
-      const query = this.searchQuery.toLowerCase().trim();
-      const matchQuery = !query ||
-        q.id.toLowerCase().includes(query) ||
-        (q.customerName && q.customerName.toLowerCase().includes(query)) ||
-        (q.customerPhone && q.customerPhone.includes(query));
-      return matchStatus && matchQuery;
-    });
+    const filtered = this._filterQuotations(quotations);
 
     container.innerHTML = `
       <div class="view-header">
@@ -50,7 +43,7 @@ export class QuotationsModule {
         <div class="search-filter-bar">
           <div class="search-input-wrap">
             <input type="text" id="quote-search" class="form-input" placeholder="🔍 Tìm theo số báo giá, khách hàng..." value="${escapeHTML(this.searchQuery)}">
-            ${this.searchQuery ? `<button id="btn-clear-quote-search" class="clear-search-btn">&times;</button>` : ''}
+            <button id="btn-clear-quote-search" class="clear-search-btn" style="display:${this.searchQuery ? 'flex' : 'none'}">&times;</button>
           </div>
           <div class="category-tabs-scroll">
             <button class="cat-pill ${this.filterStatus === 'all' ? 'active' : ''}" data-status="all">Tất cả (${quotations.length})</button>
@@ -61,77 +54,107 @@ export class QuotationsModule {
         </div>
       </div>
 
-      <div class="quotations-list">
-        ${filtered.length === 0 ? `
-          <div class="empty-state">
-            <p class="empty-icon">📑</p>
-            <p class="empty-title">Chưa có báo giá nào</p>
-            <p class="empty-desc">Bấm nút bên dưới để tạo bản báo giá đầu tiên gửi khách hàng.</p>
-            <button id="btn-create-quote-empty" class="btn btn-primary">+ Tạo Báo Giá Mới</button>
-          </div>
-        ` : filtered.map(q => {
-          const isExpired = new Date(q.validUntil) < new Date();
-          const statusBadge =
-            q.status === 'converted' ? '<span class="badge badge-success">✓ Đã lên đơn</span>' :
-            q.status === 'sent' ? '<span class="badge badge-primary">Đã gửi</span>' :
-            isExpired ? '<span class="badge badge-danger">Hết hạn</span>' :
-            '<span class="badge badge-neutral">Bản nháp</span>';
-
-          return `
-            <div class="quote-card" data-id="${q.id}">
-              <div class="quote-card-header">
-                <div>
-                  <span class="quote-id text-bold">${escapeHTML(q.id)}</span>
-                  <span class="text-muted text-xs ml-2">${formatDate(q.createdAt)}</span>
-                </div>
-                <div>${statusBadge}</div>
-              </div>
-
-              <div class="quote-card-body">
-                <div class="quote-cust-name text-bold">Khách: ${escapeHTML(q.customerName || 'Khách lẻ')}</div>
-                <div class="quote-cust-meta text-muted text-xs">
-                  ${q.customerPhone ? `📞 ${escapeHTML(q.customerPhone)}` : ''} 
-                  ${q.validUntil ? `• Hạn đến: ${formatDate(q.validUntil)}` : ''}
-                </div>
-                <div class="quote-items-preview text-xs mt-1">
-                  ${(q.items || []).map(i => `${escapeHTML(i.productName)} (x${i.quantity})`).join(', ')}
-                </div>
-              </div>
-
-              <div class="quote-card-footer">
-                <div class="quote-total-price">
-                  Tổng: <span class="text-bold text-primary">${formatVND(q.totalAmount)}</span>
-                </div>
-                <div class="quote-action-btns">
-                  <button class="btn btn-outline-primary btn-xs btn-export-pdf" data-id="${q.id}" title="Xuất PDF tiếng Việt & Gửi Zalo">
-                    📄 Xuất PDF
-                  </button>
-                  <button class="btn btn-outline-success btn-xs btn-export-excel" data-id="${q.id}" title="Xuất file Excel">
-                    📊 Excel
-                  </button>
-                  ${q.status !== 'converted' ? `
-                    <button class="btn btn-success btn-xs btn-convert-order" data-id="${q.id}" title="Chuyển báo giá này thành đơn bán hàng">
-                      ⚡ Lên Đơn Bán
-                    </button>
-                  ` : ''}
-                  <button class="btn btn-secondary btn-xs btn-edit-quote" data-id="${q.id}">✏️</button>
-                </div>
-              </div>
-            </div>
-          `;
-        }).join('')}
+      <div class="quotations-list" id="quotations-list-container">
+        ${this._renderQuotationsListHtml(filtered)}
       </div>
     `;
 
     this.bindEvents();
   }
 
+  _filterQuotations(quotations) {
+    return quotations.filter(q => {
+      const matchStatus = this.filterStatus === 'all' || q.status === this.filterStatus;
+      const query = this.searchQuery.toLowerCase().trim();
+      const matchQuery = !query ||
+        q.id.toLowerCase().includes(query) ||
+        (q.customerName && q.customerName.toLowerCase().includes(query)) ||
+        (q.customerPhone && q.customerPhone.includes(query));
+      return matchStatus && matchQuery;
+    });
+  }
+
+  _renderQuotationsListHtml(filtered) {
+    if (filtered.length === 0) {
+      return `
+        <div class="empty-state">
+          <p class="empty-icon">📑</p>
+          <p class="empty-title">Chưa có báo giá nào</p>
+          <p class="empty-desc">Bấm nút bên dưới để tạo bản báo giá đầu tiên gửi khách hàng.</p>
+          <button id="btn-create-quote-empty" class="btn btn-primary">+ Tạo Báo Giá Mới</button>
+        </div>
+      `;
+    }
+
+    return filtered.map(q => {
+      const isExpired = new Date(q.validUntil) < new Date();
+      const statusBadge =
+        q.status === 'converted' ? '<span class="badge badge-success">✓ Đã lên đơn</span>' :
+        q.status === 'sent' ? '<span class="badge badge-primary">Đã gửi</span>' :
+        isExpired ? '<span class="badge badge-danger">Hết hạn</span>' :
+        '<span class="badge badge-neutral">Bản nháp</span>';
+
+      return `
+        <div class="quote-card" data-id="${q.id}">
+          <div class="quote-card-header">
+            <div>
+              <span class="quote-id text-bold">${escapeHTML(q.id)}</span>
+              <span class="text-muted text-xs ml-2">${formatDate(q.createdAt)}</span>
+            </div>
+            <div>${statusBadge}</div>
+          </div>
+
+          <div class="quote-card-body">
+            <div class="quote-cust-name text-bold">Khách: ${escapeHTML(q.customerName || 'Khách lẻ')}</div>
+            <div class="quote-cust-meta text-muted text-xs">
+              ${q.customerPhone ? `📞 ${escapeHTML(q.customerPhone)}` : ''} 
+              ${q.validUntil ? `• Hạn đến: ${formatDate(q.validUntil)}` : ''}
+            </div>
+            <div class="quote-items-preview text-xs mt-1">
+              ${(q.items || []).map(i => `${escapeHTML(i.productName)} (x${i.quantity})`).join(', ')}
+            </div>
+          </div>
+
+          <div class="quote-card-footer">
+            <div class="quote-total-price">
+              Tổng: <span class="text-bold text-primary">${formatVND(q.totalAmount)}</span>
+            </div>
+            <div class="quote-action-btns">
+              <button class="btn btn-outline-primary btn-xs btn-export-pdf" data-id="${q.id}" title="Xuất PDF tiếng Việt & Gửi Zalo">
+                📄 Xuất PDF
+              </button>
+              <button class="btn btn-outline-success btn-xs btn-export-excel" data-id="${q.id}" title="Xuất file Excel">
+                📊 Excel
+              </button>
+              ${q.status !== 'converted' ? `
+                <button class="btn btn-success btn-xs btn-convert-order" data-id="${q.id}" title="Chuyển báo giá này thành đơn bán hàng">
+                  ⚡ Lên Đơn Bán
+                </button>
+              ` : ''}
+              <button class="btn btn-secondary btn-xs btn-edit-quote" data-id="${q.id}">✏️</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
   bindEvents() {
+    const updateQuotesOnly = () => {
+      const clearBtn = document.getElementById('btn-clear-quote-search');
+      if (clearBtn) clearBtn.style.display = this.searchQuery ? 'flex' : 'none';
+      const listEl = document.getElementById('quotations-list-container');
+      if (!listEl) return;
+      const filtered = this._filterQuotations(this._cachedQuotations || []);
+      listEl.innerHTML = this._renderQuotationsListHtml(filtered);
+      this.bindQuotationCardEvents();
+    };
+
     const searchInp = document.getElementById('quote-search');
     if (searchInp) {
       searchInp.addEventListener('input', (e) => {
         this.searchQuery = e.target.value;
-        this.render();
+        updateQuotesOnly();
       });
     }
 
@@ -139,11 +162,13 @@ export class QuotationsModule {
     if (clearSearch) {
       clearSearch.addEventListener('click', () => {
         this.searchQuery = '';
-        this.render();
+        if (searchInp) searchInp.value = '';
+        updateQuotesOnly();
+        if (searchInp) searchInp.focus();
       });
     }
 
-    document.querySelectorAll('.quotations-list .cat-pill').forEach(btn => {
+    document.querySelectorAll('.view-header .cat-pill').forEach(btn => {
       btn.addEventListener('click', () => {
         this.filterStatus = btn.dataset.status;
         this.render();
@@ -151,8 +176,13 @@ export class QuotationsModule {
     });
 
     const createBtn = document.getElementById('btn-create-quote');
-    const createBtnEmpty = document.getElementById('btn-create-quote-empty');
     if (createBtn) createBtn.addEventListener('click', () => this.showQuotationFormModal());
+
+    this.bindQuotationCardEvents();
+  }
+
+  bindQuotationCardEvents() {
+    const createBtnEmpty = document.getElementById('btn-create-quote-empty');
     if (createBtnEmpty) createBtnEmpty.addEventListener('click', () => this.showQuotationFormModal());
 
     // Xuất PDF

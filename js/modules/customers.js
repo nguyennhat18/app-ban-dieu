@@ -71,6 +71,8 @@ export class CustomerModule {
     // Lịch sử thu nợ sắp xếp mới nhất
     debtPayments.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
+    this._cachedCustomersData = { customers, debtors, customerStats, debtPayments };
+
     container.innerHTML = `
       <div class="view-header">
         <div class="header-title-row">
@@ -92,7 +94,7 @@ export class CustomerModule {
           <div class="search-filter-bar">
             <div class="search-input-wrap">
               <input type="text" id="customer-search" class="form-input" placeholder="🔍 Tìm tên khách, số điện thoại..." value="${escapeHTML(this.searchQuery)}">
-              ${this.searchQuery ? `<button id="btn-clear-customer-search" class="clear-search-btn">&times;</button>` : ''}
+              <button id="btn-clear-customer-search" class="clear-search-btn" style="display:${this.searchQuery ? 'flex' : 'none'}">&times;</button>
             </div>
           </div>
         ` : ''}
@@ -100,103 +102,113 @@ export class CustomerModule {
 
       <!-- NỘI DUNG THEO TAB -->
       <div id="customer-content">
-        ${this.activeTab === 'list' ? `
-          <!-- TAB 1: DANH SÁCH KHÁCH HÀNG -->
-          <div class="customer-list">
-            ${filteredCustomers.length === 0 ? `
-              <div class="empty-state">
-                <p class="empty-icon">👥</p>
-                <p class="empty-title">Không tìm thấy khách hàng nào</p>
-                <p class="empty-desc">Bấm nút bên dưới để tạo khách hàng mới.</p>
-                <button id="btn-add-customer-empty" class="btn btn-primary btn-sm">+ Thêm Khách Hàng</button>
-              </div>
-            ` : filteredCustomers.map(c => {
-              const stats = customerStats[c.id] || { totalOrders: 0, totalSpent: 0, totalDebt: 0 };
-              return `
-                <div class="customer-card ${stats.totalDebt > 0 ? 'card-has-debt' : ''}" data-id="${c.id}">
-                  <div class="customer-card-header">
-                    <div>
-                      <h3 class="customer-name text-bold">${escapeHTML(c.name)}</h3>
-                      <div class="customer-meta text-xs text-muted mt-1">
-                        ${c.phone ? `<a href="tel:${escapeHTML(c.phone)}" class="customer-phone" onclick="event.stopPropagation()" style="color:#0284c7; text-decoration:none;">📞 ${escapeHTML(c.phone)}</a>` : 'Chưa có SĐT'}
-                        ${c.address ? `<span class="customer-address ml-1">• 📍 ${escapeHTML(c.address)}</span>` : ''}
-                      </div>
-                    </div>
-                    ${stats.totalDebt > 0 ? `
-                      <span class="badge badge-danger text-bold">Nợ: ${formatVND(stats.totalDebt)}</span>
-                    ` : `
-                      <span class="badge badge-neutral">0 ₫ nợ</span>
-                    `}
-                  </div>
-
-                  <div class="customer-card-body d-flex gap-3 text-xs text-muted mt-1" style="display:flex; gap:12px;">
-                    <div>Đã mua: <b>${stats.totalOrders} đơn</b></div>
-                    <div>Tổng chi: <b>${formatVND(stats.totalSpent)}</b></div>
-                  </div>
-
-                  <div class="customer-card-footer">
-                    <button class="btn btn-outline-primary btn-xs btn-view-history" data-id="${c.id}">📜 Lịch sử mua</button>
-                    ${stats.totalDebt > 0 ? `
-                      <button class="btn btn-danger btn-xs btn-collect-debt-fast" data-id="${c.id}" data-name="${escapeHTML(c.name)}" data-debt="${stats.totalDebt}">💵 Thu nợ</button>
-                    ` : ''}
-                    <button class="btn btn-secondary btn-xs btn-edit-customer" data-id="${c.id}">✏️ Sửa</button>
-                  </div>
-                </div>
-              `;
-            }).join('')}
-          </div>
-        ` : this.activeTab === 'debts' ? `
-          <!-- TAB 2: KHÁCH ĐANG NỢ TIỀN -->
-          <div class="debtors-list">
-            ${filteredDebtors.length === 0 ? `
-              <div class="empty-state">
-                <p class="empty-icon">🎉</p>
-                <p class="empty-title">Tuyệt vời! Không có ai còn nợ</p>
-                <p class="empty-desc">Tất cả khách hàng đã thanh toán đầy đủ tiền diều.</p>
-              </div>
-            ` : filteredDebtors.map(d => `
-              <div class="debtor-card card p-3 mb-2" style="display:flex; justify-content:space-between; align-items:center;">
-                <div>
-                  <h3 class="text-bold" style="font-size:15px;">${escapeHTML(d.customer.name)}</h3>
-                  <div class="text-xs text-muted mt-1">
-                    ${d.customer.phone ? `📞 ${escapeHTML(d.customer.phone)}` : 'Chưa có SĐT'}
-                  </div>
-                  <div class="text-xs text-danger text-bold mt-1">
-                    Còn nợ: ${formatVND(d.totalDebt)}
-                  </div>
-                </div>
-                <div>
-                  <button class="btn btn-danger btn-sm btn-collect-debt-fast" data-id="${d.customer.id}" data-name="${escapeHTML(d.customer.name)}" data-debt="${d.totalDebt}">
-                    💵 Thu Tiền
-                  </button>
-                </div>
-              </div>
-            `).join('')}
-          </div>
-        ` : `
-          <!-- TAB 3: LỊCH SỬ CÁC LẦN THU TIỀN -->
-          <div class="payments-list">
-            ${debtPayments.length === 0 ? `
-              <div class="empty-state">
-                <p class="empty-icon">📜</p>
-                <p class="empty-title">Chưa có lịch sử thu nợ nào</p>
-              </div>
-            ` : debtPayments.map(p => `
-              <div class="card p-3 mb-2" style="display:flex; justify-content:space-between; align-items:center;">
-                <div>
-                  <div class="text-bold">${escapeHTML(p.customerName)}</div>
-                  <div class="text-muted text-xs">${formatDateTime(p.createdAt)} • ${p.paymentMethod === 'transfer' ? 'Chuyển khoản' : 'Tiền mặt'}</div>
-                  ${p.notes ? `<div class="text-xs text-muted mt-1">Ghi chú: ${escapeHTML(p.notes)}</div>` : ''}
-                </div>
-                <div class="text-success text-bold text-lg">+ ${formatVND(p.amount)}</div>
-              </div>
-            `).join('')}
-          </div>
-        `}
+        ${this._renderCustomerContentHtml(filteredCustomers, filteredDebtors, customerStats, debtPayments)}
       </div>
     `;
 
     this.bindEvents();
+  }
+
+  _renderCustomerContentHtml(filteredCustomers, filteredDebtors, customerStats, debtPayments) {
+    if (this.activeTab === 'list') {
+      return `
+        <!-- TAB 1: DANH SÁCH KHÁCH HÀNG -->
+        <div class="customer-list">
+          ${filteredCustomers.length === 0 ? `
+            <div class="empty-state">
+              <p class="empty-icon">👥</p>
+              <p class="empty-title">Không tìm thấy khách hàng nào</p>
+              <p class="empty-desc">Bấm nút bên dưới để tạo khách hàng mới.</p>
+              <button id="btn-add-customer-empty" class="btn btn-primary btn-sm">+ Thêm Khách Hàng</button>
+            </div>
+          ` : filteredCustomers.map(c => {
+            const stats = customerStats[c.id] || { totalOrders: 0, totalSpent: 0, totalDebt: 0 };
+            return `
+              <div class="customer-card ${stats.totalDebt > 0 ? 'card-has-debt' : ''}" data-id="${c.id}">
+                <div class="customer-card-header">
+                  <div>
+                    <h3 class="customer-name text-bold">${escapeHTML(c.name)}</h3>
+                    <div class="customer-meta text-xs text-muted mt-1">
+                      ${c.phone ? `<a href="tel:${escapeHTML(c.phone)}" class="customer-phone" onclick="event.stopPropagation()" style="color:#0284c7; text-decoration:none;">📞 ${escapeHTML(c.phone)}</a>` : 'Chưa có SĐT'}
+                      ${c.address ? `<span class="customer-address ml-1">• 📍 ${escapeHTML(c.address)}</span>` : ''}
+                    </div>
+                  </div>
+                  ${stats.totalDebt > 0 ? `
+                    <span class="badge badge-danger text-bold">Nợ: ${formatVND(stats.totalDebt)}</span>
+                  ` : `
+                    <span class="badge badge-neutral">0 ₫ nợ</span>
+                  `}
+                </div>
+
+                <div class="customer-card-body d-flex gap-3 text-xs text-muted mt-1" style="display:flex; gap:12px;">
+                  <div>Đã mua: <b>${stats.totalOrders} đơn</b></div>
+                  <div>Tổng chi: <b>${formatVND(stats.totalSpent)}</b></div>
+                </div>
+
+                <div class="customer-card-footer">
+                  <button class="btn btn-outline-primary btn-xs btn-view-history" data-id="${c.id}">📜 Lịch sử mua</button>
+                  ${stats.totalDebt > 0 ? `
+                    <button class="btn btn-danger btn-xs btn-collect-debt-fast" data-id="${c.id}" data-name="${escapeHTML(c.name)}" data-debt="${stats.totalDebt}">💵 Thu nợ</button>
+                  ` : ''}
+                  <button class="btn btn-secondary btn-xs btn-edit-customer" data-id="${c.id}">✏️ Sửa</button>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+    if (this.activeTab === 'debts') {
+      return `
+        <!-- TAB 2: KHÁCH ĐANG NỢ TIỀN -->
+        <div class="debtors-list">
+          ${filteredDebtors.length === 0 ? `
+            <div class="empty-state">
+              <p class="empty-icon">🎉</p>
+              <p class="empty-title">Tuyệt vời! Không có ai còn nợ</p>
+              <p class="empty-desc">Tất cả khách hàng đã thanh toán đầy đủ tiền diều.</p>
+            </div>
+          ` : filteredDebtors.map(d => `
+            <div class="debtor-card card p-3 mb-2" style="display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <h3 class="text-bold" style="font-size:15px;">${escapeHTML(d.customer.name)}</h3>
+                <div class="text-xs text-muted mt-1">
+                  ${d.customer.phone ? `📞 ${escapeHTML(d.customer.phone)}` : 'Chưa có SĐT'}
+                </div>
+                <div class="text-xs text-danger text-bold mt-1">
+                  Còn nợ: ${formatVND(d.totalDebt)}
+                </div>
+              </div>
+              <div>
+                <button class="btn btn-danger btn-sm btn-collect-debt-fast" data-id="${d.customer.id}" data-name="${escapeHTML(d.customer.name)}" data-debt="${d.totalDebt}">
+                  💵 Thu Tiền
+                </button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+    return `
+      <!-- TAB 3: LỊCH SỬ CÁC LẦN THU TIỀN -->
+      <div class="payments-list">
+        ${debtPayments.length === 0 ? `
+          <div class="empty-state">
+            <p class="empty-icon">📜</p>
+            <p class="empty-title">Chưa có lịch sử thu nợ nào</p>
+          </div>
+        ` : debtPayments.map(p => `
+          <div class="card p-3 mb-2" style="display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <div class="text-bold">${escapeHTML(p.customerName)}</div>
+              <div class="text-muted text-xs">${formatDateTime(p.createdAt)} • ${p.paymentMethod === 'transfer' ? 'Chuyển khoản' : 'Tiền mặt'}</div>
+              ${p.notes ? `<div class="text-xs text-muted mt-1">Ghi chú: ${escapeHTML(p.notes)}</div>` : ''}
+            </div>
+            <div class="text-success text-bold text-lg">+ ${formatVND(p.amount)}</div>
+          </div>
+        `).join('')}
+      </div>
+    `;
   }
 
   bindEvents() {
@@ -209,11 +221,26 @@ export class CustomerModule {
     if (tabDebts) tabDebts.addEventListener('click', () => { this.activeTab = 'debts'; this.render(); });
     if (tabPay) tabPay.addEventListener('click', () => { this.activeTab = 'payments'; this.render(); });
 
+    const updateContentOnly = () => {
+      const clearBtn = document.getElementById('btn-clear-customer-search');
+      if (clearBtn) clearBtn.style.display = this.searchQuery ? 'flex' : 'none';
+      const contentEl = document.getElementById('customer-content');
+      if (!contentEl || !this._cachedCustomersData) return;
+
+      const { customers, debtors, customerStats, debtPayments } = this._cachedCustomersData;
+      const q = this.searchQuery.toLowerCase().trim();
+      const filteredCustomers = customers.filter(c => !q || c.name.toLowerCase().includes(q) || (c.phone && c.phone.includes(q)) || (c.address && c.address.toLowerCase().includes(q)));
+      const filteredDebtors = debtors.filter(d => !q || d.customer.name.toLowerCase().includes(q) || (d.customer.phone && d.customer.phone.includes(q)));
+
+      contentEl.innerHTML = this._renderCustomerContentHtml(filteredCustomers, filteredDebtors, customerStats, debtPayments);
+      this.bindCustomerContentEvents();
+    };
+
     const searchInput = document.getElementById('customer-search');
     if (searchInput) {
       searchInput.addEventListener('input', (e) => {
         this.searchQuery = e.target.value;
-        this.render();
+        updateContentOnly();
       });
     }
 
@@ -221,13 +248,20 @@ export class CustomerModule {
     if (clearSearch) {
       clearSearch.addEventListener('click', () => {
         this.searchQuery = '';
-        this.render();
+        if (searchInput) searchInput.value = '';
+        updateContentOnly();
+        if (searchInput) searchInput.focus();
       });
     }
 
     const addBtn = document.getElementById('btn-add-customer');
-    const addBtnEmpty = document.getElementById('btn-add-customer-empty');
     if (addBtn) addBtn.addEventListener('click', () => this.showCustomerModal());
+
+    this.bindCustomerContentEvents();
+  }
+
+  bindCustomerContentEvents() {
+    const addBtnEmpty = document.getElementById('btn-add-customer-empty');
     if (addBtnEmpty) addBtnEmpty.addEventListener('click', () => this.showCustomerModal());
 
     document.querySelectorAll('.btn-edit-customer').forEach(btn => {

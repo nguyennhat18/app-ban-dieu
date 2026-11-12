@@ -42,6 +42,7 @@ export class InventoryModule {
   async renderHistoryView() {
     const logs = await db.getAll('inventory_logs');
     logs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    this._cachedInvLogs = logs;
 
     const filtered = logs.filter(l => {
       const matchType = this.historyFilterType === 'all' || l.changeType === this.historyFilterType;
@@ -59,7 +60,7 @@ export class InventoryModule {
         <div class="search-filter-bar">
           <div class="search-input-wrap">
             <input type="text" id="inv-history-search" class="form-input" placeholder="🔍 Tìm theo diều, mã đơn, lý do..." value="${escapeHTML(this.historySearchQuery)}">
-            ${this.historySearchQuery ? `<button id="btn-clear-inv-search" class="clear-search-btn">&times;</button>` : ''}
+            <button id="btn-clear-inv-search" class="clear-search-btn" style="display:${this.historySearchQuery ? 'flex' : 'none'}">&times;</button>
           </div>
           <div class="category-tabs-scroll">
             <button class="cat-pill ${this.historyFilterType === 'all' ? 'active' : ''}" data-type="all">Tất cả (${logs.length})</button>
@@ -70,50 +71,58 @@ export class InventoryModule {
           </div>
         </div>
 
-        <div class="inv-log-list">
-          ${filtered.length === 0 ? `
-            <div class="empty-state">
-              <p class="empty-icon">📜</p>
-              <p class="empty-title">Chưa có lịch sử biến động kho nào</p>
-            </div>
-          ` : filtered.map(log => {
-            const isPlus = log.quantityChange > 0;
-            const typeLabel =
-              log.changeType === 'sale' ? 'Bán hàng' :
-              log.changeType === 'import' ? 'Nhập kho' :
-              log.changeType === 'cancel_order' ? 'Hủy đơn hoàn kho' : 'Điều chỉnh';
-            const typeBadgeClass =
-              log.changeType === 'sale' ? 'badge-primary' :
-              log.changeType === 'import' ? 'badge-success' :
-              log.changeType === 'cancel_order' ? 'badge-warning' : 'badge-neutral';
-
-            return `
-              <div class="inv-log-card">
-                <div class="inv-log-top">
-                  <div>
-                    <span class="badge ${typeBadgeClass}">${typeLabel}</span>
-                    <span class="text-bold ml-2">${escapeHTML(log.productName)}</span>
-                    ${log.productCode ? `<span class="text-muted text-xs">(${escapeHTML(log.productCode)})</span>` : ''}
-                  </div>
-                  <div class="inv-qty-change ${isPlus ? 'text-success' : 'text-danger'} text-bold">
-                    ${isPlus ? '+' : ''}${log.quantityChange}
-                  </div>
-                </div>
-
-                <div class="inv-log-mid">
-                  <span class="inv-reason-text">${escapeHTML(log.reason || 'Biến động kho')}</span>
-                </div>
-
-                <div class="inv-log-bottom">
-                  <span class="text-muted text-xs">Tồn trước: <b>${log.stockBefore}</b> ➔ Sau: <b>${log.stockAfter}</b></span>
-                  <span class="text-muted text-xs">${formatDateTime(log.createdAt)}</span>
-                </div>
-              </div>
-            `;
-          }).join('')}
+        <div class="inv-log-list" id="inv-log-list-container">
+          ${this._renderInvLogsHtml(filtered)}
         </div>
       </div>
     `;
+  }
+
+  _renderInvLogsHtml(filtered) {
+    if (filtered.length === 0) {
+      return `
+        <div class="empty-state">
+          <p class="empty-icon">📜</p>
+          <p class="empty-title">Chưa có lịch sử biến động kho nào</p>
+        </div>
+      `;
+    }
+
+    return filtered.map(log => {
+      const isPlus = log.quantityChange > 0;
+      const typeLabel =
+        log.changeType === 'sale' ? 'Bán hàng' :
+        log.changeType === 'import' ? 'Nhập kho' :
+        log.changeType === 'cancel_order' ? 'Hủy đơn hoàn kho' : 'Điều chỉnh';
+      const typeBadgeClass =
+        log.changeType === 'sale' ? 'badge-primary' :
+        log.changeType === 'import' ? 'badge-success' :
+        log.changeType === 'cancel_order' ? 'badge-warning' : 'badge-neutral';
+
+      return `
+        <div class="inv-log-card">
+          <div class="inv-log-top">
+            <div>
+              <span class="badge ${typeBadgeClass}">${typeLabel}</span>
+              <span class="text-bold ml-2">${escapeHTML(log.productName)}</span>
+              ${log.productCode ? `<span class="text-muted text-xs">(${escapeHTML(log.productCode)})</span>` : ''}
+            </div>
+            <div class="inv-qty-change ${isPlus ? 'text-success' : 'text-danger'} text-bold">
+              ${isPlus ? '+' : ''}${log.quantityChange}
+            </div>
+          </div>
+
+          <div class="inv-log-mid">
+            <span class="inv-reason-text">${escapeHTML(log.reason || 'Biến động kho')}</span>
+          </div>
+
+          <div class="inv-log-bottom">
+            <span class="text-muted text-xs">Tồn trước: <b>${log.stockBefore}</b> ➔ Sau: <b>${log.stockAfter}</b></span>
+            <span class="text-muted text-xs">${formatDateTime(log.createdAt)}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
   }
 
   // ================= TAB 2: NHẬP HÀNG (TĂNG TỒN, CẬP NHẬT GIÁ NHẬP) =================
@@ -222,18 +231,39 @@ export class InventoryModule {
     if (tabAdjust) tabAdjust.addEventListener('click', () => { this.activeTab = 'adjust'; this.render(); });
 
     // Events Tab 1: Lịch sử kho
+    const updateInvLogsOnly = () => {
+      const clearBtn = document.getElementById('btn-clear-inv-search');
+      if (clearBtn) clearBtn.style.display = this.historySearchQuery ? 'flex' : 'none';
+      const listEl = document.getElementById('inv-log-list-container');
+      if (!listEl) return;
+      const logs = this._cachedInvLogs || [];
+      const q = this.historySearchQuery.toLowerCase().trim();
+      const filtered = logs.filter(l => {
+        const matchType = this.historyFilterType === 'all' || l.changeType === this.historyFilterType;
+        const matchQ = !q ||
+          (l.productName && l.productName.toLowerCase().includes(q)) ||
+          (l.productCode && l.productCode.toLowerCase().includes(q)) ||
+          (l.reason && l.reason.toLowerCase().includes(q)) ||
+          (l.referenceId && l.referenceId.toLowerCase().includes(q));
+        return matchType && matchQ;
+      });
+      listEl.innerHTML = this._renderInvLogsHtml(filtered);
+    };
+
     const searchInp = document.getElementById('inv-history-search');
     if (searchInp) {
       searchInp.addEventListener('input', (e) => {
         this.historySearchQuery = e.target.value;
-        this.render();
+        updateInvLogsOnly();
       });
     }
     const clearSearch = document.getElementById('btn-clear-inv-search');
     if (clearSearch) {
       clearSearch.addEventListener('click', () => {
         this.historySearchQuery = '';
-        this.render();
+        if (searchInp) searchInp.value = '';
+        updateInvLogsOnly();
+        if (searchInp) searchInp.focus();
       });
     }
 
