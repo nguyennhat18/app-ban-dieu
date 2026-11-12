@@ -20,6 +20,17 @@ import {
   LICENSE_CONFIG,
   formatRemainingCountdown
 } from '../js/modules/license.js';
+import {
+  NAPAS_BANKS,
+  normalizeTransferContent,
+  crc16ccitt,
+  buildVietQRString,
+  generateQRMatrix,
+  renderVietQRDataUrl,
+  drawVietQRToJsPdf,
+  hasVietQRConfig,
+  resolveOrderQR
+} from '../js/vietqr.js';
 
 console.log('========================================================');
 console.log('🧪 BẮT ĐẦU CHẠY BỘ TEST TỰ ĐỘNG CHO HỆ THỐNG BÁN DIỀU');
@@ -511,9 +522,137 @@ async function main() {
     assert.strictEqual(numIdProd.id, '12345', 'ID số phải chuyển thành chuỗi chuẩn');
   });
 
+  // ================= 11. TEST VIETQR OFFLINE & QR GENERATOR =================
+  runTest('11.1. crc16ccitt: Chuẩn CRC-16/CCITT-FALSE với vector chuẩn & payload EMVCo', () => {
+    assert.strictEqual(crc16ccitt('123456789'), '29B1', 'Vector chuẩn 123456789 phải trả về 29B1');
+    assert.strictEqual(crc16ccitt(''), 'FFFF', 'Chuỗi rỗng với init 0xFFFF phải trả về FFFF');
+
+    const staticPayloadPrefix = '00020101021138570010A00000072701270006970436011310123456789010208QRIBFTTA53037045802VN6304';
+    assert.strictEqual(crc16ccitt(staticPayloadPrefix), '64D8', 'CRC payload tĩnh EMVCo/VietQR chuẩn xác');
+
+    const dynamicPayloadPrefix = '00020101021238570010A00000072701270006970436011310123456789010208QRIBFTTA530370454062500005802VN62280824Thanh toan don hang DH096304';
+    assert.strictEqual(crc16ccitt(dynamicPayloadPrefix), 'ED27', 'CRC payload động có số tiền & nội dung chuẩn xác');
+  });
+
+  runTest('11.2. normalizeTransferContent: Bỏ dấu đ/Đ, ký tự đặc biệt và giới hạn 25 ký tự', () => {
+    assert.strictEqual(
+      normalizeTransferContent('Đơn hàng #ĐH-01: Diều!'),
+      'Don hang DH01 Dieu',
+      'Phải chuyển đ/Đ thành d/D, bỏ dấu tiếng Việt và ký tự đặc biệt'
+    );
+    const longNorm = normalizeTransferContent('Thanh   toán   nợ   khách hàng   Nguyễn Văn A 12345');
+    assert.ok(longNorm.length > 0 && longNorm.length <= 25, 'Chuỗi dài phải được cắt <= 25 ký tự và trim khoảng trắng cuối');
+    assert.strictEqual(normalizeTransferContent('ABCDEFGHIJKLMNOPQRSTUVWXYZ'), 'ABCDEFGHIJKLMNOPQRSTUVWXY', 'Chuỗi 26 ký tự ASCII phải cắt đúng còn 25 ký tự');
+    assert.ok(/^[A-Za-z0-9 ]+$/.test(longNorm), 'Chỉ giữ lại ký tự ASCII chữ, số và khoảng trắng');
+    assert.strictEqual(normalizeTransferContent('@@@---!!!'), '', 'Chuỗi toàn ký tự đặc biệt phải thành rỗng');
+  });
+
+  runTest('11.3. buildVietQRString: Đúng cấu trúc TLV EMVCo/NAPAS 247 (động & tĩnh)', () => {
+    const parseTLV = (str) => {
+      const out = {};
+      let i = 0;
+      while (i < str.length) {
+        const tag = str.slice(i, i + 2);
+        const len = parseInt(str.slice(i + 2, i + 4), 10);
+        const val = str.slice(i + 4, i + 4 + len);
+        assert.strictEqual(val.length, len, `Độ dài TLV tag ${tag} phải khớp`);
+        out[tag] = val;
+        i += 4 + len;
+      }
+      assert.strictEqual(i, str.length, 'Toàn bộ chuỗi TLV phải khớp độ dài');
+      return out;
+    };
+
+    const dynQR = buildVietQRString({
+      bankBin: '970436',
+      accountNumber: '1012345678901',
+      amount: 250000,
+      description: 'Thanh toán đơn hàng #ĐH-09'
+    });
+    assert.strictEqual(
+      dynQR,
+      '00020101021238570010A00000072701270006970436011310123456789010208QRIBFTTA530370454062500005802VN62280824Thanh toan don hang DH096304ED27'
+    );
+    const dynTop = parseTLV(dynQR);
+    assert.strictEqual(dynTop['00'], '01');
+    assert.strictEqual(dynTop['01'], '12');
+    assert.strictEqual(dynTop['53'], '704');
+    assert.strictEqual(dynTop['54'], '250000');
+    assert.strictEqual(dynTop['58'], 'VN');
+    assert.strictEqual(dynTop['63'], crc16ccitt(dynQR.slice(0, -4)));
+    const t38 = parseTLV(dynTop['38']);
+    assert.strictEqual(t38['00'], 'A000000727');
+    assert.strictEqual(t38['02'], 'QRIBFTTA');
+    const t38Sub = parseTLV(t38['01']);
+    assert.strictEqual(t38Sub['00'], '970436');
+    assert.strictEqual(t38Sub['01'], '1012345678901');
+    const t62 = parseTLV(dynTop['62']);
+    assert.strictEqual(t62['08'], 'Thanh toan don hang DH09');
+
+    const staticQR = buildVietQRString({
+      bankBin: '970436',
+      accountNumber: '1012345678901',
+      amount: 0,
+      description: ''
+    });
+    assert.strictEqual(
+      staticQR,
+      '00020101021138570010A00000072701270006970436011310123456789010208QRIBFTTA53037045802VN630464D8'
+    );
+    const staticTop = parseTLV(staticQR);
+    assert.strictEqual(staticTop['01'], '11');
+    assert.strictEqual('54' in staticTop, false, 'QR tĩnh không chứa tag 54');
+    assert.strictEqual('62' in staticTop, false, 'QR không có mô tả không chứa tag 62');
+  });
+
+  runTest('11.4. generateQRMatrix & renderVietQRDataUrl: Sinh ma trận vuông >= 21x21 & Data URL offline', () => {
+    assert.ok(Array.isArray(NAPAS_BANKS) && NAPAS_BANKS.length >= 25, 'Danh sách ngân hàng NAPAS đầy đủ');
+    const qrText = buildVietQRString({
+      bankBin: '970415',
+      accountNumber: '113366668888',
+      amount: 500000,
+      description: 'DON HANG DH123'
+    });
+    const matrix = generateQRMatrix(qrText);
+    assert.ok(Array.isArray(matrix) && matrix.length >= 21, 'Ma trận QR phải có kích thước >= 21x21');
+    assert.strictEqual(matrix.length, matrix[0].length, 'Ma trận QR phải là hình vuông');
+    assert.strictEqual(matrix[matrix.length - 8][8], true, 'Dark module QR chuẩn phải bằng true');
+
+    const dataUrl = renderVietQRDataUrl(qrText, 280);
+    assert.ok(
+      dataUrl.startsWith('data:image/png;base64,') || dataUrl.startsWith('data:image/svg+xml;base64,'),
+      'renderVietQRDataUrl phải trả về Data URL ảnh PNG hoặc SVG nội bộ'
+    );
+  });
+
+  runTest('11.5. hasVietQRConfig, resolveOrderQR & drawVietQRToJsPdf: Ưu tiên VietQR, fallback QR tĩnh & vẽ vector PDF', () => {
+    const shopVietQR = { bankBin: '970422', bankName: 'MBBank', bankAccount: '0987654321', bankAccountName: 'NGUYEN VAN A', qrCode: 'data:image/png;base64,OLD' };
+    assert.strictEqual(hasVietQRConfig(shopVietQR), true);
+    const resolved = resolveOrderQR(shopVietQR, 350000, 'Đơn #DH-88');
+    assert.strictEqual(resolved.type, 'vietqr');
+    assert.strictEqual(resolved.normalizedDesc, 'Don DH88');
+    assert.ok(resolved.qrText.includes('5406350000'));
+    assert.ok(resolved.dataUrl.startsWith('data:image/'));
+
+    const shopStatic = { bankBin: '', bankAccount: '', bankInfo: 'VCB', qrCode: 'data:image/png;base64,STATIC' };
+    assert.strictEqual(hasVietQRConfig(shopStatic), false);
+    const resolvedStatic = resolveOrderQR(shopStatic, 100000, 'DH-01');
+    assert.strictEqual(resolvedStatic.type, 'static');
+    assert.strictEqual(resolvedStatic.dataUrl, 'data:image/png;base64,STATIC');
+
+    assert.strictEqual(resolveOrderQR({}, 100000, 'DH-01'), null);
+
+    let rectCount = 0;
+    const mockDoc = { setFillColor: () => {}, rect: () => { rectCount++; } };
+    drawVietQRToJsPdf(mockDoc, resolved.qrText, 15, 20, 28);
+    assert.ok(rectCount > 50, 'drawVietQRToJsPdf phải vẽ nền trắng và các module đen lên jsPDF');
+  });
+
+  const pct = totalTests > 0 ? Math.round((passedTests / totalTests) * 100) : 0;
   console.log('\n========================================================');
-  console.log(`🎉 KẾT QUẢ KIỂM THỬ: ${passedTests}/${totalTests} TESTS ĐẠT (100%)`);
+  console.log(`🎉 KẾT QUẢ KIỂM THỬ: ${passedTests}/${totalTests} TESTS ĐẠT (${pct}%)`);
   console.log('========================================================\n');
+  if (passedTests !== totalTests) process.exitCode = 1;
 }
 
 main().catch(err => {
