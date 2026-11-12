@@ -30,7 +30,7 @@ export class QuotationsModule {
 
     container.innerHTML = `
       <div class="view-header">
-        <div class="header-title-row">
+        <div class="header-title-row" style="flex-wrap: wrap; align-items: center; gap: 8px;">
           <div>
             <h1 class="view-title">📑 Báo Giá Cho Khách</h1>
             <p class="view-subtitle">Lập báo giá chuyên nghiệp, xuất PDF tiếng Việt có dấu, gửi Zalo</p>
@@ -96,8 +96,8 @@ export class QuotationsModule {
 
       return `
         <div class="quote-card" data-id="${q.id}">
-          <div class="quote-card-header">
-            <div>
+          <div class="quote-card-header" style="flex-wrap: wrap; align-items: center; gap: 8px;">
+            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px;">
               <span class="quote-id text-bold">${escapeHTML(q.id)}</span>
               <span class="text-muted text-xs ml-2">${formatDate(q.createdAt)}</span>
             </div>
@@ -115,11 +115,11 @@ export class QuotationsModule {
             </div>
           </div>
 
-          <div class="quote-card-footer">
+          <div class="quote-card-footer" style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px;">
             <div class="quote-total-price">
               Tổng: <span class="text-bold text-primary">${formatVND(q.totalAmount)}</span>
             </div>
-            <div class="quote-action-btns">
+            <div class="quote-action-btns" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px;">
               <button class="btn btn-outline-primary btn-xs btn-export-pdf" data-id="${q.id}" title="Xuất PDF tiếng Việt & Gửi Zalo">
                 📄 Xuất PDF
               </button>
@@ -436,13 +436,12 @@ export class QuotationsModule {
               <textarea id="q-notes" class="form-textarea" rows="2">${escapeHTML(quote.notes || '')}</textarea>
             </div>
 
-            <div class="modal-footer">
+            <div class="modal-footer" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px;">
               ${isEdit ? `
-                <button type="button" class="btn btn-outline-danger" id="btn-soft-delete-quote">Xóa vào Thùng rác</button>
+                <button type="button" class="btn btn-outline-danger btn-sm" id="btn-soft-delete-quote" style="margin-right: auto;">Xóa vào Thùng rác</button>
               ` : ''}
-              <div style="flex:1"></div>
-              <button type="button" class="btn btn-secondary" id="btn-cancel-qmodal">Hủy</button>
-              <button type="submit" class="btn btn-primary">Lưu Báo Giá</button>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-cancel-qmodal">Hủy</button>
+              <button type="submit" class="btn btn-primary btn-sm">Lưu Báo Giá</button>
             </div>
           </form>
         </div>
@@ -870,14 +869,13 @@ export class QuotationsModule {
             ` : ''}
           </div>
 
-          <div class="modal-footer">
-            <button class="btn btn-outline-primary" id="btn-modal-pdf">📄 Xuất PDF & Gửi Zalo</button>
-            <button class="btn btn-outline-success" id="btn-modal-excel">📊 Xuất Excel</button>
+          <div class="modal-footer" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px;">
+            <button class="btn btn-outline-primary btn-sm" id="btn-modal-pdf">📄 Xuất PDF & Gửi Zalo</button>
+            <button class="btn btn-outline-success btn-sm" id="btn-modal-excel">📊 Xuất Excel</button>
             ${q.status !== 'converted' ? `
-              <button class="btn btn-success" id="btn-modal-convert">⚡ Chuyển Thành Đơn Bán</button>
+              <button class="btn btn-success btn-sm" id="btn-modal-convert">⚡ Chuyển Thành Đơn Bán</button>
             ` : ''}
-            <div style="flex:1"></div>
-            <button class="btn btn-secondary" id="btn-close-qpmodal2">Đóng</button>
+            <button class="btn btn-secondary btn-sm" id="btn-close-qpmodal2" style="margin-left: auto;">Đóng</button>
           </div>
         </div>
       </div>

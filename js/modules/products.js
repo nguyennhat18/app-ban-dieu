@@ -46,14 +46,14 @@ export class ProductModule {
       </div>
 
       <div class="view-header">
-        <div class="header-title-row">
+        <div class="header-title-row" style="flex-wrap: wrap; align-items: center; gap: 8px;">
           <div>
             <h1 class="view-title">
               ${this.currentWarehouse === 'stock' ? '📦 Kho Tồn Hàng & Phụ Kiện' : '✨ Kho Diều Mới'}
             </h1>
             <p class="view-subtitle">${warehouseProducts.length} mặt hàng • ${lowStockCount} sắp hết • ${outStockCount} hết hàng</p>
           </div>
-          <div class="d-flex gap-2">
+          <div class="d-flex flex-wrap align-center gap-2" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px;">
             ${this.currentWarehouse === 'stock' ? `
               <button id="btn-import-stock-excel" class="btn btn-outline-success btn-sm" title="Đẩy file Excel hoặc CSV vào Kho Tồn">
                 <span>📥</span> Đẩy File Excel
@@ -67,8 +67,8 @@ export class ProductModule {
         </div>
 
         ${this.currentWarehouse === 'stock' ? `
-          <div class="stock-tools-bar mb-2 p-2 d-flex justify-between align-center flex-wrap gap-2">
-            <div class="text-xs text-muted">
+          <div class="stock-tools-bar mb-2 p-2 d-flex justify-between align-center flex-wrap gap-2" style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 10px; margin-bottom: 8px;">
+            <div class="text-xs text-muted" style="flex: 1 1 200px;">
               💡 <b>Kho Tồn:</b> Nan, pass, sáo, dây, phụ kiện tồn kho. Bạn có thể đẩy file Excel lên bất cứ lúc nào.
             </div>
             <button id="btn-load-sample-stock-69" class="btn btn-outline-primary btn-xs" title="Nạp nhanh 69 mặt hàng phụ kiện từ file mẫu bạn gửi">
@@ -153,7 +153,7 @@ export class ProductModule {
           <p class="empty-icon">${this.currentWarehouse === 'stock' ? '📦' : '🪁'}</p>
           <p class="empty-title">${this.currentWarehouse === 'stock' ? 'Kho Tồn Chưa Có Mặt Hàng Nào' : 'Không tìm thấy diều phù hợp'}</p>
           <p class="empty-desc">${this.currentWarehouse === 'stock' ? 'Bạn có thể đẩy file Excel tồn kho lên hoặc nạp sẵn 69 mặt hàng mẫu từ file bạn cung cấp.' : 'Thử tìm từ khóa khác hoặc bấm nút thêm diều mới.'}</p>
-          <div class="d-flex justify-center gap-2 mt-2 flex-wrap">
+          <div class="d-flex justify-center gap-2 mt-2 flex-wrap" style="display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; margin-top: 8px;">
             ${this.currentWarehouse === 'stock' ? `
               <button id="btn-trigger-upload-excel" class="btn btn-success btn-sm">
                 <span>📥</span> Đẩy File Excel Lên
@@ -204,17 +204,17 @@ export class ProductModule {
               <span class="meta-tag">Mã: ${escapeHTML(p.code || '---')}</span>
               ${p.supplier ? `<span class="meta-tag text-primary">Nguồn: ${escapeHTML(p.supplier)}</span>` : ''}
             </div>
-            <div class="product-price-row">
+            <div class="product-price-row" style="flex-wrap: wrap; gap: 6px;">
               <div>
                 <div class="selling-price">${formatVND(p.sellingPrice)}</div>
                 <div class="cost-price-hint">Vốn: ${formatVND(p.costPrice)}</div>
               </div>
-              <div class="product-card-actions">
-                <button class="btn-icon btn-switch-warehouse" data-id="${p.id}" data-current="${p.warehouse || 'new'}" title="${p.warehouse === 'stock' ? 'Chuyển sang Kho Mới' : 'Chuyển sang Kho Tồn'}">
+              <div class="product-card-actions" style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px;">
+                <button class="btn-icon btn-switch-warehouse" style="display: inline-flex; align-items: center; justify-content: center; gap: 4px;" data-id="${p.id}" data-current="${p.warehouse || 'new'}" title="${p.warehouse === 'stock' ? 'Chuyển sang Kho Mới' : 'Chuyển sang Kho Tồn'}">
                   ${p.warehouse === 'stock' ? '✨ Sang Mới' : '📦 Sang Tồn'}
                 </button>
-                <button class="btn-icon btn-edit-product" data-id="${p.id}" title="Chỉnh sửa">✏️</button>
-                <button class="btn-icon btn-quick-sell" data-id="${p.id}" title="Thêm vào giỏ bán">⚡ Bán</button>
+                <button class="btn-icon btn-edit-product" style="display: inline-flex; align-items: center; justify-content: center;" data-id="${p.id}" title="Chỉnh sửa">✏️</button>
+                <button class="btn-icon btn-quick-sell" style="display: inline-flex; align-items: center; justify-content: center; gap: 4px;" data-id="${p.id}" title="Thêm vào giỏ bán">⚡ Bán</button>
               </div>
             </div>
           </div>
@@ -593,11 +593,10 @@ export class ProductModule {
               <textarea id="p-notes" class="form-textarea" rows="2" placeholder="Chất liệu nan carbon, vải dù, pas khóa sáo...">${escapeHTML(product.notes || '')}</textarea>
             </div>
 
-            <div class="modal-footer">
+            <div class="modal-footer" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px;">
               ${isEdit ? `
-                <button type="button" class="btn btn-outline-danger btn-sm" id="btn-soft-delete-product">Xóa vào Thùng rác</button>
+                <button type="button" class="btn btn-outline-danger btn-sm" id="btn-soft-delete-product" style="margin-right: auto;">Xóa vào Thùng rác</button>
               ` : ''}
-              <div style="flex:1"></div>
               <button type="button" class="btn btn-secondary btn-sm" id="btn-cancel-modal">Hủy</button>
               <button type="submit" class="btn btn-primary btn-sm" id="btn-save-product">Lưu Diều</button>
             </div>

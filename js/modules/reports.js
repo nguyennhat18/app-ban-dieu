@@ -97,19 +97,19 @@ export class ReportsModule {
 
     container.innerHTML = `
       <div class="view-header">
-        <div class="header-title-row">
-          <div>
+        <div class="header-title-row" style="flex-wrap: wrap; gap: 10px;">
+          <div style="min-width: 0; flex: 1 1 200px;">
             <h1 class="view-title">📊 Báo Cáo Kinh Doanh & Tồn Kho</h1>
             <p class="view-subtitle">Doanh thu, lợi nhuận gộp, hàng bán chạy và tồn kho</p>
           </div>
-          <button id="btn-export-report-excel" class="btn btn-outline-success btn-sm">
+          <button id="btn-export-report-excel" class="btn btn-outline-success btn-sm" style="flex-shrink: 0; white-space: nowrap;">
             📊 Xuất Báo Cáo Excel
           </button>
         </div>
 
         <!-- Bộ lọc thời gian -->
         <div class="report-period-selector">
-          <div class="category-tabs-scroll">
+          <div class="category-tabs-scroll" style="gap: 8px; align-items: center;">
             <button class="cat-pill ${this.period === 'today' ? 'active' : ''}" data-period="today">Hôm nay</button>
             <button class="cat-pill ${this.period === 'week' ? 'active' : ''}" data-period="week">7 ngày qua</button>
             <button class="cat-pill ${this.period === 'month' ? 'active' : ''}" data-period="month">Tháng này</button>
@@ -117,12 +117,12 @@ export class ReportsModule {
           </div>
 
           ${this.period === 'custom' ? `
-            <div class="custom-date-range-row mt-2">
-              <span>Từ:</span>
-              <input type="date" id="rep-start-date" class="form-input-sm" value="${this.customStartDate}">
-              <span>Đến:</span>
-              <input type="date" id="rep-end-date" class="form-input-sm" value="${this.customEndDate}">
-              <button class="btn btn-primary btn-sm" id="btn-apply-custom-date">Lọc</button>
+            <div class="custom-date-range-row mt-2" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px;">
+              <span class="text-xs text-bold">Từ:</span>
+              <input type="date" id="rep-start-date" class="form-input-sm" style="flex: 1 1 120px; min-width: 0;" value="${this.customStartDate}">
+              <span class="text-xs text-bold">Đến:</span>
+              <input type="date" id="rep-end-date" class="form-input-sm" style="flex: 1 1 120px; min-width: 0;" value="${this.customEndDate}">
+              <button class="btn btn-primary btn-sm" id="btn-apply-custom-date" style="flex-shrink: 0; white-space: nowrap;">Lọc</button>
             </div>
           ` : ''}
         </div>
@@ -158,18 +158,18 @@ export class ReportsModule {
       </div>
 
       <!-- Khối tồn kho hiện tại -->
-      <div class="card p-3 mb-3">
+      <div class="card p-3 mb-3" style="padding: 12px; margin-bottom: 12px;">
         <h3 class="card-title">📦 Giá Trị Tồn Kho Hiện Tại</h3>
-        <div class="stock-summary-row">
-          <div class="stock-summary-col">
+        <div class="stock-summary-row" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-top: 8px;">
+          <div class="stock-summary-col" style="display: flex; flex-direction: column; gap: 2px;">
             <span class="text-muted text-xs">Tổng số lượng diều:</span>
             <span class="text-bold text-lg">${totalStockQty} cái</span>
           </div>
-          <div class="stock-summary-col">
+          <div class="stock-summary-col" style="display: flex; flex-direction: column; gap: 2px;">
             <span class="text-muted text-xs">Tổng vốn đang tồn:</span>
             <span class="text-bold text-lg text-primary">${formatVND(totalStockCostValue)}</span>
           </div>
-          <div class="stock-summary-col">
+          <div class="stock-summary-col" style="display: flex; flex-direction: column; gap: 2px;">
             <span class="text-muted text-xs">Giá trị theo giá bán:</span>
             <span class="text-bold text-lg text-success">${formatVND(totalStockSellValue)}</span>
           </div>
@@ -177,20 +177,20 @@ export class ReportsModule {
       </div>
 
       <!-- Top sản phẩm bán chạy -->
-      <div class="card p-3 mb-3">
+      <div class="card p-3 mb-3" style="padding: 12px; margin-bottom: 12px;">
         <h3 class="card-title">🔥 Diều & Phụ Kiện Bán Chạy Trong Kỳ</h3>
         ${topProducts.length === 0 ? `
           <p class="text-muted text-center py-2 text-sm">Chưa có giao dịch bán nào trong khoảng thời gian này.</p>
         ` : `
           <div class="top-products-list">
             ${topProducts.map((p, idx) => `
-              <div class="top-prod-item">
-                <span class="top-rank ${idx === 0 ? 'rank-1' : idx === 1 ? 'rank-2' : ''}">#${idx + 1}</span>
-                <div class="top-prod-info">
+              <div class="top-prod-item" style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px dashed var(--border);">
+                <span class="top-rank ${idx === 0 ? 'rank-1' : idx === 1 ? 'rank-2' : ''}" style="flex-shrink: 0; font-weight: 800;">#${idx + 1}</span>
+                <div class="top-prod-info" style="flex: 1; min-width: 0;">
                   <div class="top-prod-name text-bold">${escapeHTML(p.name)}</div>
                   <div class="text-muted text-xs">Doanh thu: ${formatVND(p.revenue)}</div>
                 </div>
-                <div class="top-prod-qty text-bold text-primary">
+                <div class="top-prod-qty text-bold text-primary" style="flex-shrink: 0; white-space: nowrap;">
                   ${p.quantity} ${escapeHTML(p.unit)}
                 </div>
               </div>
@@ -200,12 +200,12 @@ export class ReportsModule {
       </div>
 
       <!-- Cảnh báo hàng sắp hết -->
-      <div class="card p-3 mb-3">
+      <div class="card p-3 mb-3" style="padding: 12px; margin-bottom: 12px;">
         <h3 class="card-title text-danger">⚠️ Danh Sách Hàng Sắp Hết (Dưới Mức Cảnh Báo)</h3>
         ${lowStockItems.length === 0 ? `
           <p class="text-success text-sm py-2">✓ Tất cả các loại diều đều đang đủ tồn kho an toàn.</p>
         ` : `
-          <div class="low-stock-table-wrap">
+          <div class="low-stock-table-wrap" style="overflow-x: auto;">
             <table class="table">
               <thead>
                 <tr>
@@ -224,7 +224,7 @@ export class ReportsModule {
                     <td class="text-center text-bold text-danger">${p.stock} ${escapeHTML(p.unit || 'cái')}</td>
                     <td class="text-center text-muted">${p.lowStockThreshold || 5}</td>
                     <td class="text-right">
-                      <button class="btn btn-outline-primary btn-xs btn-quick-import" data-id="${p.id}">📥 Nhập</button>
+                      <button class="btn btn-outline-primary btn-xs btn-quick-import" style="white-space: nowrap;" data-id="${p.id}">📥 Nhập</button>
                     </td>
                   </tr>
                 `).join('')}

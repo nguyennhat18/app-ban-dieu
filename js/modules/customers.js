@@ -75,19 +75,19 @@ export class CustomerModule {
 
     container.innerHTML = `
       <div class="view-header">
-        <div class="header-title-row">
-          <div>
+        <div class="header-title-row" style="flex-wrap: wrap; gap: 10px;">
+          <div style="min-width: 0; flex: 1 1 180px;">
             <h1 class="view-title">👥 Khách Hàng & Công Nợ</h1>
             <p class="view-subtitle">${customers.length} khách • ${debtors.length} khách nợ (<b class="text-danger">${formatVND(totalAllDebt)}</b>)</p>
           </div>
-          <button id="btn-add-customer" class="btn btn-primary btn-sm">+ Thêm Khách</button>
+          <button id="btn-add-customer" class="btn btn-primary btn-sm" style="flex-shrink: 0; white-space: nowrap;">+ Thêm Khách</button>
         </div>
 
         <!-- 3 Tab chuyển đổi tiện lợi -->
-        <div class="header-tab-switch mb-2">
-          <button class="tab-switch-btn ${this.activeTab === 'list' ? 'active' : ''}" id="tab-cust-list">👥 Danh Sách (${customers.length})</button>
-          <button class="tab-switch-btn ${this.activeTab === 'debts' ? 'active' : ''}" id="tab-cust-debts">💵 Đang Nợ (${debtors.length})</button>
-          <button class="tab-switch-btn ${this.activeTab === 'payments' ? 'active' : ''}" id="tab-cust-payments">📜 Lịch Sử Thu</button>
+        <div class="header-tab-switch mb-2" style="gap: 4px; margin-bottom: 8px;">
+          <button class="tab-switch-btn ${this.activeTab === 'list' ? 'active' : ''}" id="tab-cust-list" style="flex: 1 0 auto;">👥 Danh Sách (${customers.length})</button>
+          <button class="tab-switch-btn ${this.activeTab === 'debts' ? 'active' : ''}" id="tab-cust-debts" style="flex: 1 0 auto;">💵 Đang Nợ (${debtors.length})</button>
+          <button class="tab-switch-btn ${this.activeTab === 'payments' ? 'active' : ''}" id="tab-cust-payments" style="flex: 1 0 auto;">📜 Lịch Sử Thu</button>
         </div>
 
         ${this.activeTab !== 'payments' ? `
@@ -125,32 +125,32 @@ export class CustomerModule {
             const stats = customerStats[c.id] || { totalOrders: 0, totalSpent: 0, totalDebt: 0 };
             return `
               <div class="customer-card ${stats.totalDebt > 0 ? 'card-has-debt' : ''}" data-id="${c.id}">
-                <div class="customer-card-header">
-                  <div>
+                <div class="customer-card-header" style="gap: 8px;">
+                  <div style="min-width: 0; flex: 1;">
                     <h3 class="customer-name text-bold">${escapeHTML(c.name)}</h3>
-                    <div class="customer-meta text-xs text-muted mt-1">
-                      ${c.phone ? `<a href="tel:${escapeHTML(c.phone)}" class="customer-phone" onclick="event.stopPropagation()" style="color:#0284c7; text-decoration:none;">📞 ${escapeHTML(c.phone)}</a>` : 'Chưa có SĐT'}
+                    <div class="customer-meta text-xs text-muted mt-1" style="display: flex; flex-wrap: wrap; gap: 2px 8px; margin-top: 4px;">
+                      ${c.phone ? `<a href="tel:${escapeHTML(c.phone)}" class="customer-phone" onclick="event.stopPropagation()" style="color:#0284c7; text-decoration:none;">📞 ${escapeHTML(c.phone)}</a>` : '<span>Chưa có SĐT</span>'}
                       ${c.address ? `<span class="customer-address ml-1">• 📍 ${escapeHTML(c.address)}</span>` : ''}
                     </div>
                   </div>
                   ${stats.totalDebt > 0 ? `
-                    <span class="badge badge-danger text-bold">Nợ: ${formatVND(stats.totalDebt)}</span>
+                    <span class="badge badge-danger text-bold" style="flex-shrink: 0; white-space: nowrap;">Nợ: ${formatVND(stats.totalDebt)}</span>
                   ` : `
-                    <span class="badge badge-neutral">0 ₫ nợ</span>
+                    <span class="badge badge-neutral" style="flex-shrink: 0; white-space: nowrap;">0 ₫ nợ</span>
                   `}
                 </div>
 
-                <div class="customer-card-body d-flex gap-3 text-xs text-muted mt-1" style="display:flex; gap:12px;">
+                <div class="customer-card-body d-flex gap-3 text-xs text-muted mt-1" style="display:flex; flex-wrap:wrap; gap:6px 12px; margin-top: 4px;">
                   <div>Đã mua: <b>${stats.totalOrders} đơn</b></div>
                   <div>Tổng chi: <b>${formatVND(stats.totalSpent)}</b></div>
                 </div>
 
-                <div class="customer-card-footer">
-                  <button class="btn btn-outline-primary btn-xs btn-view-history" data-id="${c.id}">📜 Lịch sử mua</button>
+                <div class="customer-card-footer" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px;">
+                  <button class="btn btn-outline-primary btn-xs btn-view-history" style="white-space: nowrap;" data-id="${c.id}">📜 Lịch sử mua</button>
                   ${stats.totalDebt > 0 ? `
-                    <button class="btn btn-danger btn-xs btn-collect-debt-fast" data-id="${c.id}" data-name="${escapeHTML(c.name)}" data-debt="${stats.totalDebt}">💵 Thu nợ</button>
+                    <button class="btn btn-danger btn-xs btn-collect-debt-fast" style="white-space: nowrap;" data-id="${c.id}" data-name="${escapeHTML(c.name)}" data-debt="${stats.totalDebt}">💵 Thu nợ</button>
                   ` : ''}
-                  <button class="btn btn-secondary btn-xs btn-edit-customer" data-id="${c.id}">✏️ Sửa</button>
+                  <button class="btn btn-secondary btn-xs btn-edit-customer" style="white-space: nowrap;" data-id="${c.id}">✏️ Sửa</button>
                 </div>
               </div>
             `;
@@ -169,18 +169,18 @@ export class CustomerModule {
               <p class="empty-desc">Tất cả khách hàng đã thanh toán đầy đủ tiền diều.</p>
             </div>
           ` : filteredDebtors.map(d => `
-            <div class="debtor-card card p-3 mb-2" style="display:flex; justify-content:space-between; align-items:center;">
-              <div>
+            <div class="debtor-card card p-3 mb-2" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+              <div style="min-width: 0; flex: 1 1 180px;">
                 <h3 class="text-bold" style="font-size:15px;">${escapeHTML(d.customer.name)}</h3>
-                <div class="text-xs text-muted mt-1">
+                <div class="text-xs text-muted mt-1" style="margin-top: 4px;">
                   ${d.customer.phone ? `📞 ${escapeHTML(d.customer.phone)}` : 'Chưa có SĐT'}
                 </div>
-                <div class="text-xs text-danger text-bold mt-1">
+                <div class="text-xs text-danger text-bold mt-1" style="margin-top: 4px;">
                   Còn nợ: ${formatVND(d.totalDebt)}
                 </div>
               </div>
-              <div>
-                <button class="btn btn-danger btn-sm btn-collect-debt-fast" data-id="${d.customer.id}" data-name="${escapeHTML(d.customer.name)}" data-debt="${d.totalDebt}">
+              <div style="flex-shrink: 0; margin-left: auto;">
+                <button class="btn btn-danger btn-sm btn-collect-debt-fast" style="white-space: nowrap;" data-id="${d.customer.id}" data-name="${escapeHTML(d.customer.name)}" data-debt="${d.totalDebt}">
                   💵 Thu Tiền
                 </button>
               </div>
@@ -198,13 +198,13 @@ export class CustomerModule {
             <p class="empty-title">Chưa có lịch sử thu nợ nào</p>
           </div>
         ` : debtPayments.map(p => `
-          <div class="card p-3 mb-2" style="display:flex; justify-content:space-between; align-items:center;">
-            <div>
+          <div class="card p-3 mb-2" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; padding:12px; margin-bottom:8px;">
+            <div style="min-width: 0; flex: 1 1 180px;">
               <div class="text-bold">${escapeHTML(p.customerName)}</div>
               <div class="text-muted text-xs">${formatDateTime(p.createdAt)} • ${p.paymentMethod === 'transfer' ? 'Chuyển khoản' : 'Tiền mặt'}</div>
-              ${p.notes ? `<div class="text-xs text-muted mt-1">Ghi chú: ${escapeHTML(p.notes)}</div>` : ''}
+              ${p.notes ? `<div class="text-xs text-muted mt-1" style="margin-top: 4px;">Ghi chú: ${escapeHTML(p.notes)}</div>` : ''}
             </div>
-            <div class="text-success text-bold text-lg">+ ${formatVND(p.amount)}</div>
+            <div class="text-success text-bold text-lg" style="flex-shrink: 0; white-space: nowrap;">+ ${formatVND(p.amount)}</div>
           </div>
         `).join('')}
       </div>
@@ -310,7 +310,7 @@ export class CustomerModule {
             <div class="form-group">
               <label class="form-label required">Số tiền thu đợt này (VNĐ)</label>
               <input type="number" id="dp-amount" class="form-input form-input-lg text-primary text-bold" required min="1000" max="${currentDebt}" value="${currentDebt}">
-              <div class="quick-amount-buttons mt-2" style="display:flex; gap:6px;">
+              <div class="quick-amount-buttons mt-2" style="display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:8px;">
                 <button type="button" class="btn btn-outline-secondary btn-xs btn-set-full-debt" data-amt="${currentDebt}">Thu hết (${formatVND(currentDebt)})</button>
                 ${currentDebt > 200000 ? `<button type="button" class="btn btn-outline-secondary btn-xs btn-set-debt-half" data-amt="${Math.round(currentDebt / 2)}">Thu 50%</button>` : ''}
               </div>
@@ -329,7 +329,7 @@ export class CustomerModule {
               <input type="text" id="dp-notes" class="form-input" placeholder="VD: Khách chuyển khoản Vietcombank...">
             </div>
 
-            <div class="modal-footer">
+            <div class="modal-footer" style="display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:8px; margin-top:12px;">
               <button type="button" class="btn btn-secondary btn-sm" id="btn-cancel-dpmodal">Hủy</button>
               <button type="submit" class="btn btn-success btn-sm">✓ Xác Nhận Thu Tiền</button>
             </div>
@@ -433,13 +433,13 @@ export class CustomerModule {
               <textarea id="c-notes" class="form-textarea" rows="2" placeholder="Sở thích diều, nan carbon...">${escapeHTML(customer.notes || '')}</textarea>
             </div>
 
-            <div class="modal-footer">
+            <div class="modal-footer" style="flex-wrap: wrap; gap: 8px; justify-content: flex-end;">
               ${isEdit ? `
-                <button type="button" class="btn btn-outline-danger btn-sm" id="btn-delete-customer">Xóa mềm</button>
+                <button type="button" class="btn btn-outline-danger btn-sm" id="btn-delete-customer" style="white-space: nowrap;">Xóa mềm</button>
               ` : ''}
               <div style="flex:1"></div>
-              <button type="button" class="btn btn-secondary btn-sm" id="btn-cancel-cmodal">Hủy</button>
-              <button type="submit" class="btn btn-primary btn-sm">Lưu Khách Hàng</button>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-cancel-cmodal" style="white-space: nowrap;">Hủy</button>
+              <button type="submit" class="btn btn-primary btn-sm" style="white-space: nowrap;">Lưu Khách Hàng</button>
             </div>
           </form>
         </div>
@@ -541,26 +541,26 @@ export class CustomerModule {
               </div>
             </div>
 
-            <div class="customer-action-bar mb-3" style="display:flex; gap:8px;">
+            <div class="customer-action-bar mb-3" style="display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:12px;">
               ${currentDebt > 0 ? `
-                <button class="btn btn-danger btn-sm" id="btn-history-collect-debt">💵 Thu Nợ</button>
+                <button class="btn btn-danger btn-sm" id="btn-history-collect-debt" style="white-space: nowrap;">💵 Thu Nợ</button>
               ` : ''}
-              <button class="btn btn-primary btn-sm" id="btn-history-new-order">⚡ Tạo Đơn Cho Khách</button>
-              <button class="btn btn-secondary btn-sm" id="btn-history-edit-cust">✏️ Sửa</button>
+              <button class="btn btn-primary btn-sm" id="btn-history-new-order" style="white-space: nowrap;">⚡ Tạo Đơn Cho Khách</button>
+              <button class="btn btn-secondary btn-sm" id="btn-history-edit-cust" style="white-space: nowrap;">✏️ Sửa</button>
             </div>
 
-            <h3 class="section-divider-title mb-2" style="font-size:14px; font-weight:700;">📦 Lịch Sử Đơn Hàng (${customerOrders.length})</h3>
+            <h3 class="section-divider-title mb-2" style="font-size:14px; font-weight:700; margin-bottom:8px;">📦 Lịch Sử Đơn Hàng (${customerOrders.length})</h3>
             <div class="history-list">
               ${customerOrders.length === 0 ? `
                 <p class="text-muted text-center py-2 text-xs">Khách chưa có đơn mua nào.</p>
               ` : customerOrders.map(o => `
-                <div class="order-mini-card card p-2 mb-2 ${o.status === 'cancelled' ? 'cancelled-order' : ''}">
-                  <div class="d-flex justify-between" style="display:flex; justify-content:space-between;">
-                    <div>
+                <div class="order-mini-card card p-2 mb-2 ${o.status === 'cancelled' ? 'cancelled-order' : ''}" style="padding:10px; margin-bottom:8px;">
+                  <div class="d-flex justify-between" style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:6px;">
+                    <div style="min-width: 0; flex: 1;">
                       <span class="text-bold text-sm">${escapeHTML(o.id)}</span>
                       <span class="text-muted text-xs ml-1">${formatDateTime(o.createdAt)}</span>
                     </div>
-                    <div>
+                    <div style="flex-shrink: 0;">
                       ${o.status === 'cancelled' ? `
                         <span class="badge badge-danger">Đã hủy</span>
                       ` : o.debtAmount > 0 ? `
@@ -571,35 +571,35 @@ export class CustomerModule {
                     </div>
                   </div>
 
-                  <div class="order-mini-items text-xs text-muted mt-1">
+                  <div class="order-mini-items text-xs text-muted mt-1" style="margin-top:4px;">
                     ${(o.items || []).map(item => `${escapeHTML(item.productName)} x${item.quantity}`).join(', ')}
                   </div>
 
-                  <div class="order-mini-bottom text-xs mt-1" style="display:flex; justify-content:space-between;">
+                  <div class="order-mini-bottom text-xs mt-1" style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:4px;">
                     <span>${o.paymentMethod === 'cash' ? 'Tiền mặt' : o.paymentMethod === 'transfer' ? 'Chuyển khoản' : 'Ghi nợ'}</span>
-                    <span class="text-bold text-primary">${formatVND(o.totalAmount)}</span>
+                    <span class="text-bold text-primary" style="white-space: nowrap;">${formatVND(o.totalAmount)}</span>
                   </div>
                 </div>
               `).join('')}
             </div>
 
             ${customerPayments.length > 0 ? `
-              <h3 class="section-divider-title mt-3 mb-2" style="font-size:14px; font-weight:700;">💳 Lịch Sử Thanh Toán Nợ (${customerPayments.length})</h3>
+              <h3 class="section-divider-title mt-3 mb-2" style="font-size:14px; font-weight:700; margin:12px 0 8px;">💳 Lịch Sử Thanh Toán Nợ (${customerPayments.length})</h3>
               <div class="payment-history-table">
                 ${customerPayments.map(p => `
-                  <div class="card p-2 mb-1" style="display:flex; justify-content:space-between; align-items:center;">
-                    <div>
+                  <div class="card p-2 mb-1" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; padding:10px; margin-bottom:6px;">
+                    <div style="min-width: 0; flex: 1 1 160px;">
                       <div class="text-bold text-xs">${formatDateTime(p.createdAt)}</div>
                       <div class="text-muted text-xs">${escapeHTML(p.notes || 'Thu nợ')} (${p.paymentMethod === 'transfer' ? 'Chuyển khoản' : 'Tiền mặt'})</div>
                     </div>
-                    <div class="text-success text-bold">+ ${formatVND(p.amount)}</div>
+                    <div class="text-success text-bold" style="flex-shrink: 0; white-space: nowrap;">+ ${formatVND(p.amount)}</div>
                   </div>
                 `).join('')}
               </div>
             ` : ''}
           </div>
 
-          <div class="modal-footer">
+          <div class="modal-footer" style="justify-content: flex-end; flex-wrap: wrap; gap: 8px;">
             <button type="button" class="btn btn-secondary btn-sm" id="btn-close-hmodal2">Đóng</button>
           </div>
         </div>

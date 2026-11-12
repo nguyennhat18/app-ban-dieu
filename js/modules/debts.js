@@ -61,14 +61,14 @@ export class DebtsModule {
 
     container.innerHTML = `
       <div class="view-header">
-        <div class="header-title-row">
-          <div>
+        <div class="header-title-row" style="flex-wrap: wrap; gap: 10px;">
+          <div style="min-width: 0; flex: 1 1 200px;">
             <h1 class="view-title">💵 Theo Dõi Công Nợ</h1>
             <p class="view-subtitle">${allDebtors.length} khách đang nợ • Tổng tiền cần thu: <b class="text-danger">${formatVND(totalShopDebt)}</b></p>
           </div>
-          <div class="header-tab-switch">
-            <button class="tab-switch-btn ${this.activeTab === 'customers' ? 'active' : ''}" id="tab-btn-debt-cust">👥 Khách Còn Nợ</button>
-            <button class="tab-switch-btn ${this.activeTab === 'payments' ? 'active' : ''}" id="tab-btn-debt-history">📜 Lịch Sử Thu</button>
+          <div class="header-tab-switch" style="gap: 4px; max-width: 100%;">
+            <button class="tab-switch-btn ${this.activeTab === 'customers' ? 'active' : ''}" id="tab-btn-debt-cust" style="flex: 1 0 auto;">👥 Khách Còn Nợ</button>
+            <button class="tab-switch-btn ${this.activeTab === 'payments' ? 'active' : ''}" id="tab-btn-debt-history" style="flex: 1 0 auto;">📜 Lịch Sử Thu</button>
           </div>
         </div>
 
@@ -101,21 +101,21 @@ export class DebtsModule {
               <p class="empty-desc">Tất cả khách hàng đã thanh toán đủ tiền diều.</p>
             </div>
           ` : debtors.map(d => `
-            <div class="debtor-card">
-              <div class="debtor-info">
+            <div class="debtor-card" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+              <div class="debtor-info" style="min-width: 0; flex: 1 1 180px;">
                 <h3 class="debtor-name">${escapeHTML(d.customer.name)}</h3>
-                <div class="debtor-meta">
+                <div class="debtor-meta" style="display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; color: var(--text-muted); margin-top: 4px;">
                   ${d.customer.phone ? `<span>📞 ${escapeHTML(d.customer.phone)}</span>` : ''}
                   ${d.customer.address ? `<span>📍 ${escapeHTML(d.customer.address)}</span>` : ''}
                 </div>
-                <div class="text-xs text-muted mt-1">
+                <div class="text-xs text-muted mt-1" style="margin-top: 4px;">
                   ${d.ordersWithDebt.length} đơn hàng chưa trả hết
                 </div>
               </div>
 
-              <div class="debtor-amount-box text-right">
+              <div class="debtor-amount-box text-right" style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; margin-left: auto;">
                 <div class="debtor-debt-val text-danger text-bold">${formatVND(d.totalDebt)}</div>
-                <button class="btn btn-danger btn-sm btn-record-debt-payment mt-2" data-id="${d.customer.id}" data-name="${escapeHTML(d.customer.name)}" data-debt="${d.totalDebt}">
+                <button class="btn btn-danger btn-sm btn-record-debt-payment mt-2" style="white-space: nowrap;" data-id="${d.customer.id}" data-name="${escapeHTML(d.customer.name)}" data-debt="${d.totalDebt}">
                   💵 Thu Tiền Nợ
                 </button>
               </div>
@@ -133,13 +133,13 @@ export class DebtsModule {
             <p class="empty-title">Chưa có phiếu thu nợ nào</p>
           </div>
         ` : payments.map(p => `
-          <div class="payment-record-card">
-            <div>
+          <div class="payment-record-card" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px; margin-bottom: 8px; box-shadow: var(--shadow-sm);">
+            <div style="min-width: 0; flex: 1 1 180px;">
               <div class="text-bold">${escapeHTML(p.customerName)}</div>
               <div class="text-muted text-xs">${formatDateTime(p.createdAt)} • ${p.paymentMethod === 'transfer' ? 'Chuyển khoản' : 'Tiền mặt'}</div>
-              ${p.notes ? `<div class="text-xs mt-1">Ghi chú: ${escapeHTML(p.notes)}</div>` : ''}
+              ${p.notes ? `<div class="text-xs mt-1" style="margin-top: 4px;">Ghi chú: ${escapeHTML(p.notes)}</div>` : ''}
             </div>
-            <div class="text-success text-bold text-lg">+ ${formatVND(p.amount)}</div>
+            <div class="text-success text-bold text-lg" style="flex-shrink: 0; white-space: nowrap;">+ ${formatVND(p.amount)}</div>
           </div>
         `).join('')}
       </div>
@@ -219,7 +219,7 @@ export class DebtsModule {
             <div class="form-group">
               <label class="form-label required">Số tiền thu đợt này (VNĐ)</label>
               <input type="number" id="dp-amount" class="form-input form-input-lg text-primary text-bold" required min="1000" max="${currentDebt}" value="${currentDebt}">
-              <div class="quick-amount-buttons mt-2">
+              <div class="quick-amount-buttons mt-2" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px;">
                 <button type="button" class="btn btn-outline-secondary btn-xs btn-set-full-debt" data-amt="${currentDebt}">Thu hết (${formatVND(currentDebt)})</button>
                 ${currentDebt > 200000 ? `<button type="button" class="btn btn-outline-secondary btn-xs btn-set-debt-half" data-amt="${Math.round(currentDebt / 2)}">Thu 50%</button>` : ''}
               </div>
@@ -238,7 +238,7 @@ export class DebtsModule {
               <input type="text" id="dp-notes" class="form-input" placeholder="VD: Khách chuyển khoản Vietcombank...">
             </div>
 
-            <div class="modal-footer">
+            <div class="modal-footer" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 12px;">
               <button type="button" class="btn btn-secondary" id="btn-cancel-dpmodal">Hủy</button>
               <button type="submit" class="btn btn-success">✓ Xác Nhận Thu Tiền</button>
             </div>

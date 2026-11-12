@@ -87,21 +87,21 @@ export class BackupModule {
               </div>
 
               <div style="display: flex; flex-direction: column; gap: 10px;">
-                <button type="button" class="btn btn-primary btn-block btn-lg" id="btn-exp-download" style="font-weight: 800;">
+                <button type="button" class="btn btn-primary btn-block btn-lg" id="btn-exp-download" style="font-weight: 800; white-space: normal; text-align: center; line-height: 1.35;">
                   ⬇️ Tải File Sao Lưu (.json) Về Máy
                 </button>
 
-                <button type="button" class="btn btn-success btn-block btn-lg" id="btn-exp-share" style="font-weight: 800;">
+                <button type="button" class="btn btn-success btn-block btn-lg" id="btn-exp-share" style="font-weight: 800; white-space: normal; text-align: center; line-height: 1.35;">
                   📤 Gửi File Qua Zalo / Google Drive
                 </button>
 
-                <button type="button" class="btn btn-outline-primary btn-block" id="btn-exp-copy-text" style="font-weight: 700;">
+                <button type="button" class="btn btn-outline-primary btn-block" id="btn-exp-copy-text" style="font-weight: 700; white-space: normal; text-align: center; line-height: 1.35;">
                   📋 Sao Chép Mã Dữ Liệu (Dự phòng gửi Zalo/Tin nhắn)
                 </button>
               </div>
             </div>
 
-            <div class="modal-footer">
+            <div class="modal-footer" style="justify-content: flex-end; flex-wrap: wrap; gap: 8px;">
               <button type="button" class="btn btn-secondary" id="btn-cancel-expmodal">Đóng</button>
             </div>
           </div>
@@ -193,7 +193,7 @@ export class BackupModule {
                 Hỗ trợ file sao lưu <b>.json</b> (hoặc file <b>.xlsx</b> xuất từ chức năng Xuất Excel Toàn Bộ).
               </p>
 
-              <label for="dom-restore-file-input" class="btn btn-primary btn-block btn-lg" style="font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0;">
+              <label for="dom-restore-file-input" class="btn btn-primary btn-block btn-lg" style="font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0; white-space: normal; text-align: center; line-height: 1.35;">
                 📂 CHỌN FILE TỪ ĐIỆN THOẠI / MÁY TÍNH
               </label>
               <input type="file" id="dom-restore-file-input" accept=".json,.xlsx,.xls,.txt,application/json,text/plain,*/*" style="position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden;">
@@ -207,13 +207,13 @@ export class BackupModule {
                 Nếu điện thoại bị lỗi không chọn được file từ Zalo, hãy sao chép mã dữ liệu rồi dán vào ô dưới đây:
               </p>
               <textarea id="restore-paste-textarea" class="form-textarea text-xs" rows="3" placeholder="Dán chuỗi mã sao lưu JSON bắt đầu bằng { ... } vào đây..."></textarea>
-              <button type="button" class="btn btn-outline-primary btn-block btn-sm mt-2" id="btn-restore-from-paste" style="font-weight: 700;">
+              <button type="button" class="btn btn-outline-primary btn-block btn-sm mt-2" id="btn-restore-from-paste" style="font-weight: 700; white-space: normal; text-align: center; margin-top: 8px;">
                 ⚡ Đọc & Nạp Dữ Liệu Đã Dán
               </button>
             </div>
           </div>
 
-          <div class="modal-footer">
+          <div class="modal-footer" style="justify-content: flex-end; flex-wrap: wrap; gap: 8px;">
             <button type="button" class="btn btn-secondary" id="btn-cancel-rsmodal">Đóng</button>
           </div>
         </div>
@@ -441,18 +441,18 @@ export class BackupModule {
 
             <div class="form-group">
               <label class="form-label text-bold">Chọn chế độ khôi phục:</label>
-              <div class="restore-mode-options">
-                <label class="restore-mode-card">
-                  <input type="radio" name="restore-mode" value="replace" checked>
-                  <div class="restore-mode-text">
+              <div class="restore-mode-options" style="display: flex; flex-direction: column; gap: 8px;">
+                <label class="restore-mode-card" style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: #ffffff; cursor: pointer;">
+                  <input type="radio" name="restore-mode" value="replace" checked style="margin-top: 3px; flex-shrink: 0;">
+                  <div class="restore-mode-text" style="display: flex; flex-direction: column; gap: 2px; font-size: 13px; line-height: 1.35;">
                     <b>Thay thế toàn bộ (Khuyên dùng)</b>
                     <span>Xóa dữ liệu cũ trên máy này và nạp y hệt dữ liệu từ bản sao lưu. Thích hợp khi chuyển sang máy mới.</span>
                   </div>
                 </label>
 
-                <label class="restore-mode-card">
-                  <input type="radio" name="restore-mode" value="merge">
-                  <div class="restore-mode-text">
+                <label class="restore-mode-card" style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: #ffffff; cursor: pointer;">
+                  <input type="radio" name="restore-mode" value="merge" style="margin-top: 3px; flex-shrink: 0;">
+                  <div class="restore-mode-text" style="display: flex; flex-direction: column; gap: 2px; font-size: 13px; line-height: 1.35;">
                     <b>Gộp thêm dữ liệu</b>
                     <span>Giữ nguyên dữ liệu hiện có, bổ sung thêm và cập nhật theo mã từ file sao lưu.</span>
                   </div>
@@ -465,9 +465,9 @@ export class BackupModule {
             </div>
           </div>
 
-          <div class="modal-footer">
+          <div class="modal-footer" style="justify-content: flex-end; flex-wrap: wrap; gap: 8px;">
             <button type="button" class="btn btn-secondary" id="btn-cancel-rpmodal">Hủy</button>
-            <button type="button" class="btn btn-danger" id="btn-confirm-restore" style="font-weight: 800;">✓ Bắt Đầu Nạp Dữ Liệu</button>
+            <button type="button" class="btn btn-danger" id="btn-confirm-restore" style="font-weight: 800; white-space: nowrap;">✓ Bắt Đầu Nạp Dữ Liệu</button>
           </div>
         </div>
       </div>
@@ -523,16 +523,16 @@ export class BackupModule {
     }
 
     return `
-      <div class="snapshot-list">
+      <div class="snapshot-list" style="display: flex; flex-direction: column; gap: 8px;">
         ${snapshots.map(s => `
-          <div class="snapshot-item">
-            <div class="snapshot-info">
+          <div class="snapshot-item" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: #f8fafc;">
+            <div class="snapshot-info" style="min-width: 0; flex: 1 1 180px;">
               <div class="snapshot-title text-bold">${escapeHTML(s.note || 'Bản chụp tự động')}</div>
               <div class="snapshot-meta text-xs text-muted">
                 ${formatDateTime(s.createdAt)} • ${s.summary?.productsCount || 0} diều, ${s.summary?.ordersCount || 0} đơn
               </div>
             </div>
-            <button class="btn btn-outline-danger btn-xs btn-restore-snapshot" data-id="${s.id}">
+            <button class="btn btn-outline-danger btn-xs btn-restore-snapshot" style="flex-shrink: 0; white-space: nowrap;" data-id="${s.id}">
               Khôi phục lại
             </button>
           </div>
@@ -586,21 +586,21 @@ export class BackupModule {
                 <p class="empty-desc">Không có sản phẩm, khách hàng hay đơn hàng nào bị xóa.</p>
               </div>
             ` : `
-              <div class="trash-list">
+              <div class="trash-list" style="display: flex; flex-direction: column; gap: 10px;">
                 ${trashItems.map(item => `
-                  <div class="trash-card" data-store="${item._storeName}" data-id="${item.id}">
-                    <div class="trash-info">
+                  <div class="trash-card" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-card); box-shadow: var(--shadow-sm);" data-store="${item._storeName}" data-id="${item.id}">
+                    <div class="trash-info" style="min-width: 0; flex: 1 1 180px;">
                       <span class="badge badge-neutral">${escapeHTML(item._typeName)}</span>
                       <span class="text-bold ml-2">${escapeHTML(item.name || item.customerName || item.id)}</span>
-                      <div class="text-xs text-muted mt-1">
+                      <div class="text-xs text-muted mt-1" style="margin-top: 4px;">
                         Xóa lúc: ${formatDateTime(item.deletedAt)}
                       </div>
                     </div>
-                    <div class="trash-actions">
-                      <button class="btn btn-success btn-xs btn-restore-item" data-store="${item._storeName}" data-id="${item.id}">
+                    <div class="trash-actions" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; flex-shrink: 0;">
+                      <button class="btn btn-success btn-xs btn-restore-item" style="white-space: nowrap;" data-store="${item._storeName}" data-id="${item.id}">
                         ↩ Khôi phục
                       </button>
-                      <button class="btn btn-outline-danger btn-xs btn-purge-item" data-store="${item._storeName}" data-id="${item.id}">
+                      <button class="btn btn-outline-danger btn-xs btn-purge-item" style="white-space: nowrap;" data-store="${item._storeName}" data-id="${item.id}">
                         Xóa vĩnh viễn
                       </button>
                     </div>
@@ -610,7 +610,7 @@ export class BackupModule {
             `}
           </div>
 
-          <div class="modal-footer">
+          <div class="modal-footer" style="justify-content: flex-end; flex-wrap: wrap; gap: 8px;">
             <button class="btn btn-secondary" id="btn-close-trash2">Đóng</button>
           </div>
         </div>
