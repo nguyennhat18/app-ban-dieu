@@ -31,6 +31,10 @@ import {
   hasVietQRConfig,
   resolveOrderQR
 } from '../js/vietqr.js';
+import {
+  DEFAULT_WAREHOUSES,
+  normalizeWarehouseId
+} from '../js/config.js';
 
 console.log('========================================================');
 console.log('🧪 BẮT ĐẦU CHẠY BỘ TEST TỰ ĐỘNG CHO HỆ THỐNG BÁN DIỀU');
@@ -313,33 +317,60 @@ async function main() {
     assert.strictEqual(product.stock, 5);
   });
 
-  // ================= 8. TEST PHÂN TÁCH HAI KHO & EXCEL IMPORTER =================
-  runTest('8.1. Phân chia 2 kho: Kho Mới (\'new\') và Kho Tồn (\'stock\')', () => {
+  // ================= 8. TEST KHO HÀNG ĐA KHO & EXCEL IMPORTER =================
+  runTest('8.1. Cấu hình 9 kho mới + Kho Tồn (đã bỏ Kho Mới) & normalizeWarehouseId', () => {
+    const expectedIds = [
+      'kho-ao-dieu',
+      'kho-nan-dieu',
+      'kho-pass-inox',
+      'kho-thanh-cai',
+      'kho-guong-inox',
+      'kho-day-dieu',
+      'kho-sao-dieu',
+      'kho-dieu',
+      'kho-combo',
+      'stock'
+    ];
+    assert.strictEqual(DEFAULT_WAREHOUSES.length, 10);
+    assert.deepStrictEqual(DEFAULT_WAREHOUSES.map(w => w.id), expectedIds);
+    assert.strictEqual(DEFAULT_WAREHOUSES.some(w => w.id === 'new' || w.name === 'Kho Mới'), false);
+
+    // Dữ liệu cũ ('new' hoặc thiếu trường warehouse) được map an toàn sang 'kho-dieu'
+    assert.strictEqual(normalizeWarehouseId('new', DEFAULT_WAREHOUSES), 'kho-dieu');
+    assert.strictEqual(normalizeWarehouseId('', DEFAULT_WAREHOUSES), 'kho-dieu');
+    assert.strictEqual(normalizeWarehouseId(undefined, DEFAULT_WAREHOUSES), 'kho-dieu');
+    assert.strictEqual(normalizeWarehouseId('kho-pass-inox', DEFAULT_WAREHOUSES), 'kho-pass-inox');
+    assert.strictEqual(normalizeWarehouseId('stock', DEFAULT_WAREHOUSES), 'stock');
+
     const products = [
       { id: '1', name: 'Diều sáo 2.5m', warehouse: 'new', stock: 5 },
-      { id: '2', name: 'Pass khóa D7 D8', warehouse: 'stock', stock: 12 },
-      { id: '3', name: 'Diều lắp ghép', stock: 3 }, // Mặc định là 'new' nếu thiếu trường
+      { id: '2', name: 'Pass khóa D7 D8', warehouse: 'kho-pass-inox', stock: 12 },
+      { id: '3', name: 'Diều lắp ghép', stock: 3 },
       { id: '4', name: 'Dây amiang 3.0', warehouse: 'stock', stock: 4 }
     ];
+    const dieuProducts = products.filter(p => normalizeWarehouseId(p.warehouse, DEFAULT_WAREHOUSES) === 'kho-dieu');
+    const passProducts = products.filter(p => normalizeWarehouseId(p.warehouse, DEFAULT_WAREHOUSES) === 'kho-pass-inox');
+    const stockProducts = products.filter(p => normalizeWarehouseId(p.warehouse, DEFAULT_WAREHOUSES) === 'stock');
 
-    const newWarehouseProducts = products.filter(p => (p.warehouse || 'new') === 'new');
-    const stockWarehouseProducts = products.filter(p => p.warehouse === 'stock');
-
-    assert.strictEqual(newWarehouseProducts.length, 2);
-    assert.strictEqual(stockWarehouseProducts.length, 2);
+    assert.strictEqual(dieuProducts.length, 2);
+    assert.strictEqual(passProducts.length, 1);
+    assert.strictEqual(stockProducts.length, 1);
   });
 
-  runTest('8.2. Chuyển đổi mặt hàng giữa 2 kho hàng', () => {
-    const product = { id: '1', name: 'Diều sáo 2 cánh', warehouse: 'new' };
-    const switchWarehouse = (p) => {
-      p.warehouse = (p.warehouse === 'stock') ? 'new' : 'stock';
-    };
+  runTest('8.2. Chuyển đổi & tạo kho hàng động', () => {
+    const customWarehouses = [
+      ...DEFAULT_WAREHOUSES,
+      { id: 'kho-duoi-dieu-1234', name: 'Kho Đuôi Diều', icon: '🎏' }
+    ];
+    const product = { id: '1', name: 'Đuôi vải 5m', warehouse: 'kho-dieu' };
+    product.warehouse = normalizeWarehouseId('kho-duoi-dieu-1234', customWarehouses);
+    assert.strictEqual(product.warehouse, 'kho-duoi-dieu-1234');
 
-    switchWarehouse(product);
-    assert.strictEqual(product.warehouse, 'stock');
+    product.warehouse = normalizeWarehouseId('kho-ao-dieu', customWarehouses);
+    assert.strictEqual(product.warehouse, 'kho-ao-dieu');
 
-    switchWarehouse(product);
-    assert.strictEqual(product.warehouse, 'new');
+    // Khi kho không còn tồn tại trong danh sách -> fallback an toàn về kho đầu tiên
+    assert.strictEqual(normalizeWarehouseId('kho-khong-ton-tai', customWarehouses), 'kho-ao-dieu');
   });
 
   runTest('8.3. Excel Importer & Nhận diện tự động danh mục, đơn vị tính', () => {
