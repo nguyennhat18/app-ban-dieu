@@ -9,9 +9,15 @@ import {
   addDays,
   numberToVietnameseWords,
   shareFileOrDownload,
+  downloadBlobFile,
   escapeHTML
 } from '../utils.js';
 import { registerVietnameseFont } from '../vendor/roboto-font.js';
+import {
+  resolveOrderQR,
+  drawVietQRToJsPdf,
+  normalizeTransferContent
+} from '../vietqr.js';
 
 export class QuotationsModule {
   constructor(app) {
@@ -756,6 +762,8 @@ export class QuotationsModule {
     if (!q) return;
 
     const shop = (await db.getSetting('shop_info')) || {};
+    const qrDesc = normalizeTransferContent(q.id);
+    const qrInfo = resolveOrderQR(shop, q.totalAmount, q.id);
 
     const modalHtml = `
       <div class="modal-backdrop" id="quote-preview-modal">
@@ -849,11 +857,20 @@ export class QuotationsModule {
               </div>
             </div>
 
-            ${shop.qrCode ? `
+            ${qrInfo ? `
               <div class="doc-bank-box mt-3 p-2 bg-light text-center">
-                <div class="text-xs text-bold text-primary mb-1">📱 Quét mã QR thanh toán đặt cọc / chuyển khoản:</div>
-                <img src="${shop.qrCode}" style="width: 120px; height: 120px; object-fit: contain; background:#fff; padding:4px; border:1px solid #cbd5e1; border-radius:6px;" alt="QR Code">
-                ${shop.bankInfo ? `<div class="text-xs text-bold text-muted mt-1">${escapeHTML(shop.bankInfo)}</div>` : ''}
+                <div class="text-xs text-bold text-primary mb-1">
+                  ${qrInfo.type === 'vietqr'
+                    ? `📱 Quét mã VietQR thanh toán / đặt cọc (${formatVND(q.totalAmount)}):`
+                    : '📱 Quét mã QR thanh toán đặt cọc / chuyển khoản:'}
+                </div>
+                <img src="${qrInfo.dataUrl}" style="width: 120px; height: 120px; object-fit: contain; background:#fff; padding:4px; border:1px solid #cbd5e1; border-radius:6px;" alt="QR Code">
+                ${qrInfo.type === 'vietqr' ? `
+                  <div class="text-xs text-bold text-muted mt-1">
+                    ${escapeHTML(qrInfo.bankLabel)} • STK: <span style="color:#0f172a;">${escapeHTML(qrInfo.account)}</span>${qrInfo.accountName ? ` (${escapeHTML(qrInfo.accountName)})` : ''}
+                  </div>
+                  <div class="text-xs text-muted">Nội dung CK: <code>${escapeHTML(qrInfo.normalizedDesc || qrDesc)}</code></div>
+                ` : (shop.bankInfo ? `<div class="text-xs text-bold text-muted mt-1">${escapeHTML(shop.bankInfo)}</div>` : '')}
               </div>
             ` : (shop.bankInfo ? `
               <div class="doc-bank-box mt-3 p-2 bg-light">
@@ -870,7 +887,8 @@ export class QuotationsModule {
           </div>
 
           <div class="modal-footer" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px;">
-            <button class="btn btn-outline-primary btn-sm" id="btn-modal-pdf">📄 Xuất PDF & Gửi Zalo</button>
+            <button class="btn btn-primary btn-sm" id="btn-modal-download-pdf">⬇️ Tải PDF</button>
+            <button class="btn btn-outline-primary btn-sm" id="btn-modal-pdf">📤 Gửi PDF Zalo</button>
             <button class="btn btn-outline-success btn-sm" id="btn-modal-excel">📊 Xuất Excel</button>
             ${q.status !== 'converted' ? `
               <button class="btn btn-success btn-sm" id="btn-modal-convert">⚡ Chuyển Thành Đơn Bán</button>
@@ -890,8 +908,50 @@ export class QuotationsModule {
     document.getElementById('btn-close-qpmodal').addEventListener('click', close);
     document.getElementById('btn-close-qpmodal2').addEventListener('click', close);
 
-    document.getElementById('btn-modal-pdf').addEventListener('click', () => {
-      this.generateAndSharePDF(q.id);
+    const markSentIfDraft = async () => {
+      if (q.status === 'draft') {
+        q.status = 'sent';
+        await db.put('quotations', q);
+        this.render();
+      }
+    };
+
+    document.getElementById('btn-modal-download-pdf').addEventListener('click', async () => {
+      try {
+        const { pdfBlob, fileName } = this._buildQuotationPdf(q, shop);
+        downloadBlobFile(pdfBlob, fileName);
+        await markSentIfDraft();
+      } catch (err) {
+        alert('Lỗi tạo file PDF: ' + err.message);
+        console.error(err);
+      }
+    });
+
+    document.getElementById('btn-modal-pdf').addEventListener('click', async () => {
+      try {
+        const { pdfBlob, fileName } = this._buildQuotationPdf(q, shop);
+        const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({
+              files: [file],
+              title: `Báo giá diều ${q.id} - ${q.customerName}`,
+              text: `Kính gửi ${q.customerName}, gửi bạn bản báo giá ${q.id} từ ${shop.shopName || 'Cửa Hàng Diều'}.`
+            });
+            await markSentIfDraft();
+            return;
+          } catch (shareErr) {
+            if (shareErr.name === 'AbortError') return;
+            console.warn('Web Share PDF báo giá thất bại, chuyển sang tải xuống:', shareErr);
+          }
+        }
+        downloadBlobFile(pdfBlob, fileName);
+        await markSentIfDraft();
+        alert(`Đã tải file "${fileName}" về máy — bạn mở Zalo chọn đính kèm file PDF vừa tải để gửi cho khách nhé!`);
+      } catch (err) {
+        alert('Lỗi tạo file PDF: ' + err.message);
+        console.error(err);
+      }
     });
 
     document.getElementById('btn-modal-excel').addEventListener('click', () => {
@@ -907,6 +967,325 @@ export class QuotationsModule {
     }
   }
 
+  _detectPdfImageFormat(dataUrl) {
+    if (typeof dataUrl !== 'string') return 'JPEG';
+    const lower = dataUrl.slice(0, 40).toLowerCase();
+    if (lower.includes('image/png')) return 'PNG';
+    if (lower.includes('image/webp')) return 'WEBP';
+    return 'JPEG';
+  }
+
+  _buildQuotationPdf(q, shop = {}) {
+    if (!window.jspdf || !window.jspdf.jsPDF) {
+      throw new Error('Thư viện jsPDF chưa sẵn sàng. Vui lòng tải lại trang.');
+    }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({
+      orientation: 'p',
+      unit: 'mm',
+      format: 'a4'
+    });
+
+    // 1. NHÚNG FONT ROBOTO HỖ TRỢ 100% TIẾNG VIỆT CÓ DẤU
+    registerVietnameseFont(doc);
+
+    const primaryColor = [2, 132, 199];
+    const darkColor = [30, 41, 59];
+    const BOTTOM_LIMIT = 274;
+
+    let startY = 18;
+
+    // 2. Header: Logo và thông tin cửa hàng
+    if (shop.logo) {
+      try {
+        const logoFmt = this._detectPdfImageFormat(shop.logo);
+        doc.addImage(shop.logo, logoFmt, 14, 12, 24, 24);
+      } catch {
+        // Bỏ qua nếu lỗi nén ảnh
+      }
+    }
+
+    const textStartX = shop.logo ? 42 : 14;
+    const leftMaxW = shop.logo ? 96 : 124;
+    doc.setFont('Roboto', 'bold');
+    doc.setFontSize(14);
+    doc.setTextColor(...primaryColor);
+    const shopNameLines = doc.splitTextToSize(shop.shopName || 'CỬA HÀNG BÁN DIỀU', leftMaxW);
+    doc.text(shopNameLines, textStartX, startY);
+    let leftY = startY + shopNameLines.length * 5.5;
+
+    doc.setFont('Roboto', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(...darkColor);
+    if (shop.address) {
+      const addrLines = doc.splitTextToSize(`Địa chỉ: ${shop.address}`, leftMaxW);
+      doc.text(addrLines, textStartX, leftY);
+      leftY += addrLines.length * 4.5;
+    }
+    if (shop.phone) {
+      const phoneLines = doc.splitTextToSize(`Hotline: ${shop.phone}`, leftMaxW);
+      doc.text(phoneLines, textStartX, leftY);
+      leftY += phoneLines.length * 4.5;
+    }
+
+    // Tiêu đề báo giá góc trên phải
+    doc.setFont('Roboto', 'bold');
+    doc.setFontSize(16);
+    doc.setTextColor(...primaryColor);
+    doc.text('BÁO GIÁ', 196, startY, { align: 'right' });
+
+    doc.setFont('Roboto', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(...darkColor);
+    doc.text(`Số: ${q.id}`, 196, startY + 6, { align: 'right' });
+    doc.text(`Ngày: ${formatDate(q.createdAt)}`, 196, startY + 11, { align: 'right' });
+    doc.setTextColor(220, 38, 38); // Màu đỏ cho hạn hiệu lực
+    doc.text(`Hạn hiệu lực: ${formatDate(q.validUntil)}`, 196, startY + 16, { align: 'right' });
+    const rightY = startY + 20;
+
+    const headerEndY = Math.max(38, leftY + 2, rightY);
+
+    // Đường kẻ ngăn cách header
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.5);
+    doc.line(14, headerEndY, 196, headerEndY);
+
+    let curY = headerEndY + 7;
+
+    // 3. Thông tin người nhận báo giá (tự wrap tránh tràn)
+    doc.setTextColor(...darkColor);
+    doc.setFont('Roboto', 'bold');
+    doc.setFontSize(10);
+    doc.text('KÍNH GỬI QUÝ KHÁCH HÀNG:', 14, curY);
+    curY += 6;
+
+    doc.setFont('Roboto', 'normal');
+    doc.setFontSize(9);
+    const custLines = doc.splitTextToSize(`Khách hàng: ${q.customerName || 'Quý khách'}`, 182);
+    doc.text(custLines, 14, curY);
+    curY += custLines.length * 4.8;
+
+    if (q.customerPhone) {
+      doc.text(`Số điện thoại: ${q.customerPhone}`, 14, curY);
+      curY += 4.8;
+    }
+    if (q.customerAddress) {
+      const custAddrLines = doc.splitTextToSize(`Địa chỉ: ${q.customerAddress}`, 182);
+      doc.text(custAddrLines, 14, curY);
+      curY += custAddrLines.length * 4.8;
+    }
+
+    const tableStartY = curY + 2;
+
+    // 4. Bảng danh sách hàng hóa (dùng autoTable với font Roboto)
+    const tableRows = (q.items || []).map((item, index) => [
+      index + 1,
+      item.productName,
+      item.unit || 'Chiếc',
+      item.quantity,
+      formatVND(item.unitPrice),
+      formatVND(item.subtotal)
+    ]);
+
+    doc.autoTable({
+      startY: tableStartY,
+      margin: { top: 14, bottom: 16, left: 14, right: 14 },
+      head: [['STT', 'Tên sản phẩm diều / Phụ kiện', 'ĐVT', 'SL', 'Đơn giá', 'Thành tiền']],
+      body: tableRows,
+      styles: {
+        font: 'Roboto',
+        fontStyle: 'normal',
+        fontSize: 9,
+        cellPadding: 3,
+        lineColor: [226, 232, 240],
+        lineWidth: 0.2
+      },
+      headStyles: {
+        font: 'Roboto',
+        fontStyle: 'bold',
+        fillColor: primaryColor,
+        textColor: [255, 255, 255],
+        halign: 'center'
+      },
+      columnStyles: {
+        0: { halign: 'center', cellWidth: 12 },
+        1: { cellWidth: 74 },
+        2: { halign: 'center', cellWidth: 18 },
+        3: { halign: 'center', cellWidth: 15 },
+        4: { halign: 'right', cellWidth: 28 },
+        5: { halign: 'right', cellWidth: 35 }
+      },
+      theme: 'grid'
+    });
+
+    let finalY = (doc.lastAutoTable ? doc.lastAutoTable.finalY : tableStartY) + 6;
+    const ensureSpace = (neededMm) => {
+      if (finalY + neededMm > BOTTOM_LIMIT) {
+        doc.addPage();
+        finalY = 18;
+      }
+    };
+
+    // 5. Tổng tiền & Chiết khấu (kiểm tra tràn trang)
+    const summaryRowCount = 2
+      + (q.discountAmount > 0 ? 1 : 0)
+      + (q.shippingFee > 0 ? 1 : 0)
+      + (q.vatAmount > 0 ? 1 : 0);
+    doc.setFont('Roboto', 'normal');
+    doc.setFontSize(9);
+    const inWordsLines = doc.splitTextToSize(`Bằng chữ: ${numberToVietnameseWords(q.totalAmount)}`, 182);
+    ensureSpace(summaryRowCount * 5.5 + inWordsLines.length * 4.5 + 8);
+
+    doc.text('Tiền hàng:', 130, finalY);
+    doc.text(formatVND(q.subtotal), 196, finalY, { align: 'right' });
+
+    if (q.discountAmount > 0) {
+      finalY += 5;
+      doc.text('Chiết khấu:', 130, finalY);
+      doc.text(`-${formatVND(q.discountAmount)}`, 196, finalY, { align: 'right' });
+    }
+
+    if (q.shippingFee > 0) {
+      finalY += 5;
+      doc.text('Phí vận chuyển:', 130, finalY);
+      doc.text(`+${formatVND(q.shippingFee)}`, 196, finalY, { align: 'right' });
+    }
+
+    if (q.vatAmount > 0) {
+      finalY += 5;
+      doc.text(`VAT (${q.vatRate}%):`, 130, finalY);
+      doc.text(`+${formatVND(q.vatAmount)}`, 196, finalY, { align: 'right' });
+    }
+
+    finalY += 6;
+    doc.setFont('Roboto', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(...primaryColor);
+    doc.text('TỔNG CỘNG:', 130, finalY);
+    doc.text(formatVND(q.totalAmount), 196, finalY, { align: 'right' });
+
+    // Bằng chữ
+    finalY += 6;
+    doc.setFont('Roboto', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(...darkColor);
+    doc.text(inWordsLines, 14, finalY);
+    finalY += inWordsLines.length * 4.5 + 2;
+
+    // 6. Thông tin chuyển khoản & VietQR offline sắc nét
+    const qrDesc = normalizeTransferContent(q.id);
+    const qrInfo = resolveOrderQR(shop, q.totalAmount, q.id);
+
+    if (qrInfo) {
+      doc.setFont('Roboto', 'normal');
+      doc.setFontSize(8.5);
+      const infoLines = [];
+      infoLines.push({ text: `Số tiền thanh toán: ${formatVND(q.totalAmount)}`, bold: false });
+      if (qrInfo.type === 'vietqr') {
+        const bankStr = `${qrInfo.bankLabel} • STK: ${qrInfo.account}${qrInfo.accountName ? ` (${qrInfo.accountName})` : ''}`;
+        doc.splitTextToSize(bankStr, 134).forEach(l => infoLines.push({ text: l, bold: false }));
+        infoLines.push({ text: `Nội dung CK: ${qrInfo.normalizedDesc || qrDesc}`, bold: true });
+      } else if (shop.bankInfo) {
+        doc.splitTextToSize(shop.bankInfo, 134).forEach(l => infoLines.push({ text: l, bold: false }));
+      }
+
+      const boxHeight = Math.max(36, 12 + infoLines.length * 4.5 + 3);
+      ensureSpace(boxHeight + 6);
+      finalY += 4;
+
+      doc.setFillColor(248, 250, 252);
+      doc.setDrawColor(203, 213, 225);
+      doc.roundedRect(14, finalY, 182, boxHeight, 2, 2, 'FD');
+
+      let qrDrawn = false;
+      if (qrInfo.type === 'vietqr' && qrInfo.qrText) {
+        try {
+          drawVietQRToJsPdf(doc, qrInfo.qrText, 162, finalY + 3, 29);
+          qrDrawn = true;
+        } catch (qrErr) {
+          console.warn('Lỗi vẽ VietQR trên PDF báo giá:', qrErr);
+        }
+      }
+      if (!qrDrawn && qrInfo.dataUrl) {
+        try {
+          const qrFmt = this._detectPdfImageFormat(qrInfo.dataUrl);
+          doc.addImage(qrInfo.dataUrl, qrFmt, 162, finalY + 3, 29, 29);
+        } catch {
+          // Ignored if image format issue
+        }
+      }
+
+      doc.setFont('Roboto', 'bold');
+      doc.setFontSize(9);
+      doc.setTextColor(...primaryColor);
+      doc.text(
+        qrInfo.type === 'vietqr' ? 'Thông tin thanh toán VietQR (tự điền số tiền):' : 'Thông tin thanh toán chuyển khoản:',
+        18,
+        finalY + 6
+      );
+
+      let lineY = finalY + 12;
+      doc.setFontSize(8.5);
+      doc.setTextColor(...darkColor);
+      for (const item of infoLines) {
+        doc.setFont('Roboto', item.bold ? 'bold' : 'normal');
+        doc.text(item.text, 18, lineY);
+        lineY += 4.5;
+      }
+
+      finalY += boxHeight + 3;
+    } else if (shop.bankInfo) {
+      doc.setFont('Roboto', 'normal');
+      doc.setFontSize(8.5);
+      const bankLines = doc.splitTextToSize(shop.bankInfo, 174);
+      const boxHeight = 9 + bankLines.length * 4.5;
+      ensureSpace(boxHeight + 6);
+      finalY += 4;
+      doc.setFillColor(248, 250, 252);
+      doc.setDrawColor(203, 213, 225);
+      doc.roundedRect(14, finalY, 182, boxHeight, 2, 2, 'FD');
+      doc.setFont('Roboto', 'bold');
+      doc.setTextColor(...darkColor);
+      doc.text('Thông tin thanh toán chuyển khoản:', 18, finalY + 5.5);
+      doc.setFont('Roboto', 'normal');
+      doc.text(bankLines, 18, finalY + 10.5);
+      finalY += boxHeight + 3;
+    }
+
+    if (q.notes) {
+      doc.setFont('Roboto', 'normal');
+      doc.setFontSize(8.5);
+      const notesLines = doc.splitTextToSize(`Ghi chú: ${q.notes}`, 182);
+      ensureSpace(notesLines.length * 4.5 + 4);
+      finalY += 3;
+      doc.setTextColor(100, 116, 139);
+      doc.text(notesLines, 14, finalY);
+      finalY += notesLines.length * 4.5;
+    }
+
+    // Footer luôn đặt an toàn không đè nội dung
+    ensureSpace(10);
+    const pageCount = doc.getNumberOfPages();
+    doc.setFont('Roboto', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    doc.text('Cảm ơn quý khách đã tin tưởng và ủng hộ cửa hàng! Diều bay no gió, vạn sự hanh thông!', 105, 285, { align: 'center' });
+    if (pageCount > 1) {
+      for (let p = 1; p <= pageCount; p++) {
+        doc.setPage(p);
+        doc.setFont('Roboto', 'normal');
+        doc.setFontSize(7.5);
+        doc.setTextColor(148, 163, 184);
+        doc.text(`Trang ${p}/${pageCount}`, 196, 289, { align: 'right' });
+      }
+    }
+
+    const pdfBlob = doc.output('blob');
+    const fileName = `BaoGia-${q.id}.pdf`;
+    return { doc, pdfBlob, fileName };
+  }
+
   // ================= XUẤT PDF CHUẨN TIẾNG VIỆT CÓ DẤU & CHIA SẺ =================
   async generateAndSharePDF(quoteId) {
     const q = await db.getById('quotations', quoteId);
@@ -915,203 +1294,7 @@ export class QuotationsModule {
     const shop = (await db.getSetting('shop_info')) || {};
 
     try {
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF({
-        orientation: 'p',
-        unit: 'mm',
-        format: 'a4'
-      });
-
-      // 1. NHÚNG FONT ROBOTO HỖ TRỢ 100% TIẾNG VIỆT CÓ DẤU
-      registerVietnameseFont(doc);
-
-      // Màu sắc chủ đạo: Xanh diều (#0284c7)
-      const primaryColor = [2, 132, 199];
-      const darkColor = [30, 41, 59];
-
-      let startY = 18;
-
-      // 2. Header: Logo và thông tin cửa hàng
-      if (shop.logo) {
-        try {
-          doc.addImage(shop.logo, 'JPEG', 14, 12, 24, 24);
-        } catch {
-          // Bỏ qua nếu lỗi nén ảnh
-        }
-      }
-
-      const textStartX = shop.logo ? 42 : 14;
-      doc.setFont('Roboto', 'bold');
-      doc.setFontSize(14);
-      doc.setTextColor(...primaryColor);
-      doc.text(shop.shopName || 'CỬA HÀNG BÁN DIỀU', textStartX, startY);
-
-      doc.setFont('Roboto', 'normal');
-      doc.setFontSize(9);
-      doc.setTextColor(...darkColor);
-      doc.text(`Địa chỉ: ${shop.address || ''}`, textStartX, startY + 6);
-      doc.text(`Hotline: ${shop.phone || ''}`, textStartX, startY + 11);
-
-      // Tiêu đề báo giá góc trên phải
-      doc.setFont('Roboto', 'bold');
-      doc.setFontSize(16);
-      doc.setTextColor(...primaryColor);
-      doc.text('BÁO GIÁ', 196, startY, { align: 'right' });
-
-      doc.setFont('Roboto', 'normal');
-      doc.setFontSize(9);
-      doc.setTextColor(...darkColor);
-      doc.text(`Số: ${q.id}`, 196, startY + 6, { align: 'right' });
-      doc.text(`Ngày: ${formatDate(q.createdAt)}`, 196, startY + 11, { align: 'right' });
-      doc.setTextColor(220, 38, 38); // Màu đỏ cho hạn hiệu lực
-      doc.text(`Hạn hiệu lực: ${formatDate(q.validUntil)}`, 196, startY + 16, { align: 'right' });
-
-      // Đường kẻ ngăn cách header
-      doc.setDrawColor(226, 232, 240);
-      doc.setLineWidth(0.5);
-      doc.line(14, 38, 196, 38);
-
-      // 3. Thông tin người nhận báo giá
-      doc.setTextColor(...darkColor);
-      doc.setFont('Roboto', 'bold');
-      doc.setFontSize(10);
-      doc.text('KÍNH GỬI QUÝ KHÁCH HÀNG:', 14, 45);
-
-      doc.setFont('Roboto', 'normal');
-      doc.setFontSize(9);
-      doc.text(`Khách hàng: ${q.customerName || 'Quý khách'}`, 14, 51);
-      if (q.customerPhone) doc.text(`Số điện thoại: ${q.customerPhone}`, 14, 56);
-      if (q.customerAddress) doc.text(`Địa chỉ: ${q.customerAddress}`, 14, 61);
-
-      const tableStartY = q.customerAddress ? 66 : 61;
-
-      // 4. Bảng danh sách hàng hóa (dùng autoTable với font Roboto)
-      const tableRows = (q.items || []).map((item, index) => [
-        index + 1,
-        item.productName,
-        item.unit || 'Chiếc',
-        item.quantity,
-        formatVND(item.unitPrice),
-        formatVND(item.subtotal)
-      ]);
-
-      doc.autoTable({
-        startY: tableStartY,
-        head: [['STT', 'Tên sản phẩm diều / Phụ kiện', 'ĐVT', 'SL', 'Đơn giá', 'Thành tiền']],
-        body: tableRows,
-        styles: {
-          font: 'Roboto',
-          fontStyle: 'normal',
-          fontSize: 9,
-          cellPadding: 3,
-          lineColor: [226, 232, 240],
-          lineWidth: 0.2
-        },
-        headStyles: {
-          font: 'Roboto',
-          fontStyle: 'bold',
-          fillColor: primaryColor,
-          textColor: [255, 255, 255],
-          halign: 'center'
-        },
-        columnStyles: {
-          0: { halign: 'center', cellWidth: 12 },
-          1: { cellWidth: 80 },
-          2: { halign: 'center', cellWidth: 20 },
-          3: { halign: 'center', cellWidth: 15 },
-          4: { halign: 'right', cellWidth: 28 },
-          5: { halign: 'right', cellWidth: 35 }
-        },
-        theme: 'grid'
-      });
-
-      let finalY = doc.lastAutoTable.finalY + 6;
-
-      // 5. Tổng tiền & Chiết khấu
-      doc.setFont('Roboto', 'normal');
-      doc.setFontSize(9);
-      doc.text('Tiền hàng:', 130, finalY);
-      doc.text(formatVND(q.subtotal), 196, finalY, { align: 'right' });
-
-      if (q.discountAmount > 0) {
-        finalY += 5;
-        doc.text('Chiết khấu:', 130, finalY);
-        doc.text(`-${formatVND(q.discountAmount)}`, 196, finalY, { align: 'right' });
-      }
-
-      if (q.shippingFee > 0) {
-        finalY += 5;
-        doc.text('Phí vận chuyển:', 130, finalY);
-        doc.text(`+${formatVND(q.shippingFee)}`, 196, finalY, { align: 'right' });
-      }
-
-      if (q.vatAmount > 0) {
-        finalY += 5;
-        doc.text(`VAT (${q.vatRate}%):`, 130, finalY);
-        doc.text(`+${formatVND(q.vatAmount)}`, 196, finalY, { align: 'right' });
-      }
-
-      finalY += 6;
-      doc.setFont('Roboto', 'bold');
-      doc.setFontSize(11);
-      doc.setTextColor(...primaryColor);
-      doc.text('TỔNG CỘNG:', 130, finalY);
-      doc.text(formatVND(q.totalAmount), 196, finalY, { align: 'right' });
-
-      // Bằng chữ
-      finalY += 6;
-      doc.setFont('Roboto', 'normal');
-      doc.setFontSize(9);
-      doc.setTextColor(...darkColor);
-      const inWords = `Bằng chữ: ${numberToVietnameseWords(q.totalAmount)}`;
-      doc.text(inWords, 14, finalY);
-
-      // 6. Thông tin chuyển khoản & Ghi chú & Mã QR
-      if (shop.bankInfo || shop.qrCode) {
-        finalY += 8;
-        const boxHeight = shop.qrCode ? 36 : 14;
-        doc.setFillColor(248, 250, 252);
-        doc.setDrawColor(203, 213, 225);
-        doc.roundedRect(14, finalY, 182, boxHeight, 2, 2, 'FD');
-        doc.setFont('Roboto', 'bold');
-        doc.setFontSize(8.5);
-        doc.text('Thông tin thanh toán chuyển khoản:', 18, finalY + 5);
-        if (shop.bankInfo) {
-          doc.setFont('Roboto', 'normal');
-          doc.text(shop.bankInfo, 18, finalY + 10);
-        }
-        if (shop.qrCode) {
-          try {
-            doc.addImage(shop.qrCode, 'JPEG', 158, finalY + 3, 30, 30);
-          } catch {
-            // Ignored if image format issue
-          }
-        }
-        finalY += (boxHeight + 2);
-      }
-
-      if (q.notes) {
-        finalY += 4;
-        doc.setFont('Roboto', 'normal');
-        doc.setFontSize(8.5);
-        doc.setTextColor(100, 116, 139);
-        doc.text(`Ghi chú: ${q.notes}`, 14, finalY);
-      }
-
-      // Footer
-      doc.setFontSize(8);
-      doc.setTextColor(148, 163, 184);
-      doc.text('Cảm ơn quý khách đã tin tưởng và ủng hộ cửa hàng! Diều bay no gió, vạn sự hanh thông!', 105, 285, { align: 'center' });
-
-      // Xuất Blob và chia sẻ
-      const pdfBlob = doc.output('blob');
-      const fileName = `BaoGia-${q.id}.pdf`;
-      const res = await shareFileOrDownload(
-        pdfBlob,
-        fileName,
-        `Báo giá diều ${q.id} - ${q.customerName}`,
-        `Kính gửi ${q.customerName}, gửi bạn bản báo giá ${q.id} từ ${shop.shopName || 'Cửa Hàng Diều'}.`
-      );
+      const { pdfBlob, fileName } = this._buildQuotationPdf(q, shop);
 
       // Cập nhật trạng thái 'sent'
       if (q.status === 'draft') {
@@ -1119,10 +1302,77 @@ export class QuotationsModule {
         await db.put('quotations', q);
         this.render();
       }
+
+      this._showQuotePdfExportModal(pdfBlob, fileName, q, shop);
     } catch (err) {
       alert('Lỗi tạo file PDF: ' + err.message);
       console.error(err);
     }
+  }
+
+  _showQuotePdfExportModal(pdfBlob, fileName, q, shop) {
+    const old = document.getElementById('quote-pdf-export-modal');
+    if (old) old.remove();
+
+    const modalHtml = `
+      <div class="modal-backdrop" id="quote-pdf-export-modal">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2 class="modal-title">📄 Xuất Báo Giá PDF</h2>
+            <button class="modal-close" id="btn-close-qpdfmodal">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="card p-3 mb-3 bg-light">
+              <div class="text-bold">Báo giá: ${escapeHTML(q.id)}</div>
+              <div class="text-xs text-muted mt-1">Tên file: <code>${escapeHTML(fileName)}</code></div>
+              <div class="text-xs text-muted mt-1">Khách hàng: <b>${escapeHTML(q.customerName || 'Quý khách')}</b> • Tổng: <b class="text-primary">${formatVND(q.totalAmount)}</b></div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+              <button type="button" class="btn btn-primary btn-block btn-lg" id="btn-qpdf-download">
+                ⬇️ Tải File PDF Về Máy
+              </button>
+              <button type="button" class="btn btn-success btn-block btn-lg" id="btn-qpdf-share">
+                📤 Gửi File PDF Qua Zalo / Chia Sẻ
+              </button>
+            </div>
+          </div>
+          <div class="modal-footer" style="justify-content: flex-end;">
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-cancel-qpdfmodal">Đóng</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    const modal = document.getElementById('quote-pdf-export-modal');
+    const close = () => modal.remove();
+    document.getElementById('btn-close-qpdfmodal').addEventListener('click', close);
+    document.getElementById('btn-cancel-qpdfmodal').addEventListener('click', close);
+
+    document.getElementById('btn-qpdf-download').addEventListener('click', () => {
+      downloadBlobFile(pdfBlob, fileName);
+      close();
+    });
+
+    document.getElementById('btn-qpdf-share').addEventListener('click', async () => {
+      const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: `Báo giá diều ${q.id} - ${q.customerName}`,
+            text: `Kính gửi ${q.customerName}, gửi bạn bản báo giá ${q.id} từ ${shop.shopName || 'Cửa Hàng Diều'}.`
+          });
+          close();
+          return;
+        } catch (err) {
+          if (err.name === 'AbortError') return;
+        }
+      }
+      downloadBlobFile(pdfBlob, fileName);
+      alert(`Trình duyệt không hỗ trợ chia sẻ trực tiếp. Đã tải "${fileName}" về máy để bạn gửi qua Zalo!`);
+      close();
+    });
   }
 
   // ================= XUẤT BÁO GIÁ RA FILE EXCEL (.XLSX) =================

@@ -1,6 +1,7 @@
 // Quản lý Công Nợ & Thu Nợ Khách Hàng
 import { db } from '../db.js';
 import { formatVND, parseVND, formatDateTime, escapeHTML } from '../utils.js';
+import { resolveOrderQR, normalizeTransferContent } from '../vietqr.js';
 
 export class DebtsModule {
   constructor(app) {
@@ -201,7 +202,9 @@ export class DebtsModule {
   }
 
   // ================= MODAL GHI NHẬN THU NỢ =================
-  showPaymentModal(customerId, customerName, currentDebt) {
+  async showPaymentModal(customerId, customerName, currentDebt) {
+    const shop = (await db.getSetting('shop_info')) || {};
+
     const modalHtml = `
       <div class="modal-backdrop" id="debt-payment-modal">
         <div class="modal-content">
@@ -233,6 +236,12 @@ export class DebtsModule {
               </select>
             </div>
 
+            <div id="dp-vietqr-section" class="mb-3" style="display: none;"></div>
+
+            <div id="dp-offline-notice" class="alert alert-warning mb-3" style="display: none; font-size: 12px; line-height: 1.45; border-radius: 10px; padding: 10px 12px;">
+              ⚠️ Lưu ý: App chạy offline nên KHÔNG tự biết khách đã chuyển tiền hay chưa. Chủ shop vui lòng tự kiểm tra biến động số dư ngân hàng rồi mới bấm xác nhận.
+            </div>
+
             <div class="form-group">
               <label class="form-label">Ghi chú thu nợ</label>
               <input type="text" id="dp-notes" class="form-input" placeholder="VD: Khách chuyển khoản Vietcombank...">
@@ -240,7 +249,7 @@ export class DebtsModule {
 
             <div class="modal-footer" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 12px;">
               <button type="button" class="btn btn-secondary" id="btn-cancel-dpmodal">Hủy</button>
-              <button type="submit" class="btn btn-success">✓ Xác Nhận Thu Tiền</button>
+              <button type="submit" class="btn btn-success" id="btn-confirm-debt-payment">✅ Đã nhận tiền (Thu tiền mặt)</button>
             </div>
           </form>
         </div>
@@ -257,10 +266,98 @@ export class DebtsModule {
     document.getElementById('btn-cancel-dpmodal').addEventListener('click', close);
 
     const amtInp = document.getElementById('dp-amount');
+    const methodSelect = document.getElementById('dp-method');
+    const qrSection = document.getElementById('dp-vietqr-section');
+    const offlineNoticeEl = document.getElementById('dp-offline-notice');
+    const submitBtn = document.getElementById('btn-confirm-debt-payment');
+
+    const rawDesc = `THANH TOAN NO ${customerName || customerId || ''}`;
+    const fallbackDesc = `THANH TOAN NO ${customerId || ''}`;
+    const baseDesc = normalizeTransferContent(rawDesc) || normalizeTransferContent(fallbackDesc) || 'THANH TOAN NO';
+
+    const updateDebtQrAndSubmitBtn = () => {
+      const amount = parseInt(amtInp.value, 10) || currentDebt;
+      const method = methodSelect ? methodSelect.value : 'cash';
+
+      if (submitBtn) {
+        submitBtn.textContent = method === 'transfer'
+          ? '✅ Đã nhận tiền (Xác nhận thu nợ)'
+          : '✅ Đã nhận tiền (Thu tiền mặt)';
+      }
+
+      let qrInfo = null;
+      try {
+        qrInfo = resolveOrderQR(shop, amount, baseDesc);
+      } catch {
+        qrInfo = null;
+      }
+
+      if (qrSection) {
+        if (qrInfo && qrInfo.dataUrl) {
+          const transferNote = qrInfo.normalizedDesc || baseDesc;
+          const bankLine = qrInfo.type === 'vietqr'
+            ? [qrInfo.bankLabel || shop.bankName, qrInfo.account || shop.bankAccount, qrInfo.accountName || shop.bankAccountName].filter(Boolean).join(' • ')
+            : (shop.bankInfo || 'Quét mã QR cửa hàng');
+          qrSection.style.display = 'block';
+          qrSection.innerHTML = `
+            <div class="card p-3" style="border: 1.5px solid ${method === 'transfer' ? '#0284c7' : '#bae6fd'}; background: #f0f9ff; border-radius: 12px; text-align: center;">
+              <div class="text-xs text-bold text-primary mb-2">🏦 VietQR Chuyển Khoản Thu Nợ</div>
+              <div style="display: inline-block; background: #fff; padding: 8px; border-radius: 10px; border: 1px solid #bae6fd;">
+                <img src="${qrInfo.dataUrl}" alt="VietQR Thu Nợ" style="width: 176px; height: 176px; object-fit: contain; display: block;">
+              </div>
+              <div class="text-sm text-bold text-danger mt-2">${formatVND(amount)}</div>
+              ${bankLine ? `<div class="text-xs text-bold mt-1">${escapeHTML(bankLine)}</div>` : ''}
+              <div class="text-xs text-muted mt-1">Nội dung CK: <code>${escapeHTML(transferNote)}</code></div>
+              <div class="mt-2" style="display: flex; justify-content: center; gap: 8px; flex-wrap: wrap;">
+                <button type="button" class="btn btn-outline-primary btn-xs" id="btn-zoom-debt-qr">🔍 Phóng to QR</button>
+                ${method !== 'transfer' ? `<button type="button" class="btn btn-primary btn-xs" id="btn-switch-debt-transfer">🏦 Chọn hình thức CK</button>` : ''}
+              </div>
+              <div class="alert alert-warning mt-2 mb-0" style="font-size: 12px; line-height: 1.45; border-radius: 8px; padding: 8px 10px; text-align: left;">
+                ⚠️ Lưu ý: App chạy offline nên KHÔNG tự biết khách đã chuyển tiền hay chưa. Chủ shop vui lòng tự kiểm tra biến động số dư ngân hàng rồi mới bấm xác nhận.
+              </div>
+            </div>
+          `;
+
+          document.getElementById('btn-zoom-debt-qr')?.addEventListener('click', () => {
+            if (this.app?.salesModule?.showFullScreenQrModal) {
+              this.app.salesModule.showFullScreenQrModal(qrInfo.dataUrl, bankLine, amount);
+            }
+          });
+          document.getElementById('btn-switch-debt-transfer')?.addEventListener('click', () => {
+            if (methodSelect) {
+              methodSelect.value = 'transfer';
+              updateDebtQrAndSubmitBtn();
+            }
+          });
+        } else {
+          qrSection.style.display = 'none';
+          qrSection.innerHTML = '';
+        }
+      }
+
+      if (offlineNoticeEl) {
+        offlineNoticeEl.style.display = (!qrInfo && method === 'transfer') ? 'block' : 'none';
+      }
+    };
+
+    amtInp.addEventListener('input', updateDebtQrAndSubmitBtn);
+    amtInp.addEventListener('change', updateDebtQrAndSubmitBtn);
+    if (methodSelect) {
+      methodSelect.addEventListener('change', updateDebtQrAndSubmitBtn);
+    }
+
     const fullBtn = document.querySelector('.btn-set-full-debt');
-    if (fullBtn) fullBtn.addEventListener('click', () => { amtInp.value = currentDebt; });
+    if (fullBtn) fullBtn.addEventListener('click', () => {
+      amtInp.value = currentDebt;
+      updateDebtQrAndSubmitBtn();
+    });
     const halfBtn = document.querySelector('.btn-set-debt-half');
-    if (halfBtn) halfBtn.addEventListener('click', () => { amtInp.value = Math.round(currentDebt / 2); });
+    if (halfBtn) halfBtn.addEventListener('click', () => {
+      amtInp.value = Math.round(currentDebt / 2);
+      updateDebtQrAndSubmitBtn();
+    });
+
+    updateDebtQrAndSubmitBtn();
 
     document.getElementById('debt-payment-form').addEventListener('submit', async (e) => {
       e.preventDefault();

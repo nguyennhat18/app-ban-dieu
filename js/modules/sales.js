@@ -8,10 +8,18 @@ import {
   generateId,
   escapeHTML,
   numberToVietnameseWords,
-  shareFileOrDownload
+  shareFileOrDownload,
+  downloadBlobFile,
+  compressImage
 } from '../utils.js';
 import { registerVietnameseFont } from '../vendor/roboto-font.js';
 import { PRODUCT_CATEGORIES } from '../config.js';
+import {
+  resolveOrderQR,
+  drawVietQRToJsPdf,
+  normalizeTransferContent,
+  hasVietQRConfig
+} from '../vietqr.js';
 
 export class SalesModule {
   constructor(app) {
@@ -64,6 +72,7 @@ export class SalesModule {
     this._cachedPosProducts = products;
     const customers = await db.getAll('customers');
     const shopSettings = (await db.getSetting('shop_info')) || {};
+    this._cachedShopSettings = shopSettings;
     const categories = await db.getCategories();
 
     const newStockCount = products.filter(p => (p.warehouse || 'new') === 'new').length;
@@ -270,26 +279,8 @@ export class SalesModule {
 
               <!-- Khung Quét mã QR thanh toán nếu chọn QR hoặc Chuyển khoản -->
               ${(this.paymentMethod === 'qr' || this.paymentMethod === 'transfer') ? `
-                <div class="pos-qr-payment-card card p-2 mt-2 bg-light text-center border-primary-subtle">
-                  ${shopSettings.qrCode ? `
-                    <div class="text-xs text-bold text-primary mb-1">📱 MÃ QR THANH TOÁN (VIETQR / NGÂN HÀNG)</div>
-                    <div class="pos-qr-img-wrap" style="position:relative; display:inline-block; margin: 4px auto;">
-                      <img src="${shopSettings.qrCode}" class="pos-qr-img" alt="Mã QR thanh toán">
-                    </div>
-                    <div class="text-xs text-muted mt-1">Số tiền cần thanh toán: <b class="text-success text-sm">${formatVND(totals.totalAmount)}</b></div>
-                    ${shopSettings.bankInfo ? `<div class="text-xs text-bold text-muted mt-1">${escapeHTML(shopSettings.bankInfo)}</div>` : ''}
-                    <button type="button" class="btn btn-primary btn-block btn-sm mt-2" id="btn-open-fullscreen-qr">
-                      🔍 Mở QR Toàn Màn Hình Cho Khách Quét
-                    </button>
-                  ` : `
-                    <div class="text-xs text-bold text-warning mb-1">⚠️ Chưa có ảnh mã QR thanh toán</div>
-                    <p class="text-xs text-muted mb-2">Thêm ảnh mã QR ngân hàng để khách quét trả tiền trên điện thoại</p>
-                    ${shopSettings.bankInfo ? `<div class="text-xs text-bold mb-2">${escapeHTML(shopSettings.bankInfo)}</div>` : ''}
-                    <button type="button" class="btn btn-outline-primary btn-sm" id="btn-quick-upload-qr">
-                      ➕ Thêm Ảnh Mã QR Ngay
-                    </button>
-                    <input type="file" id="pos-qr-file-input" accept="image/*" style="display:none">
-                  `}
+                <div id="pos-qr-payment-container">
+                  ${this._renderPosQrPanelHtml(shopSettings, totals.totalAmount, false)}
                 </div>
               ` : ''}
 
@@ -301,7 +292,10 @@ export class SalesModule {
                   </div>
                   <div class="summary-line text-danger mt-1">
                     <span class="text-bold text-xs">Còn nợ ghi sổ:</span>
-                    <span class="text-bold">${formatVND(Math.max(0, totals.totalAmount - this.paidAmount))}</span>
+                    <span class="text-bold" id="pos-partial-debt-val">${formatVND(Math.max(0, totals.totalAmount - this.paidAmount))}</span>
+                  </div>
+                  <div id="pos-partial-qr-container">
+                    ${this.paidAmount > 0 ? this._renderPosQrPanelHtml(shopSettings, Math.min(totals.totalAmount, Math.max(0, this.paidAmount)), true) : ''}
                   </div>
                 </div>
               ` : ''}
@@ -313,11 +307,83 @@ export class SalesModule {
 
               <!-- Nút hoàn tất đơn to bấm 1 tay -->
               <button id="btn-complete-order" class="btn btn-success btn-block btn-lg btn-complete-order">
-                <span>✓ HOÀN TẤT ĐƠN (${formatVND(totals.totalAmount)})</span>
+                <span>${(this.paymentMethod === 'qr' || this.paymentMethod === 'transfer')
+                  ? `✅ Đã nhận tiền (Hoàn tất đơn) (${formatVND(totals.totalAmount)})`
+                  : `✓ HOÀN TẤT ĐƠN (${formatVND(totals.totalAmount)})`}</span>
               </button>
             </div>
           ` : ''}
         </div>
+      </div>
+    `;
+  }
+
+  _detectPdfImageFormat(dataUrl) {
+    if (typeof dataUrl !== 'string') return 'JPEG';
+    const lower = dataUrl.slice(0, 40).toLowerCase();
+    if (lower.includes('image/png')) return 'PNG';
+    if (lower.includes('image/webp')) return 'WEBP';
+    return 'JPEG';
+  }
+
+  _renderPosQrPanelHtml(shopSettings = {}, amountToPay = 0, isPartial = false) {
+    const cleanAmount = Math.max(0, Math.round(Number(amountToPay) || 0));
+    const transferDesc = 'THANH TOAN DON HANG';
+    const qrInfo = resolveOrderQR(shopSettings, cleanAmount, transferDesc);
+
+    const offlineNoticeHtml = `
+      <div class="text-xs mt-2 mb-2 text-left" style="padding: 6px 8px; border-radius: 6px; background: #fffbeb; border: 1px solid #fcd34d; color: #92400e; line-height: 1.4;">
+        ⚠️ Lưu ý: App chạy offline nên KHÔNG tự biết khách đã chuyển tiền hay chưa. Chủ shop kiểm tra app ngân hàng rồi tự bấm xác nhận.
+      </div>
+    `;
+
+    if (qrInfo) {
+      const isVietQR = qrInfo.type === 'vietqr';
+      return `
+        <div class="pos-qr-payment-card card p-2 mt-2 bg-light text-center border-primary-subtle">
+          <div class="text-xs text-bold text-primary mb-1">
+            ${isVietQR
+              ? (isPartial ? '📱 MÃ VIETQR TRẢ TRƯỚC (TỰ ĐIỀN SỐ TIỀN)' : '📱 MÃ VIETQR OFFLINE (TỰ ĐIỀN SỐ TIỀN)')
+              : '📱 MÃ QR THANH TOÁN (NGÂN HÀNG)'}
+          </div>
+          <div class="pos-qr-img-wrap" style="position:relative; display:inline-block; margin: 4px auto;">
+            <img src="${qrInfo.dataUrl}" class="pos-qr-img" alt="Mã QR thanh toán">
+          </div>
+          <div class="text-xs text-muted mt-1">
+            ${isPartial ? 'Số tiền trả trước:' : 'Số tiền cần thanh toán:'}
+            <b class="text-success text-sm">${formatVND(cleanAmount)}</b>
+          </div>
+          ${isVietQR ? `
+            <div class="text-xs text-bold text-muted mt-1">
+              ${escapeHTML(qrInfo.bankLabel)} • STK: <span style="color:#0f172a;">${escapeHTML(qrInfo.account)}</span>${qrInfo.accountName ? ` (${escapeHTML(qrInfo.accountName)})` : ''}
+            </div>
+            <div class="text-xs text-muted mt-1">
+              Nội dung CK: <code>${escapeHTML(qrInfo.normalizedDesc || transferDesc)}</code>
+            </div>
+          ` : (shopSettings.bankInfo ? `<div class="text-xs text-bold text-muted mt-1">${escapeHTML(shopSettings.bankInfo)}</div>` : '')}
+          ${offlineNoticeHtml}
+          <button type="button" class="btn btn-primary btn-block btn-sm mt-1" id="btn-open-fullscreen-qr">
+            🔍 Mở QR Toàn Màn Hình Cho Khách Quét
+          </button>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="pos-qr-payment-card card p-2 mt-2 bg-light text-center border-primary-subtle">
+        <div class="text-xs text-bold text-warning mb-1">⚠️ Chưa cấu hình ngân hàng VietQR hoặc ảnh mã QR</div>
+        <p class="text-xs text-muted mb-2">Vào Cài Đặt để nhập tài khoản ngân hàng VietQR (tự điền số tiền) hoặc tải ảnh QR tĩnh.</p>
+        ${shopSettings.bankInfo ? `<div class="text-xs text-bold mb-2">${escapeHTML(shopSettings.bankInfo)}</div>` : ''}
+        ${offlineNoticeHtml}
+        <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 8px;">
+          <button type="button" class="btn btn-primary btn-xs" id="btn-pos-goto-settings">
+            ⚙️ Cài Đặt Ngân Hàng
+          </button>
+          <button type="button" class="btn btn-outline-primary btn-xs" id="btn-quick-upload-qr">
+            ➕ Thêm Ảnh QR
+          </button>
+        </div>
+        <input type="file" id="pos-qr-file-input" accept="image/*" style="display:none">
       </div>
     `;
   }
@@ -798,8 +864,21 @@ export class SalesModule {
 
     const paidInput = document.getElementById('input-paid-amount');
     if (paidInput) {
-      paidInput.addEventListener('input', (e) => {
+      paidInput.addEventListener('input', async (e) => {
         this.paidAmount = parseInt(e.target.value, 10) || 0;
+        const shop = this._cachedShopSettings || (await db.getSetting('shop_info')) || {};
+        const totals = this.calculateTotals(shop);
+        const debtEl = document.getElementById('pos-partial-debt-val');
+        if (debtEl) {
+          debtEl.textContent = formatVND(Math.max(0, totals.totalAmount - this.paidAmount));
+        }
+        const partialQrEl = document.getElementById('pos-partial-qr-container');
+        if (partialQrEl) {
+          partialQrEl.innerHTML = this.paidAmount > 0
+            ? this._renderPosQrPanelHtml(shop, Math.min(totals.totalAmount, Math.max(0, this.paidAmount)), true)
+            : '';
+          this.bindPosQrEvents();
+        }
       });
     }
 
@@ -816,13 +895,42 @@ export class SalesModule {
       completeBtn.addEventListener('click', () => this.handleCompleteOrder());
     }
 
+    this.bindPosQrEvents();
+  }
+
+  bindPosQrEvents() {
     // Mở QR toàn màn hình cho khách quét từ giỏ hàng
     const openFullscreenQrBtn = document.getElementById('btn-open-fullscreen-qr');
     if (openFullscreenQrBtn) {
       openFullscreenQrBtn.addEventListener('click', async () => {
         const shop = (await db.getSetting('shop_info')) || {};
         const totals = this.calculateTotals(shop);
-        this.showFullScreenQrModal(shop.qrCode, shop.bankInfo, totals.totalAmount);
+        const amountToPay = this.paymentMethod === 'partial'
+          ? Math.min(totals.totalAmount, Math.max(0, this.paidAmount || 0))
+          : totals.totalAmount;
+        const qrInfo = resolveOrderQR(shop, amountToPay, 'THANH TOAN DON HANG');
+        this.showFullScreenQrModal(
+          qrInfo || shop.qrCode,
+          shop.bankInfo,
+          amountToPay,
+          {
+            description: (qrInfo && qrInfo.normalizedDesc) || 'THANH TOAN DON HANG',
+            onConfirmPaid: () => this.handleCompleteOrder()
+          }
+        );
+      });
+    }
+
+    // Đi tới Cài đặt ngân hàng VietQR
+    const gotoSettingsBtn = document.getElementById('btn-pos-goto-settings');
+    if (gotoSettingsBtn) {
+      gotoSettingsBtn.addEventListener('click', () => {
+        this.isDrawerOpen = false;
+        const backdrop = document.getElementById('cart-drawer-backdrop');
+        if (backdrop) backdrop.remove();
+        if (this.app && typeof this.app.navigateTo === 'function') {
+          this.app.navigateTo('settings');
+        }
       });
     }
 
@@ -851,14 +959,42 @@ export class SalesModule {
 
   async updatePosSummaryOnly() {
     const shopSettings = (await db.getSetting('shop_info')) || {};
+    this._cachedShopSettings = shopSettings;
     const totals = this.calculateTotals(shopSettings);
     const totalEl = document.querySelector('.total-val');
     const completeBtnSpan = document.querySelector('#btn-complete-order span');
     const floatingTotalEl = document.querySelector('.floating-cart-total');
 
     if (totalEl) totalEl.textContent = formatVND(totals.totalAmount);
-    if (completeBtnSpan) completeBtnSpan.textContent = `✓ HOÀN TẤT ĐƠN (${formatVND(totals.totalAmount)})`;
+    if (completeBtnSpan) {
+      const isOnlinePay = this.paymentMethod === 'qr' || this.paymentMethod === 'transfer';
+      completeBtnSpan.textContent = isOnlinePay
+        ? `✅ Đã nhận tiền (Hoàn tất đơn) (${formatVND(totals.totalAmount)})`
+        : `✓ HOÀN TẤT ĐƠN (${formatVND(totals.totalAmount)})`;
+    }
     if (floatingTotalEl) floatingTotalEl.textContent = formatVND(totals.totalAmount);
+
+    if (this.paymentMethod === 'qr' || this.paymentMethod === 'transfer') {
+      const qrBox = document.getElementById('pos-qr-payment-container');
+      if (qrBox) {
+        qrBox.innerHTML = this._renderPosQrPanelHtml(shopSettings, totals.totalAmount, false);
+        this.bindPosQrEvents();
+      }
+    } else if (this.paymentMethod === 'partial') {
+      const debtEl = document.getElementById('pos-partial-debt-val');
+      if (debtEl) {
+        debtEl.textContent = formatVND(Math.max(0, totals.totalAmount - this.paidAmount));
+      }
+      const partialQrEl = document.getElementById('pos-partial-qr-container');
+      if (partialQrEl && this.paidAmount > 0) {
+        partialQrEl.innerHTML = this._renderPosQrPanelHtml(
+          shopSettings,
+          Math.min(totals.totalAmount, Math.max(0, this.paidAmount)),
+          true
+        );
+        this.bindPosQrEvents();
+      }
+    }
   }
 
   bindPosGridCardEvents() {
@@ -1248,6 +1384,13 @@ export class SalesModule {
     }
 
     const shopSettings = (await db.getSetting('shop_info')) || {};
+    const qrAmount = order.debtAmount > 0 ? order.debtAmount : order.totalAmount;
+    const qrDesc = normalizeTransferContent(order.id);
+    const qrInfo = resolveOrderQR(shopSettings, qrAmount, order.id);
+    const sellerBankLine = (qrInfo && qrInfo.type === 'vietqr')
+      ? `${qrInfo.bankLabel} - STK: ${qrInfo.account}${qrInfo.accountName ? ` (${qrInfo.accountName})` : ''}`
+      : (shopSettings.bankInfo || '');
+
     const ptttText = order.paymentMethod === 'cash' ? 'Tiền mặt' :
                      order.paymentMethod === 'qr' ? 'Quét mã QR' :
                      order.paymentMethod === 'transfer' ? 'Chuyển khoản' :
@@ -1281,7 +1424,7 @@ export class SalesModule {
                     <div class="seller-title"><b>ĐƠN VỊ BÁN:</b> ${escapeHTML((shopSettings.shopName || 'CỬA HÀNG BÁN DIỀU').toUpperCase())}</div>
                     <div class="text-xs">Địa chỉ: ${escapeHTML(shopSettings.address || '---')}</div>
                     <div class="text-xs">Điện thoại: ${escapeHTML(shopSettings.phone || '---')}</div>
-                    ${shopSettings.bankInfo ? `<div class="text-xs">Số tài khoản: <b>${escapeHTML(shopSettings.bankInfo)}</b></div>` : ''}
+                    ${sellerBankLine ? `<div class="text-xs">Số tài khoản: <b>${escapeHTML(sellerBankLine)}</b></div>` : ''}
                   </div>
                   <div class="invoice-meta-snippet text-right">
                     <div class="text-xs"><b>Mẫu số:</b> 02GTTT3/001</div>
@@ -1376,16 +1519,23 @@ export class SalesModule {
                   <b>Số tiền viết bằng chữ:</b> <i>${numberToVietnameseWords(order.totalAmount)}</i>
                 </div>
 
-                <!-- MÃ QR THANH TOÁN (NẾU CÓ) -->
-                ${shopSettings.qrCode ? `
+                <!-- MÃ QR THANH TOÁN (VIETQR OFFLINE HOẶC QR TĨNH) -->
+                ${qrInfo ? `
                   <div class="invoice-qr-box mt-2">
                     <div class="invoice-qr-content">
-                      <img src="${shopSettings.qrCode}" class="invoice-qr-img" alt="QR Code">
+                      <img src="${qrInfo.dataUrl}" class="invoice-qr-img" alt="QR Code">
                       <div class="invoice-qr-text">
-                        <div class="text-xs text-bold text-primary">📱 QUÉT MÃ QR THANH TOÁN CHUYỂN KHOẢN</div>
-                        <div class="text-xs mt-1">Số tiền: <b class="text-success">${formatVND(order.debtAmount > 0 ? order.debtAmount : order.totalAmount)}</b></div>
-                        ${shopSettings.bankInfo ? `<div class="text-xs text-muted mt-1">${escapeHTML(shopSettings.bankInfo)}</div>` : ''}
-                        <div class="text-xs text-muted">Dùng app ngân hàng hoặc MoMo quét mã để thanh toán</div>
+                        <div class="text-xs text-bold text-primary">
+                          ${qrInfo.type === 'vietqr' ? '📱 QUÉT MÃ VIETQR THANH TOÁN CHUYỂN KHOẢN' : '📱 QUÉT MÃ QR THANH TOÁN CHUYỂN KHOẢN'}
+                        </div>
+                        <div class="text-xs mt-1">Số tiền: <b class="text-success">${formatVND(qrAmount)}</b></div>
+                        ${qrInfo.type === 'vietqr' ? `
+                          <div class="text-xs text-muted mt-1">
+                            ${escapeHTML(qrInfo.bankLabel)} • STK: <b>${escapeHTML(qrInfo.account)}</b>${qrInfo.accountName ? ` (${escapeHTML(qrInfo.accountName)})` : ''}
+                          </div>
+                          <div class="text-xs text-muted">Nội dung CK: <code>${escapeHTML(qrInfo.normalizedDesc || qrDesc)}</code></div>
+                        ` : (shopSettings.bankInfo ? `<div class="text-xs text-muted mt-1">${escapeHTML(shopSettings.bankInfo)}</div>` : '')}
+                        <div class="text-xs text-muted">Dùng app ngân hàng hoặc ví điện tử quét mã để thanh toán</div>
                       </div>
                     </div>
                   </div>
@@ -1418,10 +1568,13 @@ export class SalesModule {
             </div>
           </div>
 
-          <!-- FOOTER MODAL VỚI NÚT XUẤT FILE PDF & IN -->
+          <!-- FOOTER MODAL VỚI NÚT TẢI PDF, CHIA SẺ ZALO & IN -->
           <div class="modal-footer" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px;">
-            <button class="btn btn-primary btn-sm" id="btn-export-order-pdf">
-              📄 Xuất File Phiếu Thu PDF (Gửi Zalo)
+            <button class="btn btn-primary btn-sm" id="btn-download-order-pdf">
+              ⬇️ Tải File PDF
+            </button>
+            <button class="btn btn-success btn-sm" id="btn-export-order-pdf">
+              📤 Gửi PDF Zalo
             </button>
             <button class="btn btn-outline-primary btn-sm" id="btn-print-receipt">
               🖨️ In Phiếu Thu
@@ -1441,15 +1594,384 @@ export class SalesModule {
     document.getElementById('btn-close-odmodal').addEventListener('click', close);
     document.getElementById('btn-close-odmodal2').addEventListener('click', close);
 
-    // Xuất file PDF chính thức
-    document.getElementById('btn-export-order-pdf').addEventListener('click', () => {
-      this.generateOrderPDF(orderId);
+    // Tải file PDF trực tiếp (đồng bộ trong click handler để Safari/Android không chặn)
+    document.getElementById('btn-download-order-pdf').addEventListener('click', () => {
+      try {
+        const { pdfBlob, filename } = this._buildOrderPdf(order, shopSettings, customer);
+        downloadBlobFile(pdfBlob, filename);
+      } catch (err) {
+        console.error('Lỗi tải PDF hóa đơn:', err);
+        alert('Lỗi tạo file PDF: ' + err.message);
+      }
+    });
+
+    // Chia sẻ file PDF qua Zalo / Web Share (giữ nguyên user gesture đồng bộ, fallback tải xuống)
+    document.getElementById('btn-export-order-pdf').addEventListener('click', async () => {
+      try {
+        const { pdfBlob, filename } = this._buildOrderPdf(order, shopSettings, customer);
+        const file = new File([pdfBlob], filename, { type: 'application/pdf' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({
+              files: [file],
+              title: `Phiếu thu ${order.id}`,
+              text: `Phiếu thu đơn hàng ${order.id} - ${order.customerName || 'Khách lẻ'}`
+            });
+            return;
+          } catch (shareErr) {
+            if (shareErr.name === 'AbortError') return;
+            console.warn('Web Share PDF thất bại, chuyển sang tải xuống:', shareErr);
+          }
+        }
+        downloadBlobFile(pdfBlob, filename);
+        alert(`Đã tải file "${filename}" về máy — bạn mở Zalo chọn đính kèm file PDF vừa tải để gửi cho khách nhé!`);
+      } catch (err) {
+        console.error('Lỗi xuất PDF hóa đơn:', err);
+        alert('Lỗi tạo file PDF: ' + err.message);
+      }
     });
 
     // In trực tiếp
     document.getElementById('btn-print-receipt').addEventListener('click', () => {
       window.print();
     });
+  }
+
+  _buildOrderPdf(order, shop = {}, customer = null) {
+    if (!window.jspdf || !window.jspdf.jsPDF) {
+      throw new Error('Thư viện jsPDF chưa sẵn sàng. Vui lòng tải lại trang.');
+    }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({
+      orientation: 'p',
+      unit: 'mm',
+      format: 'a4'
+    });
+
+    // Nhúng font Roboto hỗ trợ 100% tiếng Việt có dấu
+    registerVietnameseFont(doc);
+
+    const darkColor = [17, 24, 39];
+    const grayColor = [100, 116, 139];
+    const BOTTOM_LIMIT = 276; // Chừa lề dưới an toàn bên trong khung (12..285)
+
+    const qrAmount = order.debtAmount > 0 ? order.debtAmount : order.totalAmount;
+    const qrDesc = normalizeTransferContent(order.id);
+    const qrInfo = resolveOrderQR(shop, qrAmount, order.id);
+    const sellerBankLine = (qrInfo && qrInfo.type === 'vietqr')
+      ? `${qrInfo.bankLabel} - STK: ${qrInfo.account}${qrInfo.accountName ? ` (${qrInfo.accountName})` : ''}`
+      : (shop.bankInfo || '');
+
+    let curY = 18;
+
+    // 1. Header: Đơn vị bán bên trái (giới hạn maxWidth 112mm tránh đè cột Mẫu số bên phải)
+    doc.setFont('Roboto', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(...darkColor);
+    const shopTitleLines = doc.splitTextToSize(
+      `TÊN ĐƠN VỊ BÁN: ${(shop.shopName || 'CỬA HÀNG BÁN DIỀU').toUpperCase()}`,
+      112
+    );
+    doc.text(shopTitleLines, 16, curY);
+    let leftY = curY + shopTitleLines.length * 4.5;
+
+    doc.setFont('Roboto', 'normal');
+    doc.setFontSize(8.5);
+    const addrLines = doc.splitTextToSize(`Địa chỉ: ${shop.address || '---'}`, 112);
+    doc.text(addrLines, 16, leftY);
+    leftY += addrLines.length * 4.2;
+
+    const phoneLines = doc.splitTextToSize(`Điện thoại: ${shop.phone || '---'}`, 112);
+    doc.text(phoneLines, 16, leftY);
+    leftY += phoneLines.length * 4.2;
+
+    if (sellerBankLine) {
+      const bankLines = doc.splitTextToSize(`Số tài khoản: ${sellerBankLine}`, 112);
+      doc.text(bankLines, 16, leftY);
+      leftY += bankLines.length * 4.2;
+    }
+
+    // Thông tin Mẫu số & Ký hiệu bên phải
+    doc.setFont('Roboto', 'normal');
+    doc.setFontSize(8.5);
+    doc.text('Mẫu số: 02GTTT3/001', 194, curY, { align: 'right' });
+    doc.text('Ký hiệu: 03AA/26P', 194, curY + 5, { align: 'right' });
+    doc.setFont('Roboto', 'bold');
+    doc.setTextColor(220, 38, 38);
+    doc.text(`Số: ${order.id}`, 194, curY + 10, { align: 'right' });
+    doc.setTextColor(...darkColor);
+    const rightY = curY + 15;
+
+    curY = Math.max(leftY, rightY) + 2;
+
+    // Đường kẻ ngang phân cách header
+    doc.setDrawColor(200, 200, 200);
+    doc.setLineWidth(0.3);
+    doc.line(14, curY, 196, curY);
+
+    curY += 6;
+
+    // 2. Tiêu đề PHIẾU THU chính giữa
+    doc.setFont('Roboto', 'bold');
+    doc.setFontSize(15);
+    doc.text('PHIẾU THU', 105, curY, { align: 'center' });
+
+    doc.setFont('Roboto', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(...grayColor);
+    doc.text('Liên 2: Giao cho người mua', 105, curY + 5, { align: 'center' });
+
+    const orderDate = new Date(order.createdAt || Date.now());
+    const dateText = `Ngày ${String(orderDate.getDate()).padStart(2, '0')} tháng ${String(orderDate.getMonth() + 1).padStart(2, '0')} năm ${orderDate.getFullYear()}`;
+    doc.text(dateText, 105, curY + 10, { align: 'center' });
+
+    curY += 15;
+
+    // 3. Khung thông tin Người mua hàng (tự xuống dòng theo maxWidth)
+    doc.setFont('Roboto', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(...darkColor);
+    doc.text('Tên người mua hàng:', 16, curY);
+    doc.setFont('Roboto', 'bold');
+    const custNameLines = doc.splitTextToSize(`${order.customerName || 'Khách lẻ'}`, 140);
+    doc.text(custNameLines, 52, curY);
+    curY += custNameLines.length * 4.5;
+
+    doc.setFont('Roboto', 'normal');
+    const custAddr = order.customerAddress || (customer && customer.address);
+    if (custAddr) {
+      doc.text('Địa chỉ:', 16, curY);
+      const custAddrLines = doc.splitTextToSize(`${custAddr}`, 140);
+      doc.text(custAddrLines, 52, curY);
+      curY += custAddrLines.length * 4.5;
+    }
+
+    doc.text('Số điện thoại:', 16, curY);
+    doc.text(`${order.customerPhone || (customer && customer.phone) || '---'}`, 52, curY);
+
+    const pttt = order.paymentMethod === 'cash' ? 'Tiền mặt' :
+                 order.paymentMethod === 'qr' ? 'Quét mã QR' :
+                 order.paymentMethod === 'transfer' ? 'Chuyển khoản' :
+                 order.paymentMethod === 'debt' ? 'Ghi nợ' : 'Trả một phần';
+    doc.text('Hình thức thanh toán:', 110, curY);
+    doc.setFont('Roboto', 'bold');
+    doc.text(pttt, 146, curY);
+
+    curY += 6;
+
+    // 4. Bảng hàng hóa kẻ ô lưới chuẩn (AutoTable, an toàn đa trang)
+    const tableRows = (order.items || []).map((item, index) => [
+      index + 1,
+      item.productName,
+      item.unit || 'Chiếc',
+      item.quantity,
+      formatVND(item.unitPrice),
+      formatVND(item.subtotal)
+    ]);
+
+    tableRows.push([
+      { content: 'Cộng tiền bán hàng hóa, dịch vụ:', colSpan: 5, styles: { halign: 'right', fontStyle: 'normal' } },
+      { content: formatVND(order.subtotal), styles: { halign: 'right', fontStyle: 'bold' } }
+    ]);
+
+    if (order.discountAmount > 0) {
+      tableRows.push([
+        { content: 'Chiết khấu giảm giá:', colSpan: 5, styles: { halign: 'right', fontStyle: 'normal', textColor: [220, 38, 38] } },
+        { content: `-${formatVND(order.discountAmount)}`, styles: { halign: 'right', fontStyle: 'bold', textColor: [220, 38, 38] } }
+      ]);
+    }
+    if (order.shippingFee > 0) {
+      tableRows.push([
+        { content: 'Phí vận chuyển / giao hàng:', colSpan: 5, styles: { halign: 'right', fontStyle: 'normal' } },
+        { content: `+${formatVND(order.shippingFee)}`, styles: { halign: 'right', fontStyle: 'bold' } }
+      ]);
+    }
+    if (order.vatAmount > 0) {
+      tableRows.push([
+        { content: 'Thuế giá trị gia tăng (VAT):', colSpan: 5, styles: { halign: 'right', fontStyle: 'normal' } },
+        { content: `+${formatVND(order.vatAmount)}`, styles: { halign: 'right', fontStyle: 'bold' } }
+      ]);
+    }
+
+    tableRows.push([
+      { content: 'TỔNG CỘNG TIỀN THANH TOÁN:', colSpan: 5, styles: { halign: 'right', fontStyle: 'bold' } },
+      { content: formatVND(order.totalAmount), styles: { halign: 'right', fontStyle: 'bold', textColor: [2, 132, 199] } }
+    ]);
+
+    doc.autoTable({
+      startY: curY,
+      margin: { top: 16, bottom: 18, left: 16, right: 16 },
+      head: [['STT\n(1)', 'Tên hàng hóa, dịch vụ\n(2)', 'ĐVT\n(3)', 'SL\n(4)', 'Đơn giá\n(5)', 'Thành tiền\n(6=4x5)']],
+      body: tableRows,
+      styles: {
+        font: 'Roboto',
+        fontSize: 8.5,
+        cellPadding: 2.5,
+        lineColor: [40, 40, 40],
+        lineWidth: 0.2
+      },
+      headStyles: {
+        font: 'Roboto',
+        fontStyle: 'bold',
+        fillColor: [243, 244, 246],
+        textColor: [0, 0, 0],
+        halign: 'center',
+        lineColor: [40, 40, 40],
+        lineWidth: 0.2
+      },
+      columnStyles: {
+        0: { halign: 'center', cellWidth: 12 },
+        1: { cellWidth: 74 },
+        2: { halign: 'center', cellWidth: 18 },
+        3: { halign: 'center', cellWidth: 16 },
+        4: { halign: 'right', cellWidth: 26 },
+        5: { halign: 'right', cellWidth: 32 }
+      },
+      theme: 'grid'
+    });
+
+    let finalY = (doc.lastAutoTable ? doc.lastAutoTable.finalY : curY) + 6;
+    const ensureSpace = (neededMm) => {
+      if (finalY + neededMm > BOTTOM_LIMIT) {
+        doc.addPage();
+        finalY = 20;
+      }
+    };
+
+    // 5. Số tiền viết bằng chữ (có wrap và kiểm tra tràn trang)
+    doc.setFont('Roboto', 'italic');
+    doc.setFontSize(8.5);
+    const wordsLines = doc.splitTextToSize(numberToVietnameseWords(order.totalAmount), 140);
+    ensureSpace(wordsLines.length * 4.5 + 4);
+
+    doc.setFont('Roboto', 'bold');
+    doc.setTextColor(...darkColor);
+    doc.text('Số tiền viết bằng chữ:', 16, finalY);
+    doc.setFont('Roboto', 'italic');
+    doc.text(wordsLines, 52, finalY);
+    finalY += wordsLines.length * 4.5 + 3;
+
+    // 6. Mã QR Thanh Toán (ưu tiên VietQR vector sắc nét, fallback ảnh tĩnh an toàn PNG/JPEG)
+    if (qrInfo) {
+      doc.setFont('Roboto', 'normal');
+      doc.setFontSize(8);
+      const detailLines = [];
+      detailLines.push({ text: `Số tiền: ${formatVND(qrAmount)}`, bold: false });
+      if (qrInfo.type === 'vietqr') {
+        const bankAccStr = `${qrInfo.bankLabel} • STK: ${qrInfo.account}${qrInfo.accountName ? ` (${qrInfo.accountName})` : ''}`;
+        doc.splitTextToSize(bankAccStr, 144).forEach(l => detailLines.push({ text: l, bold: false }));
+        detailLines.push({ text: `Nội dung CK: ${qrInfo.normalizedDesc || qrDesc}`, bold: true });
+      } else if (shop.bankInfo) {
+        doc.splitTextToSize(`Tài khoản: ${shop.bankInfo}`, 144).forEach(l => detailLines.push({ text: l, bold: false }));
+      }
+
+      const qrBoxH = Math.max(29, 11 + detailLines.length * 4.2 + 2);
+      ensureSpace(qrBoxH + 4);
+
+      doc.setFillColor(240, 253, 244);
+      doc.setDrawColor(187, 247, 208);
+      doc.roundedRect(16, finalY, 178, qrBoxH, 2, 2, 'FD');
+
+      let qrDrawn = false;
+      if (qrInfo.type === 'vietqr' && qrInfo.qrText) {
+        try {
+          drawVietQRToJsPdf(doc, qrInfo.qrText, 18.5, finalY + 2.5, 24);
+          qrDrawn = true;
+        } catch (qrErr) {
+          console.warn('Lỗi vẽ VietQR lên PDF:', qrErr);
+        }
+      }
+      if (!qrDrawn && qrInfo.dataUrl) {
+        try {
+          const imgFmt = this._detectPdfImageFormat(qrInfo.dataUrl);
+          doc.addImage(qrInfo.dataUrl, imgFmt, 18.5, finalY + 2.5, 24, 24);
+          qrDrawn = true;
+        } catch (imgErr) {
+          console.warn('Lỗi chèn ảnh QR vào PDF:', imgErr);
+        }
+      }
+
+      const qrTextX = qrDrawn ? 46 : 20;
+      doc.setFont('Roboto', 'bold');
+      doc.setFontSize(8.5);
+      doc.setTextColor(22, 101, 52);
+      doc.text(
+        qrInfo.type === 'vietqr' ? 'QUÉT MÃ VIETQR THANH TOÁN / CHUYỂN KHOẢN' : 'QUÉT MÃ QR THANH TOÁN / CHUYỂN KHOẢN',
+        qrTextX,
+        finalY + 6.5
+      );
+
+      let lineY = finalY + 11.5;
+      doc.setFontSize(8);
+      doc.setTextColor(...darkColor);
+      for (const item of detailLines) {
+        doc.setFont('Roboto', item.bold ? 'bold' : 'normal');
+        doc.text(item.text, qrTextX, lineY);
+        lineY += 4.2;
+      }
+
+      finalY += qrBoxH + 4;
+    } else if (shop.bankInfo) {
+      doc.setFont('Roboto', 'normal');
+      doc.setFontSize(8.5);
+      const bankLines = doc.splitTextToSize(`Thông tin chuyển khoản: ${shop.bankInfo}`, 176);
+      ensureSpace(bankLines.length * 4.5 + 3);
+      doc.setTextColor(...darkColor);
+      doc.text(bankLines, 16, finalY);
+      finalY += bankLines.length * 4.5 + 3;
+    }
+
+    // 7. Khối chữ ký 2 bên + Footnote (luôn đi cùng nhau, tự sang trang nếu thiếu chỗ)
+    ensureSpace(34);
+    finalY += 3;
+    doc.setFont('Roboto', 'bold');
+    doc.setFontSize(9.5);
+    doc.setTextColor(...darkColor);
+    doc.text('NGƯỜI MUA HÀNG', 55, finalY, { align: 'center' });
+    doc.text('NGƯỜI BÁN HÀNG', 155, finalY, { align: 'center' });
+
+    doc.setFont('Roboto', 'italic');
+    doc.setFontSize(7.5);
+    doc.setTextColor(...grayColor);
+    doc.text('(Ký, ghi rõ họ, tên)', 55, finalY + 4, { align: 'center' });
+    doc.text('(Ký, đóng dấu, ghi rõ họ, tên)', 155, finalY + 4, { align: 'center' });
+
+    doc.setFont('Roboto', 'bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(...darkColor);
+    if (order.customerName && order.customerName !== 'Khách lẻ') {
+      const sigCust = doc.splitTextToSize(order.customerName, 75);
+      doc.text(sigCust[0] || '', 55, finalY + 21, { align: 'center' });
+    }
+    const sigShop = doc.splitTextToSize(shop.shopName || '', 75);
+    doc.text(sigShop[0] || '', 155, finalY + 21, { align: 'center' });
+
+    // Footnote luôn nằm an toàn trong khung trang cuối
+    const footnoteY = Math.max(finalY + 27, 279);
+    doc.setFont('Roboto', 'italic');
+    doc.setFontSize(7.5);
+    doc.setTextColor(156, 163, 175);
+    doc.text('(Cần kiểm tra, đối chiếu khi lập, giao, nhận phiếu thu)', 105, Math.min(footnoteY, 281), { align: 'center' });
+
+    // 8. Vẽ khung viền chữ nhật trên TẤT CẢ các trang để không bao giờ bị cắt chữ khi sang trang 2+
+    const pageCount = doc.getNumberOfPages();
+    for (let p = 1; p <= pageCount; p++) {
+      doc.setPage(p);
+      doc.setDrawColor(20, 20, 20);
+      doc.setLineWidth(0.4);
+      doc.rect(12, 12, 186, 273);
+      if (pageCount > 1) {
+        doc.setFont('Roboto', 'normal');
+        doc.setFontSize(7.5);
+        doc.setTextColor(148, 163, 184);
+        doc.text(`Trang ${p}/${pageCount}`, 195, 283, { align: 'right' });
+      }
+    }
+
+    const pdfBlob = doc.output('blob');
+    const filename = `PhieuThu-${order.id}.pdf`;
+    return { doc, pdfBlob, filename };
   }
 
   // Tạo và xuất File PDF Hóa Đơn Bán Hàng theo mẫu 02GTTT3/001 chuẩn quốc gia
@@ -1463,289 +1985,132 @@ export class SalesModule {
     }
 
     try {
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF({
-        orientation: 'p',
-        unit: 'mm',
-        format: 'a4'
-      });
-
-      // Nhúng font Roboto hỗ trợ 100% tiếng Việt có dấu
-      registerVietnameseFont(doc);
-
-      const darkColor = [17, 24, 39];
-      const grayColor = [100, 116, 139];
-
-      // 1. Khung viền ngoài chữ nhật bao quanh toàn bộ hóa đơn (Image 3)
-      doc.setDrawColor(20, 20, 20);
-      doc.setLineWidth(0.4);
-      doc.rect(12, 12, 186, 273);
-
-      let curY = 18;
-
-      // 2. Header: Đơn vị bán bên trái
-      doc.setFont('Roboto', 'bold');
-      doc.setFontSize(10);
-      doc.setTextColor(...darkColor);
-      doc.text(`TÊN ĐƠN VỊ BÁN: ${(shop.shopName || 'CỬA HÀNG BÁN DIỀU').toUpperCase()}`, 16, curY);
-
-      doc.setFont('Roboto', 'normal');
-      doc.setFontSize(8.5);
-      doc.text(`Địa chỉ: ${shop.address || '---'}`, 16, curY + 5);
-      doc.text(`Điện thoại: ${shop.phone || '---'}`, 16, curY + 10);
-      if (shop.bankInfo) {
-        doc.text(`Số tài khoản: ${shop.bankInfo}`, 16, curY + 15);
-      }
-
-      // Thông tin Mẫu số & Ký hiệu bên phải (Image 3)
-      doc.setFontSize(8.5);
-      doc.text('Mẫu số: 02GTTT3/001', 194, curY, { align: 'right' });
-      doc.text('Ký hiệu: 03AA/26P', 194, curY + 5, { align: 'right' });
-      doc.setFont('Roboto', 'bold');
-      doc.setTextColor(220, 38, 38);
-      doc.text(`Số: ${order.id}`, 194, curY + 10, { align: 'right' });
-      doc.setTextColor(...darkColor);
-
-      curY += 21;
-
-      // Đường kẻ ngang phân cách header
-      doc.setDrawColor(200, 200, 200);
-      doc.setLineWidth(0.3);
-      doc.line(14, curY, 196, curY);
-
-      curY += 6;
-
-      // 3. Tiêu đề PHIẾU THU chính giữa
-      doc.setFont('Roboto', 'bold');
-      doc.setFontSize(15);
-      doc.text('PHIẾU THU', 105, curY, { align: 'center' });
-
-      doc.setFont('Roboto', 'normal');
-      doc.setFontSize(8.5);
-      doc.setTextColor(...grayColor);
-      doc.text('Liên 2: Giao cho người mua', 105, curY + 5, { align: 'center' });
-
-      const orderDate = new Date(order.createdAt || Date.now());
-      const dateText = `Ngày ${String(orderDate.getDate()).padStart(2, '0')} tháng ${String(orderDate.getMonth() + 1).padStart(2, '0')} năm ${orderDate.getFullYear()}`;
-      doc.text(dateText, 105, curY + 10, { align: 'center' });
-
-      curY += 15;
-
-      // 4. Khung thông tin Người mua hàng
-      doc.setFont('Roboto', 'normal');
-      doc.setFontSize(9);
-      doc.setTextColor(...darkColor);
-      doc.text('Tên người mua hàng:', 16, curY);
-      doc.setFont('Roboto', 'bold');
-      doc.text(`${order.customerName || 'Khách lẻ'}`, 52, curY);
-
-      doc.setFont('Roboto', 'normal');
-      if (order.customerAddress || (customer && customer.address)) {
-        curY += 5;
-        doc.text('Địa chỉ:', 16, curY);
-        doc.text(`${order.customerAddress || customer.address}`, 52, curY);
-      }
-
-      curY += 5;
-      doc.text('Số điện thoại:', 16, curY);
-      doc.text(`${order.customerPhone || (customer && customer.phone) || '---'}`, 52, curY);
-
-      const pttt = order.paymentMethod === 'cash' ? 'Tiền mặt' :
-                   order.paymentMethod === 'qr' ? 'Quét mã QR' :
-                   order.paymentMethod === 'transfer' ? 'Chuyển khoản' :
-                   order.paymentMethod === 'debt' ? 'Ghi nợ' : 'Trả một phần';
-      doc.text('Hình thức thanh toán:', 110, curY);
-      doc.setFont('Roboto', 'bold');
-      doc.text(pttt, 146, curY);
-
-      curY += 6;
-
-      // 5. Bảng hàng hóa kẻ ô lưới chuẩn (AutoTable)
-      const tableRows = (order.items || []).map((item, index) => [
-        index + 1,
-        item.productName,
-        item.unit || 'Chiếc',
-        item.quantity,
-        formatVND(item.unitPrice),
-        formatVND(item.subtotal)
-      ]);
-
-      // Dòng cộng tiền
-      tableRows.push([
-        { content: 'Cộng tiền bán hàng hóa, dịch vụ:', colSpan: 5, styles: { halign: 'right', fontStyle: 'normal' } },
-        { content: formatVND(order.subtotal), styles: { halign: 'right', fontStyle: 'bold' } }
-      ]);
-
-      if (order.discountAmount > 0) {
-        tableRows.push([
-          { content: 'Chiết khấu giảm giá:', colSpan: 5, styles: { halign: 'right', fontStyle: 'normal', textColor: [220, 38, 38] } },
-          { content: `-${formatVND(order.discountAmount)}`, styles: { halign: 'right', fontStyle: 'bold', textColor: [220, 38, 38] } }
-        ]);
-      }
-      if (order.shippingFee > 0) {
-        tableRows.push([
-          { content: 'Phí vận chuyển / giao hàng:', colSpan: 5, styles: { halign: 'right', fontStyle: 'normal' } },
-          { content: `+${formatVND(order.shippingFee)}`, styles: { halign: 'right', fontStyle: 'bold' } }
-        ]);
-      }
-      if (order.vatAmount > 0) {
-        tableRows.push([
-          { content: 'Thuế giá trị gia tăng (VAT):', colSpan: 5, styles: { halign: 'right', fontStyle: 'normal' } },
-          { content: `+${formatVND(order.vatAmount)}`, styles: { halign: 'right', fontStyle: 'bold' } }
-        ]);
-      }
-
-      tableRows.push([
-        { content: 'TỔNG CỘNG TIỀN THANH TOÁN:', colSpan: 5, styles: { halign: 'right', fontStyle: 'bold' } },
-        { content: formatVND(order.totalAmount), styles: { halign: 'right', fontStyle: 'bold', textColor: [2, 132, 199] } }
-      ]);
-
-      doc.autoTable({
-        startY: curY,
-        margin: { left: 16, right: 16 },
-        head: [['STT\n(1)', 'Tên hàng hóa, dịch vụ\n(2)', 'ĐVT\n(3)', 'SL\n(4)', 'Đơn giá\n(5)', 'Thành tiền\n(6=4x5)']],
-        body: tableRows,
-        styles: {
-          font: 'Roboto',
-          fontSize: 8.5,
-          cellPadding: 2.5,
-          lineColor: [40, 40, 40],
-          lineWidth: 0.2
-        },
-        headStyles: {
-          font: 'Roboto',
-          fontStyle: 'bold',
-          fillColor: [243, 244, 246],
-          textColor: [0, 0, 0],
-          halign: 'center',
-          lineColor: [40, 40, 40],
-          lineWidth: 0.2
-        },
-        columnStyles: {
-          0: { halign: 'center', cellWidth: 12 },
-          1: { cellWidth: 76 },
-          2: { halign: 'center', cellWidth: 18 },
-          3: { halign: 'center', cellWidth: 16 },
-          4: { halign: 'right', cellWidth: 26 },
-          5: { halign: 'right', cellWidth: 32 }
-        },
-        theme: 'grid'
-      });
-
-      let finalY = doc.lastAutoTable.finalY + 5;
-
-      // 6. Số tiền viết bằng chữ
-      doc.setFont('Roboto', 'bold');
-      doc.setFontSize(8.5);
-      doc.text('Số tiền viết bằng chữ:', 16, finalY);
-      doc.setFont('Roboto', 'italic');
-      doc.text(numberToVietnameseWords(order.totalAmount), 52, finalY);
-
-      finalY += 6;
-
-      // 7. Mã QR Thanh Toán nhúng vào PDF
-      if (shop.qrCode) {
-        try {
-          doc.setFillColor(240, 253, 244);
-          doc.setDrawColor(187, 247, 208);
-          doc.roundedRect(16, finalY, 178, 25, 2, 2, 'FD');
-          doc.addImage(shop.qrCode, 'JPEG', 18, finalY + 2, 21, 21);
-
-          doc.setFont('Roboto', 'bold');
-          doc.setFontSize(8.5);
-          doc.setTextColor(22, 101, 52);
-          doc.text('QUÉT MÃ QR THANH TOÁN / CHUYỂN KHOẢN', 44, finalY + 7);
-
-          doc.setFont('Roboto', 'normal');
-          doc.setFontSize(8);
-          doc.setTextColor(...darkColor);
-          doc.text(`Số tiền: ${formatVND(order.debtAmount > 0 ? order.debtAmount : order.totalAmount)}`, 44, finalY + 12);
-          if (shop.bankInfo) {
-            doc.text(`Tài khoản: ${shop.bankInfo}`, 44, finalY + 17);
-          }
-          finalY += 28;
-        } catch {
-          // Bỏ qua nếu lỗi ảnh
-        }
-      } else if (shop.bankInfo) {
-        doc.setFont('Roboto', 'normal');
-        doc.setFontSize(8.5);
-        doc.text(`Thông tin chuyển khoản: ${shop.bankInfo}`, 16, finalY);
-        finalY += 7;
-      }
-
-      // 8. Khối chữ ký 2 bên chuẩn mẫu (Image 3)
-      finalY += 4;
-      doc.setFont('Roboto', 'bold');
-      doc.setFontSize(9.5);
-      doc.setTextColor(...darkColor);
-      doc.text('NGƯỜI MUA HÀNG', 55, finalY, { align: 'center' });
-      doc.text('NGƯỜI BÁN HÀNG', 155, finalY, { align: 'center' });
-
-      doc.setFont('Roboto', 'italic');
-      doc.setFontSize(7.5);
-      doc.setTextColor(...grayColor);
-      doc.text('(Ký, ghi rõ họ, tên)', 55, finalY + 4, { align: 'center' });
-      doc.text('(Ký, đóng dấu, ghi rõ họ, tên)', 155, finalY + 4, { align: 'center' });
-
-      // Tên bên dưới chữ ký
-      doc.setFont('Roboto', 'bold');
-      doc.setFontSize(8.5);
-      doc.setTextColor(...darkColor);
-      if (order.customerName && order.customerName !== 'Khách lẻ') {
-        doc.text(order.customerName, 55, finalY + 22, { align: 'center' });
-      }
-      doc.text(shop.shopName || '', 155, finalY + 22, { align: 'center' });
-
-      // Footnote
-      doc.setFont('Roboto', 'italic');
-      doc.setFontSize(7.5);
-      doc.setTextColor(156, 163, 175);
-      doc.text('(Cần kiểm tra, đối chiếu khi lập, giao, nhận phiếu thu)', 105, 281, { align: 'center' });
-
-      const pdfBlob = doc.output('blob');
-      const filename = `PhieuThu-${order.id}.pdf`;
-      await shareFileOrDownload(pdfBlob, filename, `Phiếu thu ${order.id}`);
+      const { pdfBlob, filename } = this._buildOrderPdf(order, shop, customer);
+      this._showOrderPdfExportModal(pdfBlob, filename, order);
     } catch (err) {
       console.error('Lỗi xuất PDF hóa đơn:', err);
       alert('Lỗi tạo file PDF: ' + err.message);
     }
   }
 
+  _showOrderPdfExportModal(pdfBlob, filename, order) {
+    const old = document.getElementById('order-pdf-export-modal');
+    if (old) old.remove();
+
+    const modalHtml = `
+      <div class="modal-backdrop" id="order-pdf-export-modal">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2 class="modal-title">📄 Xuất Phiếu Thu PDF</h2>
+            <button class="modal-close" id="btn-close-opdfmodal">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="card p-3 mb-3 bg-light">
+              <div class="text-bold">Phiếu thu: ${escapeHTML(order.id)}</div>
+              <div class="text-xs text-muted mt-1">Tên file: <code>${escapeHTML(filename)}</code></div>
+              <div class="text-xs text-muted mt-1">Khách hàng: <b>${escapeHTML(order.customerName || 'Khách lẻ')}</b> • Tổng: <b class="text-primary">${formatVND(order.totalAmount)}</b></div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+              <button type="button" class="btn btn-primary btn-block btn-lg" id="btn-opdf-download">
+                ⬇️ Tải File PDF Về Máy
+              </button>
+              <button type="button" class="btn btn-success btn-block btn-lg" id="btn-opdf-share">
+                📤 Gửi File PDF Qua Zalo / Chia Sẻ
+              </button>
+            </div>
+          </div>
+          <div class="modal-footer" style="justify-content: flex-end;">
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-cancel-opdfmodal">Đóng</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    const modal = document.getElementById('order-pdf-export-modal');
+    const close = () => modal.remove();
+    document.getElementById('btn-close-opdfmodal').addEventListener('click', close);
+    document.getElementById('btn-cancel-opdfmodal').addEventListener('click', close);
+
+    document.getElementById('btn-opdf-download').addEventListener('click', () => {
+      downloadBlobFile(pdfBlob, filename);
+      close();
+    });
+
+    document.getElementById('btn-opdf-share').addEventListener('click', async () => {
+      const file = new File([pdfBlob], filename, { type: 'application/pdf' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: `Phiếu thu ${order.id}`,
+            text: `Phiếu thu đơn hàng ${order.id} - ${order.customerName || 'Khách lẻ'}`
+          });
+          close();
+          return;
+        } catch (err) {
+          if (err.name === 'AbortError') return;
+        }
+      }
+      downloadBlobFile(pdfBlob, filename);
+      alert(`Trình duyệt không hỗ trợ chia sẻ trực tiếp. Đã tải "${filename}" về máy để bạn gửi qua Zalo!`);
+      close();
+    });
+  }
+
   // Modal phóng to mã QR toàn màn hình sáng rõ cho khách quét
-  showFullScreenQrModal(qrImageBase64, bankInfo, amount = 0) {
-    if (!qrImageBase64) {
-      alert('Chưa có ảnh mã QR! Vui lòng vào Cài Đặt để tải ảnh mã QR ngân hàng hoặc MoMo lên.');
+  showFullScreenQrModal(qrSource, bankInfo = '', amount = 0, options = {}) {
+    const isQrObj = qrSource && typeof qrSource === 'object' && qrSource.dataUrl;
+    const imgSrc = isQrObj ? qrSource.dataUrl : qrSource;
+    if (!imgSrc) {
+      alert('Chưa có cấu hình VietQR hoặc ảnh mã QR! Vui lòng vào Cài Đặt để thiết lập.');
       return;
     }
+
+    const bankDisplay = isQrObj && qrSource.type === 'vietqr'
+      ? `${qrSource.bankLabel} • STK: ${qrSource.account}${qrSource.accountName ? ` (${qrSource.accountName})` : ''}`
+      : bankInfo;
+    const descDisplay = options.description || (isQrObj ? qrSource.normalizedDesc : '');
+    const hasConfirm = typeof options.onConfirmPaid === 'function';
 
     const modalHtml = `
       <div class="modal-backdrop fullscreen-qr-backdrop" id="fullscreen-qr-modal">
         <div class="fullscreen-qr-container">
           <div class="fullscreen-qr-header">
-            <h3 class="fullscreen-qr-title">📱 QUÉT MÃ QR THANH TOÁN</h3>
+            <h3 class="fullscreen-qr-title">${isQrObj && qrSource.type === 'vietqr' ? '📱 QUÉT MÃ VIETQR THANH TOÁN' : '📱 QUÉT MÃ QR THANH TOÁN'}</h3>
             <button class="fullscreen-qr-close" id="btn-close-fsqr">&times;</button>
           </div>
           <div class="fullscreen-qr-body">
             <div class="fullscreen-qr-card">
-              <img src="${qrImageBase64}" class="fullscreen-qr-img" alt="Mã QR thanh toán">
+              <img src="${imgSrc}" class="fullscreen-qr-img" alt="Mã QR thanh toán">
               ${amount > 0 ? `
                 <div class="fullscreen-qr-amount">
                   <span class="text-xs text-muted">Số tiền cần thanh toán:</span>
                   <div class="amount-val">${formatVND(amount)}</div>
                 </div>
               ` : ''}
-              ${bankInfo ? `
+              ${bankDisplay ? `
                 <div class="fullscreen-qr-bank-info">
-                  ${escapeHTML(bankInfo)}
+                  ${escapeHTML(bankDisplay)}
+                </div>
+              ` : ''}
+              ${descDisplay ? `
+                <div class="text-xs text-muted mt-2">
+                  Nội dung CK: <code>${escapeHTML(descDisplay)}</code>
                 </div>
               ` : ''}
               <div class="fullscreen-qr-hint">
                 Dùng camera điện thoại hoặc app ngân hàng / MoMo / ZaloPay để quét
               </div>
+              <div class="text-xs mt-2 text-left" style="padding: 8px 10px; border-radius: 8px; background: #fffbeb; border: 1px solid #fcd34d; color: #92400e; line-height: 1.4;">
+                ⚠️ Lưu ý: App chạy offline nên KHÔNG tự biết khách đã chuyển tiền hay chưa. Chủ shop kiểm tra app ngân hàng rồi tự bấm xác nhận.
+              </div>
             </div>
           </div>
-          <div class="fullscreen-qr-footer">
+          <div class="fullscreen-qr-footer" style="display: flex; flex-direction: column; gap: 8px;">
+            ${hasConfirm ? `
+              <button class="btn btn-success btn-block btn-lg" id="btn-fsqr-confirm-paid">✅ Đã nhận tiền (Hoàn tất đơn)</button>
+            ` : ''}
             <button class="btn btn-secondary btn-block btn-lg" id="btn-close-fsqr2">✕ Đóng Lại</button>
           </div>
         </div>
@@ -1760,5 +2125,13 @@ export class SalesModule {
     const close = () => modal.remove();
     document.getElementById('btn-close-fsqr')?.addEventListener('click', close);
     document.getElementById('btn-close-fsqr2')?.addEventListener('click', close);
+
+    const confirmBtn = document.getElementById('btn-fsqr-confirm-paid');
+    if (confirmBtn && hasConfirm) {
+      confirmBtn.addEventListener('click', () => {
+        close();
+        options.onConfirmPaid();
+      });
+    }
   }
 }
