@@ -347,11 +347,20 @@ export class QuotationsModule {
 
               <div class="form-group mb-2">
                 <label class="form-label required text-bold">1. Tên diều / Phụ kiện:</label>
+
+                <!-- Tìm kiếm bằng gõ nhanh -->
+                <div class="search-input-wrap mb-2" style="position: relative;">
+                  <input type="text" id="q-product-search" class="form-input" placeholder="🔍 Gõ tên diều / phụ kiện để tìm nhanh..." autocomplete="off">
+                  <button type="button" id="btn-clear-q-prod-search" class="clear-search-btn" style="display: none;">&times;</button>
+                  <div id="q-product-suggestions" class="card" style="display: none; position: absolute; left: 0; right: 0; top: 100%; z-index: 60; max-height: 200px; overflow-y: auto; border: 1.5px solid #0284c7; box-shadow: 0 8px 20px rgba(0,0,0,0.16); margin-top: 2px; background: #fff;"></div>
+                </div>
+
+                <!-- Danh sách chọn (chỉ hiển thị tên mặt hàng, không hiển thị giá) -->
                 <select id="q-add-product-select" class="form-select" style="font-weight: 600;">
-                  <option value="">-- Bấm để chọn diều / phụ kiện --</option>
+                  <option value="">-- Hoặc bấm chọn trong danh sách (${products.length} món) --</option>
                   ${products.map(p => `
                     <option value="${p.id}" data-price="${p.sellingPrice}" data-unit="${escapeHTML(p.unit || 'Chiếc')}">
-                      ${escapeHTML(p.name)} (${formatVND(p.sellingPrice)})
+                      ${escapeHTML(p.name)}
                     </option>
                   `).join('')}
                 </select>
@@ -465,19 +474,110 @@ export class QuotationsModule {
     });
 
     // Thêm món vào báo giá
+    const qProdSearch = document.getElementById('q-product-search');
+    const clearQProdBtn = document.getElementById('btn-clear-q-prod-search');
+    const qSuggBox = document.getElementById('q-product-suggestions');
     const prodSelect = document.getElementById('q-add-product-select');
     const addQty = document.getElementById('q-add-qty');
     const addPrice = document.getElementById('q-add-price');
     const unitHint = document.getElementById('q-unit-hint');
     const tbody = document.getElementById('quote-tbody-items');
 
+    const renderSelectOptions = (list) => {
+      prodSelect.innerHTML = `
+        <option value="">-- Hoặc bấm chọn (${list.length} món) --</option>
+        ${list.map(p => `
+          <option value="${p.id}" data-price="${p.sellingPrice}" data-unit="${escapeHTML(p.unit || 'Chiếc')}">
+            ${escapeHTML(p.name)}
+          </option>
+        `).join('')}
+      `;
+    };
+
+    const selectProductItem = (p) => {
+      if (!p) return;
+      renderSelectOptions(products);
+      prodSelect.value = p.id;
+      if (qProdSearch) qProdSearch.value = p.name;
+      if (clearQProdBtn) clearQProdBtn.style.display = 'flex';
+      if (qSuggBox) qSuggBox.style.display = 'none';
+      if (unitHint) unitHint.textContent = p.unit || 'chiếc';
+      if (p.sellingPrice > 0) addPrice.value = formatVND(p.sellingPrice);
+      else addPrice.value = '';
+    };
+
+    if (qProdSearch) {
+      const updateSearchResults = () => {
+        const q = qProdSearch.value.trim().toLowerCase();
+        if (clearQProdBtn) clearQProdBtn.style.display = q ? 'flex' : 'none';
+
+        const matched = !q ? products : products.filter(p =>
+          p.name.toLowerCase().includes(q) ||
+          (p.code && p.code.toLowerCase().includes(q))
+        );
+
+        renderSelectOptions(matched);
+
+        if (q) {
+          if (matched.length === 0) {
+            qSuggBox.innerHTML = `<div class="p-3 text-xs text-muted text-center">Không tìm thấy "${escapeHTML(qProdSearch.value)}"</div>`;
+          } else {
+            qSuggBox.innerHTML = matched.slice(0, 30).map(p => `
+              <div class="q-sugg-item" data-id="${p.id}" style="padding: 10px 12px; border-bottom: 1px solid #f1f5f9; cursor: pointer; font-weight: 600; font-size: 14px; color: #0f172a;">
+                ${escapeHTML(p.name)}
+              </div>
+            `).join('');
+
+            qSuggBox.querySelectorAll('.q-sugg-item').forEach(el => {
+              el.addEventListener('click', () => {
+                const chosen = products.find(x => x.id === el.dataset.id);
+                selectProductItem(chosen);
+              });
+            });
+          }
+          qSuggBox.style.display = 'block';
+        } else {
+          qSuggBox.style.display = 'none';
+        }
+      };
+
+      qProdSearch.addEventListener('input', updateSearchResults);
+      qProdSearch.addEventListener('focus', () => {
+        if (qProdSearch.value.trim()) updateSearchResults();
+      });
+    }
+
+    if (clearQProdBtn) {
+      clearQProdBtn.addEventListener('click', () => {
+        if (qProdSearch) qProdSearch.value = '';
+        clearQProdBtn.style.display = 'none';
+        if (qSuggBox) qSuggBox.style.display = 'none';
+        renderSelectOptions(products);
+        prodSelect.value = '';
+        addPrice.value = '';
+        if (unitHint) unitHint.textContent = 'chiếc';
+        if (qProdSearch) qProdSearch.focus();
+      });
+    }
+
+    // Ẩn danh sách gợi ý khi chạm ra ngoài
+    modal.addEventListener('click', (e) => {
+      if (qSuggBox && !e.target.closest('#q-product-search') && !e.target.closest('#q-product-suggestions')) {
+        qSuggBox.style.display = 'none';
+      }
+    });
+
     prodSelect.addEventListener('change', () => {
       const opt = prodSelect.options[prodSelect.selectedIndex];
       if (opt && opt.value) {
-        const pr = parseInt(opt.dataset.price, 10) || 0;
-        const un = opt.dataset.unit || 'chiếc';
-        if (unitHint) unitHint.textContent = un;
-        if (pr > 0) addPrice.value = formatVND(pr);
+        const chosen = products.find(x => x.id === opt.value);
+        if (chosen) {
+          if (qProdSearch) qProdSearch.value = chosen.name;
+          if (clearQProdBtn) clearQProdBtn.style.display = 'flex';
+          if (qSuggBox) qSuggBox.style.display = 'none';
+          if (unitHint) unitHint.textContent = chosen.unit || 'chiếc';
+          if (chosen.sellingPrice > 0) addPrice.value = formatVND(chosen.sellingPrice);
+        }
       }
     });
 
@@ -578,6 +678,10 @@ export class QuotationsModule {
       });
 
       // Reset form chọn món để tiện thêm tiếp
+      if (qProdSearch) qProdSearch.value = '';
+      if (clearQProdBtn) clearQProdBtn.style.display = 'none';
+      if (qSuggBox) qSuggBox.style.display = 'none';
+      renderSelectOptions(products);
       prodSelect.value = '';
       addPrice.value = '';
       addQty.value = '1';
