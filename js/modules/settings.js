@@ -505,10 +505,10 @@ export class SettingsModule {
       </div>
     `;
 
-    this.bindEvents(shop, categories, products, units, licStatus);
+    this.bindEvents(shop, categories, products, units, licStatus, warehouses);
   }
 
-  bindEvents(shop, categories, products, units, licStatus) {
+  bindEvents(shop, categories, products, units, licStatus, warehouses = []) {
     // 1. Chuyển đổi các mục cài đặt chính (Cửa hàng, Loại & Hàng, Sao lưu, Cài App, Bản quyền)
     document.querySelectorAll('.settings-pill-tab').forEach(btn => {
       btn.addEventListener('click', () => {
