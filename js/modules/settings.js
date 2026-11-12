@@ -74,12 +74,12 @@ export class SettingsModule {
 
     container.innerHTML = `
       <div class="view-header mb-2">
-        <div class="header-title-row">
-          <div>
+        <div class="header-title-row" style="flex-wrap: wrap; gap: 8px;">
+          <div style="min-width: 0; flex: 1 1 180px;">
             <h1 class="view-title">⚙️ Cài Đặt Ứng Dụng</h1>
             <p class="view-subtitle">${escapeHTML(shop.shopName || 'Cửa hàng diều')} • Cấu hình & Dữ liệu</p>
           </div>
-          <span class="badge ${this.storageStatus.isPersisted ? 'badge-success' : 'badge-warning'} text-xs">
+          <span class="badge ${this.storageStatus.isPersisted ? 'badge-success' : 'badge-warning'} text-xs" style="flex-shrink: 0; white-space: nowrap;">
             ${this.storageStatus.isPersisted ? '🛡️ Bộ nhớ an toàn' : '⚠️ Bộ nhớ chưa khóa'}
           </span>
         </div>
@@ -87,19 +87,19 @@ export class SettingsModule {
 
       <!-- THANH ĐIỀU HƯỚNG TAB PHÂN NHÓM HIỆN ĐẠI (SEGMENTED TABS) -->
       <div class="settings-tabs-scroll">
-        <button type="button" class="settings-pill-tab ${this.activeSettingSection === 'shop' ? 'active' : ''}" data-section="shop">
+        <button type="button" class="settings-pill-tab ${this.activeSettingSection === 'shop' ? 'active' : ''}" data-section="shop" style="white-space: nowrap;">
           <span class="tab-icon">🏪</span> Cửa Hàng & QR
         </button>
-        <button type="button" class="settings-pill-tab ${this.activeSettingSection === 'catalog' ? 'active' : ''}" data-section="catalog">
+        <button type="button" class="settings-pill-tab ${this.activeSettingSection === 'catalog' ? 'active' : ''}" data-section="catalog" style="white-space: nowrap;">
           <span class="tab-icon">🏷️</span> Loại Diều & Hàng (${products.length})
         </button>
-        <button type="button" class="settings-pill-tab ${this.activeSettingSection === 'backup' ? 'active' : ''}" data-section="backup">
+        <button type="button" class="settings-pill-tab ${this.activeSettingSection === 'backup' ? 'active' : ''}" data-section="backup" style="white-space: nowrap;">
           <span class="tab-icon">📥</span> Nạp & Sao Lưu
         </button>
-        <button type="button" class="settings-pill-tab ${this.activeSettingSection === 'guide' ? 'active' : ''}" data-section="guide">
+        <button type="button" class="settings-pill-tab ${this.activeSettingSection === 'guide' ? 'active' : ''}" data-section="guide" style="white-space: nowrap;">
           <span class="tab-icon">📲</span> Cài App & Trợ Giúp
         </button>
-        <button type="button" class="settings-pill-tab ${this.activeSettingSection === 'license' ? 'active' : ''}" data-section="license">
+        <button type="button" class="settings-pill-tab ${this.activeSettingSection === 'license' ? 'active' : ''}" data-section="license" style="white-space: nowrap;">
           <span class="tab-icon">🔑</span> Bản Quyền & Key
         </button>
       </div>
@@ -110,9 +110,9 @@ export class SettingsModule {
           <!-- Logo & Mã QR -->
           <div class="card p-3 mb-3">
             <h3 class="card-title text-sm mb-2">🖼️ Nhận Diện & Thanh Toán</h3>
-            <div class="shop-media-row">
+            <div class="shop-media-row" style="flex-wrap: wrap; gap: 12px;">
               <!-- Logo -->
-              <div class="shop-media-col flex-1">
+              <div class="shop-media-col flex-1" style="flex: 1 1 135px; min-width: 0;">
                 <label class="form-label text-bold text-xs mb-1">📷 Logo Cửa Hàng:</label>
                 <div class="logo-preview-box" id="logo-preview-box">
                   ${shop.logo ? `
@@ -130,15 +130,15 @@ export class SettingsModule {
               </div>
 
               <!-- Mã QR -->
-              <div class="shop-media-col flex-1">
+              <div class="shop-media-col flex-1" style="flex: 1 1 135px; min-width: 0;">
                 <label class="form-label text-bold text-xs mb-1">📱 Mã QR Trả Tiền:</label>
                 <div class="qr-preview-box" id="qr-preview-box">
                   ${shop.qrCode ? `
                     <img src="${shop.qrCode}" class="shop-qr-img" id="shop-qr-preview-img" alt="Mã QR thanh toán">
-                    <div class="qr-preview-actions mt-2">
-                      <button type="button" class="btn btn-outline-primary btn-xs" id="btn-zoom-settings-qr">🔍 Phóng to</button>
-                      <button type="button" class="btn btn-outline-secondary btn-xs" id="btn-change-qr">Đổi</button>
-                      <button type="button" class="btn btn-outline-danger btn-xs" id="btn-remove-qr">&times;</button>
+                    <div class="qr-preview-actions mt-2" style="margin-top: 8px; gap: 6px;">
+                      <button type="button" class="btn btn-outline-primary btn-xs" id="btn-zoom-settings-qr" style="white-space: nowrap;">🔍 Phóng to</button>
+                      <button type="button" class="btn btn-outline-secondary btn-xs" id="btn-change-qr" style="white-space: nowrap;">Đổi</button>
+                      <button type="button" class="btn btn-outline-danger btn-xs" id="btn-remove-qr" style="white-space: nowrap;">&times;</button>
                     </div>
                   ` : `
                     <div class="qr-placeholder" id="qr-placeholder">
@@ -162,12 +162,12 @@ export class SettingsModule {
               <input type="text" id="set-shop-name" class="form-input" required value="${escapeHTML(shop.shopName || '')}" placeholder="VD: Cửa Hàng Sáo Diều Trâm Anh">
             </div>
 
-            <div class="form-row mb-2">
-              <div class="form-group flex-1 mb-0">
+            <div class="form-row mb-2" style="flex-wrap: wrap; gap: 8px; margin-bottom: 8px;">
+              <div class="form-group flex-1 mb-0" style="flex: 1 1 135px; min-width: 0; margin-bottom: 0;">
                 <label class="form-label text-xs text-bold">Số điện thoại / Zalo</label>
                 <input type="tel" id="set-phone" class="form-input" value="${escapeHTML(shop.phone || '')}" placeholder="09xx xxx xxx">
               </div>
-              <div class="form-group flex-1 mb-0">
+              <div class="form-group flex-1 mb-0" style="flex: 1 1 135px; min-width: 0; margin-bottom: 0;">
                 <label class="form-label text-xs text-bold">Hạn báo giá (ngày)</label>
                 <input type="number" id="set-quote-days" class="form-input" min="1" max="90" value="${shop.quoteValidityDays || 7}">
               </div>
@@ -186,8 +186,8 @@ export class SettingsModule {
 
           <!-- Cài đặt VAT với iOS Switch Toggle -->
           <div class="card p-3 mb-3">
-            <div class="d-flex justify-between align-center">
-              <div>
+            <div class="d-flex justify-between align-center" style="display: flex; justify-content: space-between; align-items: center; gap: 12px;">
+              <div style="min-width: 0; flex: 1;">
                 <div class="text-bold text-sm">Có áp dụng thuế VAT?</div>
                 <div class="text-xs text-muted">Tự động cộng thêm tiền VAT vào hóa đơn & báo giá</div>
               </div>
@@ -197,7 +197,7 @@ export class SettingsModule {
               </label>
             </div>
 
-            <div id="vat-rate-row" class="mt-3 pt-2 border-top" style="display: ${shop.enableVat ? 'flex' : 'none'}; align-items:center; justify-content:space-between;">
+            <div id="vat-rate-row" class="mt-3 pt-2 border-top" style="display: ${shop.enableVat ? 'flex' : 'none'}; align-items:center; justify-content:space-between; gap: 10px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border);">
               <span class="text-xs text-bold">Mức thuế VAT áp dụng:</span>
               <select id="set-vat-rate" class="form-select form-select-sm" style="width: 100px;">
                 <option value="8" ${shop.vatRate === 8 ? 'selected' : ''}>8%</option>
@@ -206,7 +206,7 @@ export class SettingsModule {
             </div>
           </div>
 
-          <button type="submit" class="btn btn-primary btn-block btn-lg shadow-sm" style="border-radius: var(--radius-full); font-weight: 700;">
+          <button type="submit" class="btn btn-primary btn-block btn-lg shadow-sm" style="border-radius: var(--radius-full); font-weight: 700; white-space: normal; text-align: center;">
             💾 Lưu Cài Đặt Cửa Hàng
           </button>
         </form>
@@ -222,13 +222,13 @@ export class SettingsModule {
 
           <!-- Sub Tabs -->
           <div class="catalog-tabs-bar mb-3">
-            <button type="button" class="catalog-tab-btn ${this.catalogTab === 'categories' ? 'active' : ''}" data-tab="categories">
+            <button type="button" class="catalog-tab-btn ${this.catalogTab === 'categories' ? 'active' : ''}" data-tab="categories" style="flex-shrink: 0;">
               🪁 Loại Diều (${categories.length})
             </button>
-            <button type="button" class="catalog-tab-btn ${this.catalogTab === 'products' ? 'active' : ''}" data-tab="products">
+            <button type="button" class="catalog-tab-btn ${this.catalogTab === 'products' ? 'active' : ''}" data-tab="products" style="flex-shrink: 0;">
               📦 Sửa Mặt Hàng (${products.length})
             </button>
-            <button type="button" class="catalog-tab-btn ${this.catalogTab === 'units' ? 'active' : ''}" data-tab="units">
+            <button type="button" class="catalog-tab-btn ${this.catalogTab === 'units' ? 'active' : ''}" data-tab="units" style="flex-shrink: 0;">
               📏 Đơn Vị Tính (${units.length})
             </button>
           </div>
@@ -266,17 +266,17 @@ export class SettingsModule {
               </p>
             </div>
           </div>
-          <button type="button" class="btn btn-primary btn-block btn-lg" id="btn-featured-restore" style="font-weight: 700; font-size: 14px; padding: 12px; box-shadow: 0 3px 10px rgba(2, 132, 199, 0.3);">
+          <button type="button" class="btn btn-primary btn-block btn-lg" id="btn-featured-restore" style="font-weight: 700; font-size: 14px; padding: 12px; box-shadow: 0 3px 10px rgba(2, 132, 199, 0.3); white-space: normal; text-align: center; line-height: 1.35;">
             📂 BẤM ĐỂ CHỌN FILE SAO LƯU (.JSON)
           </button>
         </div>
 
         <!-- Thẻ an toàn bộ nhớ -->
         <div class="card p-3 mb-3" style="background: linear-gradient(135deg, #f0fdf4 0%, #e0f2fe 100%); border: 1px solid #bae6fd;">
-          <div class="d-flex justify-between align-center mb-2">
-            <div class="d-flex align-center gap-2">
-              <span style="font-size: 24px;">🛡️</span>
-              <div>
+          <div class="d-flex justify-between align-center mb-2" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 8px;">
+            <div class="d-flex align-center gap-2" style="display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 190px;">
+              <span style="font-size: 24px; flex-shrink: 0;">🛡️</span>
+              <div style="min-width: 0;">
                 <div class="text-bold text-sm">Trạng Thái Lưu Trữ Trong Máy</div>
                 <div class="text-xs text-muted">
                   ${this.storageStatus.isPersisted ? 'Đã bật lưu trữ bền vững (Trình duyệt không tự xóa)' : 'Chưa bật khóa lưu trữ bền vững'}
@@ -284,9 +284,9 @@ export class SettingsModule {
               </div>
             </div>
             ${!this.storageStatus.isPersisted ? `
-              <button id="btn-request-persist" class="btn btn-outline-primary btn-xs">Bật Khóa</button>
+              <button id="btn-request-persist" class="btn btn-outline-primary btn-xs" style="flex-shrink: 0; white-space: nowrap;">Bật Khóa</button>
             ` : `
-              <span class="badge badge-success text-xs">An Toàn</span>
+              <span class="badge badge-success text-xs" style="flex-shrink: 0; white-space: nowrap;">An Toàn</span>
             `}
           </div>
           <div class="text-xs text-muted">
@@ -326,12 +326,12 @@ export class SettingsModule {
         <!-- Lối tắt nghiệp vụ -->
         <div class="card p-3 mb-3">
           <h3 class="card-title text-sm mb-2">⚡ Lối Tắt Nhanh</h3>
-          <div class="d-flex gap-2">
-            <button id="btn-shortcut-reports" class="btn btn-outline-primary btn-sm flex-1 text-left" style="display:flex; justify-content:space-between; align-items:center;">
+          <div class="d-flex gap-2" style="display: flex; flex-wrap: wrap; gap: 8px;">
+            <button id="btn-shortcut-reports" class="btn btn-outline-primary btn-sm flex-1 text-left" style="display:flex; justify-content:space-between; align-items:center; flex: 1 1 160px; min-width: 0; white-space: normal; text-align: left;">
               <span>📊 Báo Cáo Doanh Thu</span>
               <span>➔</span>
             </button>
-            <button id="btn-shortcut-inventory" class="btn btn-outline-secondary btn-sm flex-1 text-left" style="display:flex; justify-content:space-between; align-items:center;">
+            <button id="btn-shortcut-inventory" class="btn btn-outline-secondary btn-sm flex-1 text-left" style="display:flex; justify-content:space-between; align-items:center; flex: 1 1 160px; min-width: 0; white-space: normal; text-align: left;">
               <span>📦 Kho Diều & Nhập</span>
               <span>➔</span>
             </button>
@@ -436,11 +436,11 @@ export class SettingsModule {
           <p class="text-xs text-muted mb-3">
             Nạp sẵn 6 loại diều, 3 khách hàng và đơn mẫu để làm quen cách dùng app. Khi bắt đầu bán thật hãy bấm xóa trắng dữ liệu thử.
           </p>
-          <div class="d-flex gap-2">
-            <button type="button" id="btn-load-sample-data" class="btn btn-outline-primary btn-sm flex-1">
+          <div class="d-flex gap-2" style="display: flex; flex-wrap: wrap; gap: 8px;">
+            <button type="button" id="btn-load-sample-data" class="btn btn-outline-primary btn-sm flex-1" style="flex: 1 1 130px; white-space: nowrap;">
               Nạp Dữ Liệu Mẫu
             </button>
-            <button type="button" id="btn-clear-sample-data" class="btn btn-outline-danger btn-sm flex-1">
+            <button type="button" id="btn-clear-sample-data" class="btn btn-outline-danger btn-sm flex-1" style="flex: 1 1 130px; white-space: nowrap;">
               Xóa Dữ Liệu Thử
             </button>
           </div>
@@ -546,10 +546,10 @@ export class SettingsModule {
       if (qrCodeBase64) {
         qrPreviewBox.innerHTML = `
           <img src="${qrCodeBase64}" class="shop-qr-img" id="shop-qr-preview-img" alt="Mã QR thanh toán">
-          <div class="qr-preview-actions mt-2">
-            <button type="button" class="btn btn-outline-danger btn-xs" id="btn-remove-qr">🗑️ Xóa mã QR</button>
-            <button type="button" class="btn btn-outline-primary btn-xs" id="btn-zoom-settings-qr">🔍 Xem phóng to</button>
-            <button type="button" class="btn btn-outline-secondary btn-xs" id="btn-change-qr">🔄 Đổi ảnh khác</button>
+          <div class="qr-preview-actions mt-2" style="margin-top: 8px; gap: 6px;">
+            <button type="button" class="btn btn-outline-danger btn-xs" id="btn-remove-qr" style="white-space: nowrap;">🗑️ Xóa mã QR</button>
+            <button type="button" class="btn btn-outline-primary btn-xs" id="btn-zoom-settings-qr" style="white-space: nowrap;">🔍 Xem phóng to</button>
+            <button type="button" class="btn btn-outline-secondary btn-xs" id="btn-change-qr" style="white-space: nowrap;">🔄 Đổi ảnh khác</button>
           </div>
         `;
         document.getElementById('btn-remove-qr')?.addEventListener('click', (ev) => {
@@ -729,14 +729,14 @@ export class SettingsModule {
     return `
       <!-- THÔNG TIN BẢN QUYỀN MÁY NÀY -->
       <div class="card p-3 mb-3" style="border: 1.5px solid ${isLicensed ? '#22c55e' : (isTrial ? '#f59e0b' : '#ef4444')}; border-radius: 14px;">
-        <div class="d-flex justify-between align-center mb-2">
-          <div class="d-flex align-center gap-2">
-            <h3 class="card-title text-sm mb-0">🔑 Trạng Thái Bản Quyền</h3>
-            <button type="button" class="btn btn-outline-secondary btn-xs" id="btn-settings-dev-key" style="font-weight: 800; font-family: monospace; font-size: 11px; padding: 2px 8px; border-radius: 6px; letter-spacing: 0.5px;">
+        <div class="d-flex justify-between align-center mb-2" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 10px;">
+          <div class="d-flex align-center gap-2" style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0;">
+            <h3 class="card-title text-sm mb-0" style="margin: 0; line-height: 1.25;">🔑 Trạng Thái Bản Quyền</h3>
+            <button type="button" class="btn btn-outline-secondary btn-xs" id="btn-settings-dev-key" style="font-weight: 800; font-family: monospace; font-size: 11px; padding: 3px 8px; min-height: 24px; border-radius: 6px; letter-spacing: 0.5px; line-height: 1.2; white-space: nowrap; flex-shrink: 0;">
               DEV KEY
             </button>
           </div>
-          <span class="badge ${isLicensed ? 'badge-success' : (isTrial ? 'badge-warning' : 'badge-danger')}">
+          <span class="badge ${isLicensed ? 'badge-success' : (isTrial ? 'badge-warning' : 'badge-danger')}" style="flex-shrink: 0; white-space: nowrap;">
             ${isLicensed ? '✅ Đã Kích Hoạt' : (isTrial ? `🎁 Dùng Thử` : '⚠️ Hết Hạn')}
           </span>
         </div>
@@ -753,9 +753,9 @@ export class SettingsModule {
 
         <div class="card p-2 bg-light mb-2">
           <div class="text-xs text-muted font-bold">MÃ THIẾT BỊ NÀY (DEVICE ID):</div>
-          <div class="d-flex align-center justify-between mt-1">
-            <span class="text-bold text-primary" style="font-family: monospace; font-size: 15px;">${licStatus.deviceId}</span>
-            <button type="button" class="btn btn-outline-primary btn-xs" id="btn-copy-settings-device-id">📋 Sao chép</button>
+          <div class="d-flex align-center justify-between mt-1" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-top: 4px;">
+            <span class="text-bold text-primary" style="font-family: monospace; font-size: 15px; word-break: break-all;">${licStatus.deviceId}</span>
+            <button type="button" class="btn btn-outline-primary btn-xs" id="btn-copy-settings-device-id" style="flex-shrink: 0; white-space: nowrap;">📋 Sao chép</button>
           </div>
           <div class="text-xs text-muted mt-1">Gửi mã này cho người bán để nhận mã kích hoạt bản quyền.</div>
         </div>
@@ -766,7 +766,7 @@ export class SettingsModule {
           ${licStatus.licenseKey ? `<div>• Mã key: <code class="text-xs">${escapeHTML(licStatus.licenseKey)}</code></div>` : ''}
         </div>
 
-        <button type="button" class="btn btn-primary btn-block btn-sm" id="btn-open-activate-modal" style="font-weight: 700;">
+        <button type="button" class="btn btn-primary btn-block btn-sm" id="btn-open-activate-modal" style="font-weight: 700; white-space: normal; text-align: center; line-height: 1.35;">
           🔑 Nhập Mã Kích Hoạt Mới / Gia Hạn
         </button>
 
@@ -849,17 +849,17 @@ export class SettingsModule {
 
         <div class="catalog-add-form mb-3">
           <label class="form-label text-bold">Thêm loại diều mới:</label>
-          <div class="input-with-button-row">
-            <input type="text" id="input-new-category" class="form-input" placeholder="VD: Diều nan carbon, Diều led đêm, Diều mini..." maxlength="50">
-            <button type="button" id="btn-add-category" class="btn btn-primary">
+          <div class="input-with-button-row" style="gap: 8px;">
+            <input type="text" id="input-new-category" class="form-input" style="min-width: 0;" placeholder="VD: Diều nan carbon, Diều led đêm, Diều mini..." maxlength="50">
+            <button type="button" id="btn-add-category" class="btn btn-primary" style="flex-shrink: 0; white-space: nowrap;">
               <span>+</span> Thêm Loại
             </button>
           </div>
         </div>
 
-        <div class="categories-list-header mb-2 d-flex justify-between align-center">
+        <div class="categories-list-header mb-2 d-flex justify-between align-center" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 8px;">
           <span class="text-xs text-muted text-bold">DANH SÁCH LOẠI DIỀU (${categories.length})</span>
-          <button type="button" id="btn-reset-categories" class="btn btn-link text-xs text-muted p-0">
+          <button type="button" id="btn-reset-categories" class="btn btn-link text-xs text-muted p-0" style="background: transparent; border: none; padding: 4px 6px; min-height: auto; font-weight: 600; white-space: nowrap;">
             🔄 Khôi phục mặc định
           </button>
         </div>
@@ -868,8 +868,8 @@ export class SettingsModule {
           ${categories.map(cat => {
             const prodCount = products.filter(p => p.category === cat).length;
             return `
-              <div class="catalog-item-card">
-                <div class="catalog-item-info">
+              <div class="catalog-item-card" style="flex-wrap: wrap; gap: 10px;">
+                <div class="catalog-item-info" style="flex: 1 1 160px; min-width: 0;">
                   <span class="catalog-item-icon">🪁</span>
                   <div class="catalog-item-main">
                     <div class="catalog-item-title">${escapeHTML(cat)}</div>
@@ -878,11 +878,11 @@ export class SettingsModule {
                     </div>
                   </div>
                 </div>
-                <div class="catalog-item-actions">
-                  <button type="button" class="btn btn-outline-primary btn-xs btn-rename-cat" data-name="${escapeHTML(cat)}">
+                <div class="catalog-item-actions" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: auto;">
+                  <button type="button" class="btn btn-outline-primary btn-xs btn-rename-cat" style="white-space: nowrap;" data-name="${escapeHTML(cat)}">
                     ✏️ Đổi tên
                   </button>
-                  <button type="button" class="btn btn-outline-danger btn-xs btn-delete-cat" data-name="${escapeHTML(cat)}" data-count="${prodCount}">
+                  <button type="button" class="btn btn-outline-danger btn-xs btn-delete-cat" style="white-space: nowrap;" data-name="${escapeHTML(cat)}" data-count="${prodCount}">
                     🗑️ Xóa
                   </button>
                 </div>
@@ -920,8 +920,8 @@ export class SettingsModule {
           <div class="catalog-search-wrap mb-2">
             <input type="text" id="settings-prod-search" class="form-input" placeholder="🔍 Tìm mặt hàng theo tên hoặc mã..." value="${escapeHTML(this.productSearchQuery || '')}">
           </div>
-          <div class="form-row align-center">
-            <div class="flex-2">
+          <div class="form-row align-center" style="align-items: center; flex-wrap: wrap; gap: 8px;">
+            <div class="flex-2" style="flex: 2 1 170px; min-width: 0;">
               <select id="settings-prod-cat-filter" class="form-select text-sm">
                 <option value="all">-- Tất cả loại diều (${products.length}) --</option>
                 ${categories.map(c => `
@@ -931,8 +931,8 @@ export class SettingsModule {
                 `).join('')}
               </select>
             </div>
-            <div class="flex-1 text-right">
-              <button type="button" id="btn-settings-add-prod" class="btn btn-primary btn-sm btn-block">
+            <div class="flex-1 text-right" style="flex: 1 0 110px;">
+              <button type="button" id="btn-settings-add-prod" class="btn btn-primary btn-sm btn-block" style="white-space: nowrap; min-height: 44px;">
                 <span>+</span> Thêm Mới
               </button>
             </div>
@@ -979,20 +979,20 @@ export class SettingsModule {
               <span class="badge badge-light text-xs">${escapeHTML(p.code || '')}</span>
               <span class="text-xs text-muted">ĐVT: <b>${escapeHTML(p.unit || 'Chiếc')}</b></span>
             </div>
-            <div class="quick-prod-price-line mt-1">
+            <div class="quick-prod-price-line mt-1" style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 4px;">
               <span class="text-primary text-bold text-sm">${formatVND(p.sellingPrice || 0)}</span>
               <span class="text-xs text-muted ml-2">• Tồn kho: <b class="${p.stock <= (p.lowStockThreshold || 5) ? 'text-danger' : 'text-success'}">${p.stock}</b></span>
             </div>
           </div>
         </div>
-        <div class="quick-prod-actions mt-2 pt-2 border-top">
-          <button type="button" class="btn btn-outline-primary btn-xs btn-quick-rename-prod" data-id="${p.id}" data-name="${escapeHTML(p.name)}">
+        <div class="quick-prod-actions mt-2 pt-2 border-top" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border);">
+          <button type="button" class="btn btn-outline-primary btn-xs btn-quick-rename-prod" style="white-space: nowrap;" data-id="${p.id}" data-name="${escapeHTML(p.name)}">
             ✏️ Đổi tên nhanh
           </button>
-          <button type="button" class="btn btn-outline-secondary btn-xs btn-quick-edit-full" data-id="${p.id}">
+          <button type="button" class="btn btn-outline-secondary btn-xs btn-quick-edit-full" style="white-space: nowrap;" data-id="${p.id}">
             ⚙️ Sửa chi tiết
           </button>
-          <button type="button" class="btn btn-outline-danger btn-xs btn-quick-delete-prod" data-id="${p.id}" data-name="${escapeHTML(p.name)}">
+          <button type="button" class="btn btn-outline-danger btn-xs btn-quick-delete-prod" style="white-space: nowrap;" data-id="${p.id}" data-name="${escapeHTML(p.name)}">
             🗑️ Xóa
           </button>
         </div>
@@ -1011,9 +1011,9 @@ export class SettingsModule {
 
         <div class="catalog-add-form mb-3">
           <label class="form-label text-bold">Thêm đơn vị tính mới:</label>
-          <div class="input-with-button-row">
-            <input type="text" id="input-new-unit" class="form-input" placeholder="VD: Mét, Cây, Cặp, Túi..." maxlength="20">
-            <button type="button" id="btn-add-unit" class="btn btn-primary">
+          <div class="input-with-button-row" style="gap: 8px;">
+            <input type="text" id="input-new-unit" class="form-input" style="min-width: 0;" placeholder="VD: Mét, Cây, Cặp, Túi..." maxlength="20">
+            <button type="button" id="btn-add-unit" class="btn btn-primary" style="flex-shrink: 0; white-space: nowrap;">
               <span>+</span> Thêm ĐVT
             </button>
           </div>
@@ -1023,14 +1023,14 @@ export class SettingsModule {
 
         <div class="units-grid">
           ${units.map(u => `
-            <div class="unit-badge-card">
-              <div class="unit-badge-name">
-                <span class="unit-icon">📐</span>
-                <b>${escapeHTML(u)}</b>
+            <div class="unit-badge-card" style="gap: 6px; min-width: 0;">
+              <div class="unit-badge-name" style="min-width: 0; overflow: hidden;">
+                <span class="unit-icon" style="flex-shrink: 0;">📐</span>
+                <b style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHTML(u)}</b>
               </div>
-              <div class="unit-badge-actions">
-                <button type="button" class="btn btn-outline-primary btn-xs btn-rename-unit" data-unit="${escapeHTML(u)}" title="Đổi tên ĐVT">✏️</button>
-                <button type="button" class="btn btn-outline-danger btn-xs btn-delete-unit" data-unit="${escapeHTML(u)}" title="Xóa ĐVT">🗑️</button>
+              <div class="unit-badge-actions" style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
+                <button type="button" class="btn btn-outline-primary btn-xs btn-rename-unit" style="white-space: nowrap;" data-unit="${escapeHTML(u)}" title="Đổi tên ĐVT">✏️</button>
+                <button type="button" class="btn btn-outline-danger btn-xs btn-delete-unit" style="white-space: nowrap;" data-unit="${escapeHTML(u)}" title="Xóa ĐVT">🗑️</button>
               </div>
             </div>
           `).join('')}
