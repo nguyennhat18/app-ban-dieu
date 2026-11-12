@@ -421,8 +421,16 @@ export class InventoryModule {
 
               <div class="form-group mb-2">
                 <label class="form-label required text-bold">1. Tên diều / Phụ kiện cần nhập:</label>
+
+                <!-- Tìm kiếm bằng gõ nhanh -->
+                <div class="search-input-wrap mb-2" style="position: relative;">
+                  <input type="text" id="imp-product-search" class="form-input" placeholder="🔍 Gõ tên diều / phụ kiện để tìm nhanh..." autocomplete="off">
+                  <button type="button" id="btn-clear-imp-prod-search" class="clear-search-btn" style="display: none;">&times;</button>
+                  <div id="imp-product-suggestions" class="card" style="display: none; position: absolute; left: 0; right: 0; top: 100%; z-index: 60; max-height: 200px; overflow-y: auto; border: 1.5px solid #0284c7; box-shadow: 0 8px 20px rgba(0,0,0,0.16); margin-top: 2px; background: #fff;"></div>
+                </div>
+
                 <select id="imp-select-prod" class="form-select" style="font-weight: 600;">
-                  <option value="">-- Bấm để chọn diều / phụ kiện --</option>
+                  <option value="">-- Hoặc bấm chọn trong danh sách (${products.length} món) --</option>
                   ${products.map(p => `
                     <option value="${p.id}" data-unit="${escapeHTML(p.unit || 'chiếc')}">
                       ${escapeHTML(p.name)} (Hiện tồn: ${p.stock || 0} ${escapeHTML(p.unit || 'chiếc')})
@@ -489,14 +497,106 @@ export class InventoryModule {
     document.getElementById('btn-cancel-imp-modal').addEventListener('click', close);
 
     const selectProd = document.getElementById('imp-select-prod');
+    const impProdSearch = document.getElementById('imp-product-search');
+    const clearImpProdBtn = document.getElementById('btn-clear-imp-prod-search');
+    const impSuggBox = document.getElementById('imp-product-suggestions');
     const qtyInp = document.getElementById('imp-qty');
     const unitHint = document.getElementById('imp-unit-hint');
     const tbody = document.getElementById('tbody-imp-items');
     const totalQtyEl = document.getElementById('imp-total-qty');
 
+    const renderImpSelectOptions = (list) => {
+      const currentVal = selectProd.value;
+      selectProd.innerHTML = `<option value="">-- Hoặc bấm chọn trong danh sách (${list.length} món) --</option>` +
+        list.map(p => `
+          <option value="${p.id}" data-unit="${escapeHTML(p.unit || 'chiếc')}">
+            ${escapeHTML(p.name)} (Hiện tồn: ${p.stock || 0} ${escapeHTML(p.unit || 'chiếc')})
+          </option>
+        `).join('');
+      if (currentVal && list.some(x => x.id === currentVal)) {
+        selectProd.value = currentVal;
+      }
+    };
+
+    const selectImportProductItem = (p) => {
+      if (!p) return;
+      renderImpSelectOptions(products);
+      selectProd.value = p.id;
+      if (impProdSearch) impProdSearch.value = p.name;
+      if (clearImpProdBtn) clearImpProdBtn.style.display = 'flex';
+      if (impSuggBox) impSuggBox.style.display = 'none';
+      if (unitHint) unitHint.textContent = p.unit || 'chiếc';
+    };
+
+    if (impProdSearch) {
+      const updateImpSearchResults = () => {
+        const q = impProdSearch.value.trim().toLowerCase();
+        if (clearImpProdBtn) clearImpProdBtn.style.display = q ? 'flex' : 'none';
+
+        const matched = !q ? products : products.filter(p =>
+          (p.name || '').toLowerCase().includes(q) ||
+          (p.code && p.code.toLowerCase().includes(q))
+        );
+
+        renderImpSelectOptions(matched);
+
+        if (q) {
+          if (matched.length === 0) {
+            impSuggBox.innerHTML = `<div class="p-3 text-xs text-muted text-center">Không tìm thấy "${escapeHTML(impProdSearch.value)}"</div>`;
+          } else {
+            impSuggBox.innerHTML = matched.slice(0, 30).map(p => `
+              <div class="imp-sugg-item" data-id="${p.id}" style="padding: 10px 12px; border-bottom: 1px solid #f1f5f9; cursor: pointer; font-weight: 600; font-size: 14px; color: #0f172a; display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                <span style="min-width: 0; overflow: hidden; text-overflow: ellipsis;">${escapeHTML(p.name)}</span>
+                <span class="text-xs text-muted" style="flex-shrink: 0;">Tồn: ${p.stock || 0} ${escapeHTML(p.unit || 'chiếc')}</span>
+              </div>
+            `).join('');
+
+            impSuggBox.querySelectorAll('.imp-sugg-item').forEach(el => {
+              el.addEventListener('click', () => {
+                const chosen = products.find(x => x.id === el.dataset.id);
+                selectImportProductItem(chosen);
+              });
+            });
+          }
+          impSuggBox.style.display = 'block';
+        } else {
+          impSuggBox.style.display = 'none';
+        }
+      };
+
+      impProdSearch.addEventListener('input', updateImpSearchResults);
+      impProdSearch.addEventListener('focus', () => {
+        if (impProdSearch.value.trim()) updateImpSearchResults();
+      });
+    }
+
+    if (clearImpProdBtn) {
+      clearImpProdBtn.addEventListener('click', () => {
+        if (impProdSearch) impProdSearch.value = '';
+        clearImpProdBtn.style.display = 'none';
+        if (impSuggBox) impSuggBox.style.display = 'none';
+        renderImpSelectOptions(products);
+        selectProd.value = '';
+        if (unitHint) unitHint.textContent = 'chiếc';
+        if (impProdSearch) impProdSearch.focus();
+      });
+    }
+
+    modal.addEventListener('click', (e) => {
+      if (impSuggBox && !e.target.closest('#imp-product-search') && !e.target.closest('#imp-product-suggestions')) {
+        impSuggBox.style.display = 'none';
+      }
+    });
+
     selectProd.addEventListener('change', () => {
       const opt = selectProd.options[selectProd.selectedIndex];
       if (opt && opt.value) {
+        const chosen = products.find(x => x.id === opt.value);
+        if (chosen) {
+          if (impProdSearch) impProdSearch.value = chosen.name;
+          if (clearImpProdBtn) clearImpProdBtn.style.display = 'flex';
+          if (impSuggBox) impSuggBox.style.display = 'none';
+        }
         const unit = opt.dataset.unit || 'chiếc';
         if (unitHint) unitHint.textContent = unit;
       } else if (unitHint) {
@@ -540,7 +640,12 @@ export class InventoryModule {
     };
 
     document.getElementById('btn-add-imp-item').addEventListener('click', () => {
-      const pId = selectProd.value;
+      let pId = selectProd.value;
+      if (!pId && impProdSearch && impProdSearch.value.trim()) {
+        const q = impProdSearch.value.trim().toLowerCase();
+        const exact = products.find(x => (x.name || '').trim().toLowerCase() === q);
+        if (exact) pId = exact.id;
+      }
       if (!pId) return alert('Vui lòng chọn sản phẩm cần nhập!');
       const p = products.find(x => x.id === pId);
       if (!p) return alert('Không tìm thấy sản phẩm đã chọn!');
@@ -552,6 +657,10 @@ export class InventoryModule {
       addOrMergeStockImportItem(importItems, p, qty);
 
       // Reset form chọn món để tiện thêm món tiếp theo
+      if (impProdSearch) impProdSearch.value = '';
+      if (clearImpProdBtn) clearImpProdBtn.style.display = 'none';
+      if (impSuggBox) impSuggBox.style.display = 'none';
+      renderImpSelectOptions(products);
       selectProd.value = '';
       qtyInp.value = '10';
       if (unitHint) unitHint.textContent = 'chiếc';
