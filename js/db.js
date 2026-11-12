@@ -1,5 +1,5 @@
 // Quản lý cơ sở dữ liệu IndexedDB (Offline-First, Transactional, Versioned, Snapshot)
-import { APP_CONFIG, DEFAULT_SHOP_SETTINGS, PRODUCT_CATEGORIES, PRODUCT_UNITS } from './config.js';
+import { APP_CONFIG, DEFAULT_SHOP_SETTINGS, PRODUCT_CATEGORIES, PRODUCT_UNITS, DEFAULT_WAREHOUSES, normalizeWarehouseId } from './config.js';
 import { calculateChecksum } from './utils.js';
 
 class KiteDatabase {
@@ -437,6 +437,103 @@ class KiteDatabase {
     return units;
   }
 
+  // ================= QUẢN LÝ KHO HÀNG (WAREHOUSES) =================
+  async getWarehouses() {
+    const warehouses = await this.getSetting('product_warehouses');
+    if (Array.isArray(warehouses) && warehouses.length > 0) {
+      const filtered = warehouses.filter(w => w && w.id && w.id !== 'new');
+      if (filtered.length > 0) return filtered;
+    }
+    return DEFAULT_WAREHOUSES.map(w => ({ ...w }));
+  }
+
+  async saveWarehouses(warehouses) {
+    await this.saveSetting('product_warehouses', warehouses);
+  }
+
+  async addWarehouse(name, icon = '📦') {
+    const trimmed = String(name || '').trim();
+    if (!trimmed) throw new Error('Tên kho hàng không được để trống');
+
+    const warehouses = await this.getWarehouses();
+    if (warehouses.some(w => w.name.toLowerCase() === trimmed.toLowerCase())) {
+      throw new Error(`Kho "${trimmed}" đã tồn tại!`);
+    }
+
+    const asciiSlug = trimmed
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/g, 'd')
+      .replace(/Đ/g, 'D')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .replace(/^kho-/, '') || 'custom';
+
+    let id = `kho-${asciiSlug}-${Math.floor(1000 + Math.random() * 9000)}`;
+    while (warehouses.some(w => w.id === id)) {
+      id = `kho-${asciiSlug}-${Math.floor(1000 + Math.random() * 9000)}`;
+    }
+
+    const newWarehouse = {
+      id,
+      name: trimmed,
+      icon: (icon && String(icon).trim()) || '📦'
+    };
+    warehouses.push(newWarehouse);
+    await this.saveWarehouses(warehouses);
+    return newWarehouse;
+  }
+
+  async renameWarehouse(id, newName, newIcon = null) {
+    const trimmedNew = String(newName || '').trim();
+    if (!trimmedNew) throw new Error('Tên kho hàng mới không được để trống');
+
+    const warehouses = await this.getWarehouses();
+    const idx = warehouses.findIndex(w => w.id === id);
+    if (idx === -1) throw new Error('Không tìm thấy kho hàng cần đổi tên');
+
+    if (warehouses.some((w, i) => i !== idx && w.name.toLowerCase() === trimmedNew.toLowerCase())) {
+      throw new Error(`Kho "${trimmedNew}" đã tồn tại!`);
+    }
+
+    warehouses[idx] = {
+      ...warehouses[idx],
+      name: trimmedNew,
+      ...(newIcon !== null && newIcon !== undefined && String(newIcon).trim() !== ''
+        ? { icon: String(newIcon).trim() }
+        : {})
+    };
+    await this.saveWarehouses(warehouses);
+    return warehouses;
+  }
+
+  async deleteWarehouse(id) {
+    const warehouses = await this.getWarehouses();
+    const target = warehouses.find(w => w.id === id);
+    if (!target) throw new Error('Không tìm thấy kho hàng cần xóa');
+
+    const products = await this.getAll('products');
+    const linked = products.filter(p => normalizeWarehouseId(p.warehouse, warehouses) === id);
+    if (linked.length > 0) {
+      throw new Error(`Không thể xóa vì đang có ${linked.length} sản phẩm trong "${target.name}". Vui lòng chuyển kho cho các sản phẩm này trước khi xóa!`);
+    }
+
+    if (warehouses.length <= 1) {
+      throw new Error('Cửa hàng phải có ít nhất 1 kho hàng!');
+    }
+
+    const nextWarehouses = warehouses.filter(w => w.id !== id);
+    await this.saveWarehouses(nextWarehouses);
+    return nextWarehouses;
+  }
+
+  async resetDefaultWarehouses() {
+    const defaults = DEFAULT_WAREHOUSES.map(w => ({ ...w }));
+    await this.saveWarehouses(defaults);
+    return defaults;
+  }
+
   async _incrementUnbackedChanges() {
     try {
       const shopInfo = (await this.getSetting('shop_info')) || { ...DEFAULT_SHOP_SETTINGS };
@@ -474,7 +571,7 @@ class KiteDatabase {
       exportData.stores[s] = await this.getAll(s, true);
     }
 
-    // Lấy toàn bộ cài đặt nghiệp vụ (shop_info, loại diều, đơn vị tính)
+    // Lấy toàn bộ cài đặt nghiệp vụ (shop_info, loại diều, đơn vị tính, kho hàng)
     const shopInfo = await this.getSetting('shop_info');
     if (shopInfo) exportData.settings['shop_info'] = shopInfo;
 
@@ -483,6 +580,11 @@ class KiteDatabase {
 
     const units = await this.getSetting('product_units');
     if (Array.isArray(units)) exportData.settings['product_units'] = units;
+
+    const warehouses = await this.getSetting('product_warehouses');
+    if (Array.isArray(warehouses)) {
+      exportData.settings['product_warehouses'] = warehouses.filter(w => w && w.id && w.id !== 'new');
+    }
 
     // Tính Checksum cho khối dữ liệu chính
     const payloadStr = JSON.stringify({
@@ -561,8 +663,8 @@ class KiteDatabase {
             if (item.isDeleted === undefined) item.isDeleted = false;
             else item.isDeleted = Boolean(item.isDeleted);
 
-            if (s === 'products' && !item.warehouse) {
-              item.warehouse = 'new';
+            if (s === 'products' && (!item.warehouse || item.warehouse === 'new')) {
+              item.warehouse = 'kho-dieu';
             }
 
             store.put(item);
@@ -602,6 +704,17 @@ class KiteDatabase {
             value: settingsData['product_units'],
             updatedAt: nowIso
           });
+        }
+
+        if (Array.isArray(settingsData['product_warehouses']) && settingsData['product_warehouses'].length > 0) {
+          const cleanedWarehouses = settingsData['product_warehouses'].filter(w => w && w.id && w.id !== 'new');
+          if (cleanedWarehouses.length > 0) {
+            settingsStore.put({
+              key: 'product_warehouses',
+              value: cleanedWarehouses,
+              updatedAt: nowIso
+            });
+          }
         }
       } catch (err) {
         tx.abort();

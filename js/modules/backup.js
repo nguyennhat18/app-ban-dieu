@@ -350,7 +350,7 @@ export class BackupModule {
           sellingPrice: Number(r[8]) || 0,
           stock: Number(r[9]) || 0,
           lowStockThreshold: Number(r[10]) || 5,
-          warehouse: 'new',
+          warehouse: 'kho-dieu',
           isDeleted: String(r[11] || '').toUpperCase() === 'CÓ'
         });
       }
