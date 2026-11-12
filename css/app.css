@@ -3205,30 +3205,79 @@ input, textarea, select {
   color: var(--text-main);
 }
 
-/* ================= QUẢN LÝ HAI KHO (KHO MỚI & KHO TỒN) ================= */
-.warehouse-tabs-bar {
+/* ================= QUẢN LÝ ĐA KHO HÀNG & TẠO KHO MỚI ================= */
+.warehouse-tabs-bar-wrap {
   display: flex;
-  align-items: stretch;
+  align-items: center;
   gap: 8px;
   background: var(--bg-card);
-  padding: 5px;
+  padding: 6px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-sm);
+  min-width: 0;
 }
 
-.warehouse-tab-btn {
+.warehouse-create-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 38px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  border: 1.5px dashed var(--primary);
+  background: var(--primary-light);
+  color: var(--primary-dark);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.25;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.warehouse-create-btn:hover {
+  background: #bae6fd;
+  border-style: solid;
+}
+
+.warehouse-create-btn:active {
+  transform: scale(0.97);
+}
+
+.warehouse-tabs-bar {
   flex: 1;
   min-width: 0;
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 8px;
-  padding: 10px 12px;
-  border: 1px solid transparent;
-  background: transparent;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  padding: 2px;
+}
+
+.warehouse-tabs-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.warehouse-tab-btn {
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
   border-radius: var(--radius-md);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   line-height: 1.25;
   white-space: nowrap;
@@ -3237,23 +3286,27 @@ input, textarea, select {
   transition: all 0.2s ease;
 }
 
-.warehouse-tab-btn.active {
-  background: #ffffff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+.warehouse-tab-btn:hover {
+  background: #e2e8f0;
+  color: var(--text-main);
 }
 
-.warehouse-tab-btn[data-warehouse="new"].active {
-  color: #0284c7;
-  border: 1px solid #bae6fd;
+.warehouse-tab-btn.active {
+  background: #ffffff;
+  color: var(--primary);
+  border-color: #7dd3fc;
+  box-shadow: 0 2px 8px rgba(2, 132, 199, 0.14);
 }
 
 .warehouse-tab-btn[data-warehouse="stock"].active {
   color: #d97706;
-  border: 1px solid #fed7aa;
+  border-color: #fed7aa;
+  box-shadow: 0 2px 8px rgba(217, 119, 6, 0.14);
 }
 
 .wh-tab-icon {
-  font-size: 18px;
+  font-size: 16px;
+  line-height: 1;
 }
 
 .wh-tab-badge {
@@ -3293,12 +3346,15 @@ input, textarea, select {
 .pos-warehouse-pill-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   background: #f1f5f9;
-  padding: 4px;
+  padding: 5px;
   border-radius: var(--radius-lg);
   margin-bottom: 8px;
   overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
   scrollbar-width: none;
 }
 
@@ -3307,18 +3363,19 @@ input, textarea, select {
 }
 
 .warehouse-filter-pill {
-  flex: 1;
+  flex: 0 0 auto;
+  scroll-snap-align: start;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 5px;
   text-align: center;
-  padding: 8px 8px;
-  font-size: 12px;
+  padding: 7px 12px;
+  font-size: 12.5px;
   font-weight: 700;
   line-height: 1.25;
   border-radius: var(--radius-md);
-  border: none;
+  border: 1px solid transparent;
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
@@ -3326,10 +3383,112 @@ input, textarea, select {
   transition: all 0.15s ease;
 }
 
+.warehouse-filter-pill:hover {
+  color: var(--text-main);
+}
+
 .warehouse-filter-pill.active {
   background: #ffffff;
   color: var(--primary);
+  border-color: #bae6fd;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+/* Modal chuyển kho & tạo kho */
+.move-wh-product-summary {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+}
+
+.move-warehouse-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.move-wh-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: #ffffff;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  min-width: 0;
+}
+
+.move-wh-option:hover:not([disabled]) {
+  border-color: var(--primary);
+  background: var(--primary-light);
+}
+
+.move-wh-option.is-current {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  opacity: 0.72;
+  cursor: default;
+}
+
+.move-wh-icon {
+  font-size: 20px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.move-wh-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.move-wh-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-main);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.move-wh-tag {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.wh-icon-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.wh-icon-chip {
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  background: var(--bg-subtle);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.wh-icon-chip:hover {
+  border-color: var(--primary);
+  background: #ffffff;
+}
+
+.wh-icon-chip.active {
+  border-color: var(--primary);
+  background: var(--primary-light);
+  box-shadow: 0 0 0 2px var(--primary-glow);
 }
 
 /* ================= HỘP THÊM HÀNG NHẬP KHO & BÁO GIÁ ================= */
@@ -3541,14 +3700,25 @@ input, textarea, select {
     font-size: 15px;
   }
 
-  .warehouse-tab-btn {
-    padding: 8px 8px;
+  .warehouse-create-btn {
+    padding: 7px 10px;
     font-size: 12.5px;
+    min-height: 36px;
+  }
+
+  .warehouse-tab-btn {
+    padding: 7px 10px;
+    font-size: 12.5px;
+    min-height: 36px;
     gap: 5px;
   }
 
   .wh-tab-icon {
     font-size: 15px;
+  }
+
+  .move-warehouse-grid {
+    grid-template-columns: 1fr;
   }
 }
 
