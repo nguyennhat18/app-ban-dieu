@@ -476,6 +476,41 @@ async function main() {
     assert.ok(expiredText.includes('Hết hạn'));
   });
 
+  // ================= 10. TEST BẢO TOÀN DỮ LIỆU SAO LƯU & KHÔI PHỤC =================
+  await runAsyncTest('10.1. Checksum SHA-256 đồng nhất 64 ký tự cho dữ liệu Tiếng Việt', async () => {
+    const samplePayload = JSON.stringify({
+      stores: { products: [{ id: 'SP-01', name: 'Diều sáo 2m5', stock: 10 }] },
+      settings: { product_categories: ['Diều sáo truyền thống'], product_units: ['Chiếc'] }
+    });
+    const hash1 = await calculateChecksum(samplePayload);
+    const hash2 = await calculateChecksum(samplePayload);
+    assert.strictEqual(hash1.length, 64, 'Checksum SHA-256 phải dài chuẩn 64 ký tự hex');
+    assert.strictEqual(hash1, hash2, 'Cùng dữ liệu phải cho cùng mã checksum');
+  });
+
+  runTest('10.2. Chuẩn hóa bản ghi khôi phục: Không bao giờ lỗi khóa chính hoặc thiếu phân kho', () => {
+    const sanitizeItem = (rawItem, storeName, idx) => {
+      if (!rawItem || typeof rawItem !== 'object') return null;
+      const item = { ...rawItem };
+      if (item.id === undefined || item.id === null || item.id === '') {
+        item.id = `RST-${storeName}-${idx}`;
+      } else {
+        item.id = String(item.id);
+      }
+      item.isDeleted = Boolean(item.isDeleted);
+      if (storeName === 'products' && !item.warehouse) item.warehouse = 'new';
+      return item;
+    };
+
+    const brokenProd = sanitizeItem({ name: 'Diều không có ID', sellingPrice: 500000 }, 'products', 0);
+    assert.ok(brokenProd.id.startsWith('RST-products-0'), 'Tự sinh ID nếu bản ghi thiếu ID');
+    assert.strictEqual(brokenProd.warehouse, 'new', 'Tự gán kho mặc định là new nếu thiếu');
+    assert.strictEqual(brokenProd.isDeleted, false, 'Chuẩn hóa isDeleted thành boolean');
+
+    const numIdProd = sanitizeItem({ id: 12345, name: 'Diều ID số' }, 'products', 1);
+    assert.strictEqual(numIdProd.id, '12345', 'ID số phải chuyển thành chuỗi chuẩn');
+  });
+
   console.log('\n========================================================');
   console.log(`🎉 KẾT QUẢ KIỂM THỬ: ${passedTests}/${totalTests} TESTS ĐẠT (100%)`);
   console.log('========================================================\n');

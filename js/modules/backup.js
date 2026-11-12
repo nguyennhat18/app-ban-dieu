@@ -1,4 +1,4 @@
-// Mô-đun Bảo Vệ Dữ Liệu: Sao Lưu, Khôi Phục, Bản Chụp Snapshot, Thùng Rác & Xuất Toàn Bộ Excel
+// Mô-đun Bảo Vệ Dữ Liệu: Sao Lưu, Khôi Phục (JSON/Paste/Excel), Bản Chụp Snapshot, Thùng Rác & Xuất Toàn Bộ Excel
 import { db } from '../db.js';
 import {
   formatVND,
@@ -7,9 +7,12 @@ import {
   formatDateForInput,
   calculateChecksum,
   shareFileOrDownload,
+  readFileAsText,
+  downloadBlobFile,
   escapeHTML
 } from '../utils.js';
 import { APP_CONFIG } from '../config.js';
+import { parseStockArray2D } from '../excel-importer.js';
 
 export class BackupModule {
   constructor(app) {
@@ -21,62 +24,232 @@ export class BackupModule {
     try {
       const backupData = await db.exportFullBackup();
       const jsonStr = JSON.stringify(backupData, null, 2);
-      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const compactJsonStr = JSON.stringify(backupData);
+      const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8' });
 
       const now = new Date();
       const dateStr = formatDateForInput(now);
       const timeStr = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
       const fileName = `saoluu-dieu-${dateStr}-${timeStr}.json`;
 
-      // Chia sẻ qua Web Share API (Zalo, Drive, Gmail) hoặc tải xuống
-      const result = await shareFileOrDownload(
-        blob,
-        fileName,
-        `Sao lưu dữ liệu diều ${dateStr}`,
-        `File sao lưu toàn bộ dữ liệu cửa hàng diều ngày ${dateStr}. Vui lòng cất giữ an toàn trên Zalo Cloud hoặc Google Drive.`
-      );
+      const productsCount = (backupData.stores.products || []).filter(p => !p.isDeleted).length;
+      const customersCount = (backupData.stores.customers || []).filter(c => !c.isDeleted).length;
+      const ordersCount = (backupData.stores.orders || []).filter(o => !o.isDeleted).length;
+      const quotesCount = (backupData.stores.quotations || []).filter(q => !q.isDeleted).length;
+      const importsCount = (backupData.stores.stock_imports || []).length;
+      const sizeKB = Math.max(1, Math.round(blob.size / 1024));
 
-      // Đánh dấu đã sao lưu thành công
-      await db.markBackupCompleted();
-      this.app.updateBackupBanner();
+      const isAllEmpty = productsCount === 0 && customersCount === 0 && ordersCount === 0;
 
-      alert(
-        `✅ SAO LƯU THÀNH CÔNG!\n\n` +
-        `- Tên file: ${fileName}\n` +
-        `- Mã kiểm tra (Checksum): ${backupData.checksum.slice(0, 12)}...\n` +
-        `- Hãy gửi file này vào Cloud Zalo hoặc Google Drive để bảo vệ dữ liệu khi mất hoặc đổi điện thoại.`
-      );
+      const modalHtml = `
+        <div class="modal-backdrop" id="export-backup-modal">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h2 class="modal-title">💾 Xuất File Sao Lưu Dữ Liệu</h2>
+              <button class="modal-close" id="btn-close-expmodal">&times;</button>
+            </div>
+
+            <div class="modal-body">
+              <div class="card p-3 mb-3 bg-light">
+                <div class="text-bold mb-1">📦 Nội dung đã đóng gói (${sizeKB} KB):</div>
+                <div class="text-xs text-muted mb-2">Tên file: <code>${escapeHTML(fileName)}</code></div>
+                <div class="stats-grid">
+                  <div class="stat-card">
+                    <div class="stat-lbl">Sản phẩm</div>
+                    <div class="stat-val text-primary">${productsCount}</div>
+                  </div>
+                  <div class="stat-card">
+                    <div class="stat-lbl">Khách hàng</div>
+                    <div class="stat-val">${customersCount}</div>
+                  </div>
+                  <div class="stat-card">
+                    <div class="stat-lbl">Đơn hàng</div>
+                    <div class="stat-val text-bold">${ordersCount}</div>
+                  </div>
+                  <div class="stat-card">
+                    <div class="stat-lbl">Báo giá</div>
+                    <div class="stat-val">${quotesCount}</div>
+                  </div>
+                </div>
+                <div class="text-xs text-muted mt-2">
+                  ✓ Bao gồm cả Cài đặt shop, Logo, QR, Danh mục diều & ${importsCount} phiếu nhập kho.
+                </div>
+              </div>
+
+              ${isAllEmpty ? `
+                <div class="alert alert-warning text-xs mb-3">
+                  ⚠️ <b>Chú ý:</b> Máy hiện tại đang có <b>0 sản phẩm, 0 đơn hàng</b>! Nếu bạn từng nhập hàng trên trình duyệt web (Safari/Chrome) mà nay lại mở từ icon ngoài màn hình chính (hoặc ngược lại), dữ liệu ở 2 nơi tách riêng nhau — hãy xuất từ đúng nơi có dữ liệu nhé!
+                </div>
+              ` : ''}
+
+              <div class="text-xs text-muted mb-2">
+                Chọn 1 trong các cách bên dưới để lưu hoặc gửi sang máy khác (bấm nút trực tiếp):
+              </div>
+
+              <div style="display: flex; flex-direction: column; gap: 10px;">
+                <button type="button" class="btn btn-primary btn-block btn-lg" id="btn-exp-download" style="font-weight: 800;">
+                  ⬇️ Tải File Sao Lưu (.json) Về Máy
+                </button>
+
+                <button type="button" class="btn btn-success btn-block btn-lg" id="btn-exp-share" style="font-weight: 800;">
+                  📤 Gửi File Qua Zalo / Google Drive
+                </button>
+
+                <button type="button" class="btn btn-outline-primary btn-block" id="btn-exp-copy-text" style="font-weight: 700;">
+                  📋 Sao Chép Mã Dữ Liệu (Dự phòng gửi Zalo/Tin nhắn)
+                </button>
+              </div>
+            </div>
+
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" id="btn-cancel-expmodal">Đóng</button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const old = document.getElementById('export-backup-modal');
+      if (old) old.remove();
+      document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+      const modal = document.getElementById('export-backup-modal');
+      const close = () => modal.remove();
+      document.getElementById('btn-close-expmodal').addEventListener('click', close);
+      document.getElementById('btn-cancel-expmodal').addEventListener('click', close);
+
+      // 1. Tải trực tiếp đồng bộ ngay khi bấm
+      document.getElementById('btn-exp-download').addEventListener('click', async () => {
+        downloadBlobFile(blob, fileName);
+        await db.markBackupCompleted();
+        this.app.updateBackupBanner();
+        alert(`✅ Đã tải file sao lưu "${fileName}" về thư mục Tải xuống (Downloads) của máy!\nHãy gửi file này sang máy kia qua Zalo hoặc Drive.`);
+      });
+
+      // 2. Chia sẻ trực tiếp (giữ nguyên user gesture)
+      document.getElementById('btn-exp-share').addEventListener('click', async () => {
+        const file = new File([blob], fileName, { type: 'application/json' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({
+              files: [file],
+              title: `Sao lưu dữ liệu diều ${dateStr}`,
+              text: `File sao lưu cửa hàng diều ngày ${dateStr}`
+            });
+            await db.markBackupCompleted();
+            this.app.updateBackupBanner();
+            return;
+          } catch (err) {
+            if (err.name === 'AbortError') return;
+            console.warn('[Backup] Share file thất bại, chuyển sang tải xuống:', err);
+          }
+        }
+        // Fallback tải xuống nếu máy không hỗ trợ share file .json
+        downloadBlobFile(blob, fileName);
+        await db.markBackupCompleted();
+        this.app.updateBackupBanner();
+        alert(`Trình duyệt máy này không hỗ trợ chia sẻ trực tiếp file .json. Hệ thống đã tự động tải file "${fileName}" về máy — bạn mở Zalo chọn đính kèm file đó gửi đi là được!`);
+      });
+
+      // 3. Copy text JSON dự phòng (khi iOS/Zalo WebView chặn tải file)
+      document.getElementById('btn-exp-copy-text').addEventListener('click', async () => {
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(compactJsonStr);
+            await db.markBackupCompleted();
+            this.app.updateBackupBanner();
+            alert(`✅ Đã sao chép toàn bộ mã dữ liệu (${productsCount} sản phẩm, ${ordersCount} đơn hàng)!\n\nCách chuyển sang máy khác:\n1. Dán đoạn mã này gửi vào Zalo Cloud của bạn.\n2. Trên máy kia, sao chép đoạn mã rồi vào mục Nạp Dữ Liệu -> chọn "Dán mã trực tiếp" là xong!`);
+            return;
+          }
+        } catch (err) {
+          console.warn('Clipboard error:', err);
+        }
+        // Nếu clipboard bị chặn, hiện ô textarea để copy thủ công
+        prompt('Hãy sao chép toàn bộ chuỗi dưới đây:', compactJsonStr);
+      });
     } catch (err) {
-      alert('Lỗi sao lưu: ' + err.message);
+      alert('Lỗi tạo bản sao lưu: ' + err.message);
       console.error(err);
     }
   }
 
-  // ================= 2. KHÔI PHỤC DỮ LIỆU TỪ FILE JSON =================
+  // ================= 2. KHÔI PHỤC / NHẬP DỮ LIỆU TỪ FILE HOẶC DÁN MÃ =================
   async promptRestoreFile() {
-    const fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.accept = '.json,application/json';
+    const old = document.getElementById('restore-source-modal');
+    if (old) old.remove();
 
-    fileInput.onchange = async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
+    const modalHtml = `
+      <div class="modal-backdrop" id="restore-source-modal">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2 class="modal-title">📥 Nhập / Khôi Phục Dữ Liệu</h2>
+            <button class="modal-close" id="btn-close-rsmodal">&times;</button>
+          </div>
 
+          <div class="modal-body">
+            <!-- Cách 1: Chọn file trực tiếp từ input gắn thật trong DOM -->
+            <div class="card p-3 mb-3 bg-light" style="border: 2px dashed #0284c7; border-radius: 12px;">
+              <div class="text-bold text-primary mb-1" style="font-size: 14px;">📁 Cách 1: Chọn File Sao Lưu từ máy</div>
+              <p class="text-xs text-muted mb-3">
+                Hỗ trợ file sao lưu <b>.json</b> (hoặc file <b>.xlsx</b> xuất từ chức năng Xuất Excel Toàn Bộ).
+              </p>
+
+              <label for="dom-restore-file-input" class="btn btn-primary btn-block btn-lg" style="font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0;">
+                📂 CHỌN FILE TỪ ĐIỆN THOẠI / MÁY TÍNH
+              </label>
+              <input type="file" id="dom-restore-file-input" accept=".json,.xlsx,.xls,.txt,application/json,text/plain,*/*" style="position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden;">
+              <div id="restore-file-status" class="text-xs text-muted mt-2 text-center"></div>
+            </div>
+
+            <!-- Cách 2: Dán mã sao lưu trực tiếp -->
+            <div class="card p-3 bg-light" style="border: 1px solid #cbd5e1; border-radius: 12px;">
+              <div class="text-bold mb-1" style="font-size: 14px;">📋 Cách 2: Dán Mã Dữ Liệu (Nếu không chọn được file)</div>
+              <p class="text-xs text-muted mb-2">
+                Nếu điện thoại bị lỗi không chọn được file từ Zalo, hãy sao chép mã dữ liệu rồi dán vào ô dưới đây:
+              </p>
+              <textarea id="restore-paste-textarea" class="form-textarea text-xs" rows="3" placeholder="Dán chuỗi mã sao lưu JSON bắt đầu bằng { ... } vào đây..."></textarea>
+              <button type="button" class="btn btn-outline-primary btn-block btn-sm mt-2" id="btn-restore-from-paste" style="font-weight: 700;">
+                ⚡ Đọc & Nạp Dữ Liệu Đã Dán
+              </button>
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" id="btn-cancel-rsmodal">Đóng</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+    const modal = document.getElementById('restore-source-modal');
+    const close = () => modal.remove();
+    document.getElementById('btn-close-rsmodal').addEventListener('click', close);
+    document.getElementById('btn-cancel-rsmodal').addEventListener('click', close);
+
+    const fileInput = document.getElementById('dom-restore-file-input');
+    const statusEl = document.getElementById('restore-file-status');
+
+    // Hàm dùng chung để xử lý chuỗi JSON sau khi đọc từ file hoặc dán text
+    const processBackupJsonText = async (rawText, sourceName) => {
+      const cleaned = String(rawText || '').replace(/^\uFEFF/, '').trim();
+      if (!cleaned) {
+        throw new Error('Nội dung file trống rỗng!');
+      }
+
+      let backupData;
       try {
-        const text = await file.text();
-        let backupData;
-        try {
-          backupData = JSON.parse(text);
-        } catch {
-          throw new Error('File không phải định dạng JSON hợp lệ!');
-        }
+        backupData = JSON.parse(cleaned);
+      } catch {
+        throw new Error('Nội dung không phải định dạng sao lưu JSON hợp lệ! Nếu bạn chọn nhầm ảnh hoặc PDF, hãy chọn đúng file .json.');
+      }
 
-        // Kiểm tra hợp lệ dữ liệu
-        if (!backupData.stores || !backupData.checksum) {
-          throw new Error('File sao lưu thiếu dữ liệu hoặc không phải bản sao lưu của ứng dụng!');
-        }
+      if (!backupData || typeof backupData !== 'object' || !backupData.stores) {
+        throw new Error('File không chứa dữ liệu sao lưu hợp lệ của ứng dụng Bán Diều (thiếu trường stores).');
+      }
 
-        // Kiểm tra mã băm Checksum
+      let skipChecksum = false;
+      if (backupData.checksum) {
         const payloadStr = JSON.stringify({
           stores: backupData.stores,
           settings: backupData.settings
@@ -85,26 +258,148 @@ export class BackupModule {
 
         if (backupData.checksum !== calcChecksum) {
           const forceProceed = confirm(
-            `⚠️ CẢNH BÁO MÃ CHECKSUM KHÔNG KHỚP!\n\n` +
-            `Mã trong file: ${backupData.checksum}\n` +
-            `Mã tính được: ${calcChecksum}\n\n` +
-            `File có thể đã bị sửa đổi thủ công hoặc bị hỏng một phần. Bạn có muốn bỏ qua và tiếp tục nạp không?`
+            `⚠️ CẢNH BÁO MÃ KIỂM TRA (CHECKSUM) KHÁC NHAU\n\n` +
+            `File có thể đã được gửi qua ứng dụng nhắn tin làm thay đổi định dạng chữ, hoặc sao lưu từ phiên bản cũ.\n\n` +
+            `Bạn có muốn tiếp tục nạp toàn bộ dữ liệu từ file này không?`
           );
           if (!forceProceed) return;
+          skipChecksum = true;
         }
-
-        // Hiển thị modal xem trước và lựa chọn chế độ khôi phục
-        this.showRestorePreviewModal(backupData, file.name);
-      } catch (err) {
-        alert('Lỗi đọc file sao lưu: ' + err.message);
+      } else {
+        skipChecksum = true;
       }
+
+      close();
+      this.showRestorePreviewModal(backupData, sourceName, skipChecksum);
     };
 
-    fileInput.click();
+    // Xử lý chọn file từ DOM input
+    fileInput.addEventListener('change', async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+
+      statusEl.innerHTML = `<span class="text-primary">⏳ Đang đọc file <b>${escapeHTML(file.name)}</b>...</span>`;
+
+      try {
+        const lowerName = (file.name || '').toLowerCase();
+        if (lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls')) {
+          const backupData = await this._parseExcelFileToBackupData(file);
+          close();
+          this.showRestorePreviewModal(backupData, file.name, true);
+          return;
+        }
+
+        const text = await readFileAsText(file);
+        await processBackupJsonText(text, file.name);
+      } catch (err) {
+        statusEl.innerHTML = `<span class="text-danger text-bold">❌ ${escapeHTML(err.message)}</span>`;
+        alert('Lỗi đọc file: ' + err.message);
+        fileInput.value = '';
+      }
+    });
+
+    // Xử lý dán mã trực tiếp
+    document.getElementById('btn-restore-from-paste').addEventListener('click', async () => {
+      const pasteVal = document.getElementById('restore-paste-textarea').value;
+      if (!pasteVal || !pasteVal.trim()) {
+        return alert('Vui lòng dán đoạn mã sao lưu vào ô trống trước!');
+      }
+      try {
+        await processBackupJsonText(pasteVal, 'Dữ liệu dán trực tiếp');
+      } catch (err) {
+        alert('Lỗi đọc mã đã dán: ' + err.message);
+      }
+    });
+  }
+
+  /**
+   * Hỗ trợ đọc file Excel (.xlsx) xuất từ "Xuất Excel Toàn Bộ" hoặc Excel kho tồn chuyển thành cấu trúc Backup
+   */
+  async _parseExcelFileToBackupData(file) {
+    const XLSX = window.XLSX;
+    if (!XLSX) throw new Error('Thư viện đọc Excel chưa sẵn sàng.');
+
+    const buffer = await file.arrayBuffer();
+    const wb = XLSX.read(buffer, { type: 'array' });
+
+    const stores = {
+      products: [],
+      customers: [],
+      orders: [],
+      inventory_logs: [],
+      stock_imports: [],
+      quotations: [],
+      debt_payments: []
+    };
+
+    // 1. Trường hợp file là Xuất Excel Toàn Bộ Dữ Liệu (có sheet "Sản Phẩm")
+    if (wb.Sheets['Sản Phẩm']) {
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets['Sản Phẩm'], { header: 1 });
+      for (let i = 1; i < rows.length; i++) {
+        const r = rows[i];
+        if (!r || !r[2]) continue;
+        stores.products.push({
+          id: r[0] ? String(r[0]) : `SP-XLS-${Date.now()}-${i}`,
+          code: String(r[1] || ''),
+          name: String(r[2] || '').trim(),
+          category: String(r[3] || 'Phụ kiện diều'),
+          size: String(r[4] || ''),
+          color: String(r[5] || ''),
+          unit: String(r[6] || 'Chiếc'),
+          costPrice: Number(r[7]) || 0,
+          sellingPrice: Number(r[8]) || 0,
+          stock: Number(r[9]) || 0,
+          lowStockThreshold: Number(r[10]) || 5,
+          warehouse: 'new',
+          isDeleted: String(r[11] || '').toUpperCase() === 'CÓ'
+        });
+      }
+    } else if (wb.SheetNames.length > 0) {
+      // Trường hợp nạp nhầm file Kho tồn kiểu NHẬP _ XUẤT.xlsx
+      const firstSheet = wb.Sheets[wb.SheetNames[0]];
+      const rows2D = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+      const parsed = parseStockArray2D(rows2D);
+      parsed.forEach((p, idx) => {
+        stores.products.push({
+          ...p,
+          id: p.id || `SP-IMP-${Date.now()}-${idx}`,
+          warehouse: 'stock',
+          isDeleted: false
+        });
+      });
+    }
+
+    if (wb.Sheets['Khách Hàng']) {
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets['Khách Hàng'], { header: 1 });
+      for (let i = 1; i < rows.length; i++) {
+        const r = rows[i];
+        if (!r || !r[1]) continue;
+        stores.customers.push({
+          id: r[0] ? String(r[0]) : `KH-XLS-${Date.now()}-${i}`,
+          name: String(r[1] || '').trim(),
+          phone: String(r[2] || ''),
+          address: String(r[3] || ''),
+          notes: String(r[4] || ''),
+          isDeleted: String(r[5] || '').toUpperCase() === 'CÓ'
+        });
+      }
+    }
+
+    if (stores.products.length === 0 && stores.customers.length === 0) {
+      throw new Error('Không tìm thấy dữ liệu sản phẩm hay khách hàng hợp lệ trong file Excel này! Hãy dùng file sao lưu .json để khôi phục đầy đủ nhất.');
+    }
+
+    return {
+      app: APP_CONFIG.APP_NAME,
+      schemaVersion: APP_CONFIG.DB_VERSION,
+      exportTime: new Date().toISOString(),
+      stores,
+      settings: {}
+    };
   }
 
   // Modal xem trước thông tin bản sao lưu & tùy chọn Thay thế / Gộp
-  showRestorePreviewModal(backupData, originalFileName) {
+  showRestorePreviewModal(backupData, originalFileName, skipChecksum = false) {
     const productsCount = (backupData.stores.products || []).filter(p => !p.isDeleted).length;
     const customersCount = (backupData.stores.customers || []).filter(c => !c.isDeleted).length;
     const ordersCount = (backupData.stores.orders || []).filter(o => !o.isDeleted).length;
@@ -114,16 +409,15 @@ export class BackupModule {
       <div class="modal-backdrop" id="restore-preview-modal">
         <div class="modal-content">
           <div class="modal-header">
-            <h2 class="modal-title">🔄 Khôi Phục Dữ Liệu</h2>
+            <h2 class="modal-title">🔄 Xác Nhận Khôi Phục Dữ Liệu</h2>
             <button class="modal-close" id="btn-close-rpmodal">&times;</button>
           </div>
 
           <div class="modal-body">
             <div class="card p-3 mb-3 bg-light">
-              <div class="text-bold mb-1">📄 Tên file: ${escapeHTML(originalFileName)}</div>
+              <div class="text-bold mb-1">📄 Nguồn: ${escapeHTML(originalFileName)}</div>
               <div class="text-sm">Thời điểm sao lưu: <b>${formatDateTime(backupData.exportTime)}</b></div>
-              <div class="text-sm">Phiên bản dữ liệu: <b>v${backupData.schemaVersion || 1}</b></div>
-              <div class="text-sm text-success">✓ Kiểm tra toàn vẹn Checksum: <b>Hợp lệ</b></div>
+              <div class="text-sm text-success">✓ Trạng thái file: <b>Sẵn sàng nạp vào máy</b></div>
             </div>
 
             <div class="stats-grid mb-3">
@@ -152,28 +446,28 @@ export class BackupModule {
                   <input type="radio" name="restore-mode" value="replace" checked>
                   <div class="restore-mode-text">
                     <b>Thay thế toàn bộ (Khuyên dùng)</b>
-                    <span>Xóa trắng dữ liệu hiện tại trên máy và nạp lại toàn bộ từ file sao lưu. Thích hợp khi đổi sang máy mới.</span>
+                    <span>Xóa dữ liệu cũ trên máy này và nạp y hệt dữ liệu từ bản sao lưu. Thích hợp khi chuyển sang máy mới.</span>
                   </div>
                 </label>
 
                 <label class="restore-mode-card">
                   <input type="radio" name="restore-mode" value="merge">
                   <div class="restore-mode-text">
-                    <b>Gộp dữ liệu</b>
-                    <span>Giữ nguyên dữ liệu hiện tại, bổ sung thêm các bản ghi từ file sao lưu.</span>
+                    <b>Gộp thêm dữ liệu</b>
+                    <span>Giữ nguyên dữ liệu hiện có, bổ sung thêm và cập nhật theo mã từ file sao lưu.</span>
                   </div>
                 </label>
               </div>
             </div>
 
             <div class="alert alert-info text-xs mt-3">
-              🛡️ <b>TỰ ĐỘNG BẢO VỆ:</b> Ứng dụng sẽ tự động chụp một bản sao lưu cứu hộ (Snapshot) của máy hiện tại ngay trước khi nạp. Nếu có sự cố bạn có thể hoàn tác lại bất kỳ lúc nào.
+              🛡️ <b>TỰ ĐỘNG BẢO VỆ:</b> Dữ liệu cũ trên máy này sẽ được chụp cứu hộ tự động trước khi ghi đè.
             </div>
           </div>
 
           <div class="modal-footer">
-            <button class="btn btn-secondary" id="btn-cancel-rpmodal">Hủy</button>
-            <button class="btn btn-danger" id="btn-confirm-restore">✓ Bắt Đầu Khôi Phục</button>
+            <button type="button" class="btn btn-secondary" id="btn-cancel-rpmodal">Hủy</button>
+            <button type="button" class="btn btn-danger" id="btn-confirm-restore" style="font-weight: 800;">✓ Bắt Đầu Nạp Dữ Liệu</button>
           </div>
         </div>
       </div>
@@ -188,16 +482,30 @@ export class BackupModule {
     document.getElementById('btn-close-rpmodal').addEventListener('click', close);
     document.getElementById('btn-cancel-rpmodal').addEventListener('click', close);
 
-    document.getElementById('btn-confirm-restore').addEventListener('click', async () => {
+    const btnConfirm = document.getElementById('btn-confirm-restore');
+    btnConfirm.addEventListener('click', async () => {
       const mode = document.querySelector('input[name="restore-mode"]:checked').value;
-      close();
+      btnConfirm.disabled = true;
+      btnConfirm.textContent = '⏳ Đang ghi dữ liệu vào máy...';
 
       try {
-        await db.restoreFromBackup(backupData, mode);
-        alert('🎉 KHÔI PHỤC DỮ LIỆU THÀNH CÔNG!\nỨng dụng sẽ tự động tải lại dữ liệu mới.');
+        const res = await db.restoreFromBackup(backupData, mode, skipChecksum);
+        close();
+        const c = res?.counts || {};
+        alert(
+          `🎉 NẠP DỮ LIỆU THÀNH CÔNG!\n\n` +
+          `Đã lưu thực tế vào bộ nhớ máy này:\n` +
+          `• Sản phẩm & Kho: ${c.products ?? productsCount} món\n` +
+          `• Khách hàng: ${c.customers ?? customersCount} khách\n` +
+          `• Đơn hàng: ${c.orders ?? ordersCount} đơn\n` +
+          `• Báo giá: ${c.quotations ?? quotesCount} phiếu\n\n` +
+          `Ứng dụng sẽ tải lại ngay để hiển thị dữ liệu mới!`
+        );
         window.location.reload();
       } catch (err) {
-        alert('Lỗi khôi phục: ' + err.message);
+        btnConfirm.disabled = false;
+        btnConfirm.textContent = '✓ Bắt Đầu Nạp Dữ Liệu';
+        alert('❌ LỖI NẠP DỮ LIỆU: ' + err.message);
       }
     });
   }
@@ -247,7 +555,7 @@ export class BackupModule {
     if (!confirmRestore) return;
 
     try {
-      await db.restoreFromBackup(snap.data, 'replace');
+      await db.restoreFromBackup(snap.data, 'replace', true);
       alert('✓ Đã khôi phục dữ liệu từ bản chụp thành công!');
       window.location.reload();
     } catch (err) {
@@ -400,7 +708,8 @@ export class BackupModule {
       const excelBlob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const fileName = `DuPhong-ToanBoDuLieu-${formatDateForInput(new Date())}.xlsx`;
 
-      await shareFileOrDownload(excelBlob, fileName, 'Bản sao lưu Excel toàn bộ dữ liệu', 'Bản sao lưu Excel tất cả các bảng');
+      downloadBlobFile(excelBlob, fileName);
+      alert(`✅ Đã xuất file Excel dự phòng "${fileName}" (${products.length} sản phẩm, ${customers.length} khách, ${orders.length} đơn)!`);
     } catch (err) {
       alert('Lỗi xuất Excel toàn bộ: ' + err.message);
     }

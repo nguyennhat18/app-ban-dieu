@@ -474,9 +474,15 @@ class KiteDatabase {
       exportData.stores[s] = await this.getAll(s, true);
     }
 
-    // Lấy settings
+    // Lấy toàn bộ cài đặt nghiệp vụ (shop_info, loại diều, đơn vị tính)
     const shopInfo = await this.getSetting('shop_info');
-    exportData.settings['shop_info'] = shopInfo;
+    if (shopInfo) exportData.settings['shop_info'] = shopInfo;
+
+    const categories = await this.getSetting('product_categories');
+    if (Array.isArray(categories)) exportData.settings['product_categories'] = categories;
+
+    const units = await this.getSetting('product_units');
+    if (Array.isArray(units)) exportData.settings['product_units'] = units;
 
     // Tính Checksum cho khối dữ liệu chính
     const payloadStr = JSON.stringify({
@@ -492,39 +498,46 @@ class KiteDatabase {
    * Khôi phục CSDL từ đối tượng sao lưu
    * @param {object} backupData Đối tượng JSON đã nạp
    * @param {'replace'|'merge'} mode Chế độ khôi phục
+   * @param {boolean} skipChecksum Bỏ qua lỗi checksum nếu người dùng đã xác nhận tiếp tục
    */
-  async restoreFromBackup(backupData, mode = 'replace') {
+  async restoreFromBackup(backupData, mode = 'replace', skipChecksum = false) {
     await this.ensureReady();
 
     // 1. Kiểm tra cấu trúc bắt buộc
-    if (!backupData || !backupData.stores) {
-      throw new Error('Dữ liệu sao lưu không đúng định dạng!');
+    if (!backupData || !backupData.stores || typeof backupData.stores !== 'object') {
+      throw new Error('Dữ liệu sao lưu không đúng định dạng (thiếu dữ liệu bảng stores)!');
     }
 
-    // 2. Kiểm tra checksum
-    const payloadStr = JSON.stringify({
-      stores: backupData.stores,
-      settings: backupData.settings
-    });
-    const expectedChecksum = await calculateChecksum(payloadStr);
-    if (backupData.checksum && backupData.checksum !== expectedChecksum) {
-      throw new Error('Mã băm Checksum không khớp! File sao lưu có thể đã bị sửa đổi hoặc hỏng.');
+    // 2. Kiểm tra checksum (nếu không bỏ qua)
+    if (!skipChecksum && backupData.checksum) {
+      const payloadStr = JSON.stringify({
+        stores: backupData.stores,
+        settings: backupData.settings
+      });
+      const expectedChecksum = await calculateChecksum(payloadStr);
+      if (backupData.checksum !== expectedChecksum) {
+        throw new Error('Mã băm Checksum không khớp! File sao lưu có thể đã bị sửa đổi hoặc thay đổi định dạng.');
+      }
     }
 
-    // 3. QUAN TRỌNG: LUÔN tự tạo một bản sao lưu cứu hộ (snapshot) trước khi phục hồi
-    console.log('[Restore] Đang tự động tạo bản chụp cứu hộ trước khi khôi phục...');
-    await this.createSnapshot('Cứu hộ tự động trước khi khôi phục');
+    // 3. Tạo bản chụp cứu hộ an toàn trước khi ghi đè (không để lỗi snapshot cản trở khôi phục)
+    try {
+      console.log('[Restore] Đang tự động tạo bản chụp cứu hộ trước khi khôi phục...');
+      await this.createSnapshot('Cứu hộ tự động trước khi khôi phục');
+    } catch (snapErr) {
+      console.warn('[Restore] Bỏ qua tạo snapshot cứu hộ do lỗi phụ:', snapErr);
+    }
 
     const storeNames = ['products', 'customers', 'orders', 'inventory_logs', 'stock_imports', 'quotations', 'debt_payments'];
 
-    return new Promise((resolve, reject) => {
+    await new Promise((resolve, reject) => {
       const tx = this.db.transaction([...storeNames, 'settings'], 'readwrite');
-      tx.oncomplete = async () => {
-        console.log('[Restore] Khôi phục hoàn tất!');
-        await this.markBackupCompleted();
+      tx.oncomplete = () => {
+        console.log('[Restore] Transaction IndexedDB hoàn tất!');
         resolve(true);
       };
-      tx.onerror = (e) => reject(new Error('Khôi phục thất bại: ' + e.target.error));
+      tx.onerror = (e) => reject(new Error('Khôi phục thất bại (Transaction Error): ' + (e.target.error?.message || e.target.error)));
+      tx.onabort = (e) => reject(new Error('Khôi phục bị hủy (Transaction Abort): ' + (e.target.error?.message || 'Lỗi ghi dữ liệu')));
 
       try {
         for (const s of storeNames) {
@@ -532,19 +545,62 @@ class KiteDatabase {
           if (mode === 'replace') {
             store.clear();
           }
-          const items = backupData.stores[s] || [];
-          for (const item of items) {
+
+          const rawItems = Array.isArray(backupData.stores[s]) ? backupData.stores[s] : [];
+          rawItems.forEach((rawItem, idx) => {
+            if (!rawItem || typeof rawItem !== 'object') return;
+            const item = { ...rawItem };
+
+            // Đảm bảo khóa chính 'id' luôn là chuỗi hợp lệ để tránh IndexedDB abort toàn bộ transaction
+            if (item.id === undefined || item.id === null || item.id === '') {
+              item.id = `RST-${s}-${Date.now()}-${idx}`;
+            } else {
+              item.id = String(item.id);
+            }
+
+            if (item.isDeleted === undefined) item.isDeleted = false;
+            else item.isDeleted = Boolean(item.isDeleted);
+
+            if (s === 'products' && !item.warehouse) {
+              item.warehouse = 'new';
+            }
+
             store.put(item);
-          }
+          });
         }
 
-        // Cài đặt
-        if (backupData.settings && backupData.settings['shop_info']) {
-          const settingsStore = tx.objectStore('settings');
+        // Khôi phục cài đặt (không ghi đè device_id và license_info của máy mới)
+        const settingsStore = tx.objectStore('settings');
+        const settingsData = backupData.settings || {};
+        const nowIso = new Date().toISOString();
+
+        if (settingsData['shop_info']) {
+          const restoredShop = {
+            ...DEFAULT_SHOP_SETTINGS,
+            ...settingsData['shop_info'],
+            lastBackupTime: nowIso,
+            unbackedChangesCount: 0
+          };
           settingsStore.put({
             key: 'shop_info',
-            value: backupData.settings['shop_info'],
-            updatedAt: new Date().toISOString()
+            value: restoredShop,
+            updatedAt: nowIso
+          });
+        }
+
+        if (Array.isArray(settingsData['product_categories']) && settingsData['product_categories'].length > 0) {
+          settingsStore.put({
+            key: 'product_categories',
+            value: settingsData['product_categories'],
+            updatedAt: nowIso
+          });
+        }
+
+        if (Array.isArray(settingsData['product_units']) && settingsData['product_units'].length > 0) {
+          settingsStore.put({
+            key: 'product_units',
+            value: settingsData['product_units'],
+            updatedAt: nowIso
           });
         }
       } catch (err) {
@@ -552,6 +608,24 @@ class KiteDatabase {
         reject(err);
       }
     });
+
+    // Đọc kiểm chứng lại số liệu thực tế vừa ghi vào máy mới
+    const restoredProducts = await this.getAll('products', false);
+    const restoredCustomers = await this.getAll('customers', false);
+    const restoredOrders = await this.getAll('orders', false);
+    const restoredQuotes = await this.getAll('quotations', false);
+    const restoredImports = await this.getAll('stock_imports', false);
+
+    return {
+      success: true,
+      counts: {
+        products: restoredProducts.length,
+        customers: restoredCustomers.length,
+        orders: restoredOrders.length,
+        quotations: restoredQuotes.length,
+        stock_imports: restoredImports.length
+      }
+    };
   }
 
   // ================= DAILY SNAPSHOTS (Disaster Recovery) =================
