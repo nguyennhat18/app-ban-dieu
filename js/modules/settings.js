@@ -6,7 +6,7 @@ import {
   compressImage,
   escapeHTML
 } from '../utils.js';
-import { DEFAULT_SHOP_SETTINGS } from '../config.js';
+import { DEFAULT_SHOP_SETTINGS, normalizeWarehouseId } from '../config.js';
 import { licenseService, LICENSE_CONFIG, generateLicenseKey, formatRemainingCountdown } from './license.js';
 import {
   NAPAS_BANKS,
@@ -20,7 +20,7 @@ export class SettingsModule {
     this.app = app;
     this.activeSettingSection = 'shop'; // 'shop' | 'catalog' | 'backup' | 'guide' | 'license'
     this.guidePlatform = 'ios'; // 'ios' | 'android'
-    this.catalogTab = 'categories'; // 'categories' | 'products' | 'units'
+    this.catalogTab = 'categories'; // 'categories' | 'products' | 'units' | 'warehouses'
     this.productSearchQuery = '';
     this.productCatFilter = 'all';
     this.isAdminKeygenUnlocked = false;
@@ -75,6 +75,7 @@ export class SettingsModule {
     const snapshotsHtml = await this.app.backupModule.renderSnapshotsSection();
     const categories = await db.getCategories();
     const units = await db.getUnits();
+    const warehouses = await db.getWarehouses();
     const products = await db.getAll('products');
     const licStatus = await licenseService.checkStatus();
 
@@ -274,6 +275,9 @@ export class SettingsModule {
             <button type="button" class="catalog-tab-btn ${this.catalogTab === 'units' ? 'active' : ''}" data-tab="units" style="flex-shrink: 0;">
               📏 Đơn Vị Tính (${units.length})
             </button>
+            <button type="button" class="catalog-tab-btn ${this.catalogTab === 'warehouses' ? 'active' : ''}" data-tab="warehouses" style="flex-shrink: 0;">
+              🏭 Kho Hàng (${warehouses.length})
+            </button>
           </div>
 
           <!-- Tab 1: Loại Diều -->
@@ -289,6 +293,11 @@ export class SettingsModule {
           <!-- Tab 3: Đơn Vị Tính -->
           <div id="catalog-tab-content-units" style="display: ${this.catalogTab === 'units' ? 'block' : 'none'};">
             ${this.renderUnitsTabHtml(units)}
+          </div>
+
+          <!-- Tab 4: Kho Hàng -->
+          <div id="catalog-tab-content-warehouses" style="display: ${this.catalogTab === 'warehouses' ? 'block' : 'none'};">
+            ${this.renderWarehousesTabHtml(warehouses, products)}
           </div>
         </div>
       </div>
@@ -530,8 +539,8 @@ export class SettingsModule {
       });
     });
 
-    // 3. Quản lý Loại diều, Sửa mặt hàng, Đơn vị tính
-    this.bindCatalogEvents(categories, products, units);
+    // 3. Quản lý Loại diều, Sửa mặt hàng, Đơn vị tính, Kho hàng
+    this.bindCatalogEvents(categories, products, units, warehouses);
 
     // Lưu thông tin shop
     const form = document.getElementById('settings-shop-form');
@@ -1217,8 +1226,75 @@ export class SettingsModule {
     `;
   }
 
-  bindCatalogEvents(categories, products, units) {
-    // 1. Chuyển đổi tab con (Loại diều, Mặt hàng, ĐVT)
+  renderWarehousesTabHtml(warehouses, products) {
+    const iconOptions = ['📦', '🪁', '👕', '🎋', '🔩', '📏', '🎡', '🧵', '🎶', '🧰', '✨'];
+    const whCounts = {};
+    warehouses.forEach(w => { whCounts[w.id] = 0; });
+    products.forEach(p => {
+      const whId = normalizeWarehouseId(p.warehouse, warehouses);
+      whCounts[whId] = (whCounts[whId] || 0) + 1;
+    });
+
+    return `
+      <div class="catalog-tab-pane">
+        <div class="catalog-intro-box mb-3">
+          <div class="text-xs text-muted">
+            🏭 <b>Quản lý Kho Hàng:</b> Tạo thêm kho hàng, đổi tên hoặc sắp xếp các kho sản phẩm. Chỉ xóa được kho khi không còn mặt hàng nào bên trong.
+          </div>
+        </div>
+
+        <div class="catalog-add-form mb-3">
+          <label class="form-label text-bold">Thêm kho hàng:</label>
+          <div class="input-with-button-row" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px;">
+            <select id="select-new-warehouse-icon" class="form-select" style="width: auto; min-width: 68px; flex-shrink: 0;" aria-label="Biểu tượng kho">
+              ${iconOptions.map(ic => `<option value="${ic}">${ic}</option>`).join('')}
+            </select>
+            <input type="text" id="input-new-warehouse" class="form-input" style="flex: 1 1 160px; min-width: 0;" placeholder="VD: Kho Đuôi Diều..." maxlength="40">
+            <button type="button" id="btn-add-warehouse" class="btn btn-primary" style="flex-shrink: 0; white-space: nowrap;">
+              <span>+</span> Tạo Kho
+            </button>
+          </div>
+        </div>
+
+        <div class="categories-list-header mb-2 d-flex justify-between align-center" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 8px;">
+          <span class="text-xs text-muted text-bold">DANH SÁCH KHO HÀNG (${warehouses.length})</span>
+          <button type="button" id="btn-reset-warehouses" class="btn btn-link text-xs text-muted p-0" style="background: transparent; border: none; padding: 4px 6px; min-height: auto; font-weight: 600; white-space: nowrap;">
+            ↺ Khôi phục kho mặc định
+          </button>
+        </div>
+
+        <div class="categories-list-container">
+          ${warehouses.map(wh => {
+            const prodCount = whCounts[wh.id] || 0;
+            return `
+              <div class="catalog-item-card" style="flex-wrap: wrap; gap: 10px;">
+                <div class="catalog-item-info" style="flex: 1 1 160px; min-width: 0;">
+                  <span class="catalog-item-icon">${wh.icon || '📦'}</span>
+                  <div class="catalog-item-main">
+                    <div class="catalog-item-title">${escapeHTML(wh.name)}</div>
+                    <div class="catalog-item-subtitle text-xs text-muted">
+                      ${prodCount > 0 ? `<b>${prodCount}</b> sản phẩm trong kho` : 'Chưa có sản phẩm'}
+                    </div>
+                  </div>
+                </div>
+                <div class="catalog-item-actions" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: auto;">
+                  <button type="button" class="btn btn-outline-primary btn-xs btn-rename-warehouse" style="white-space: nowrap;" data-id="${escapeHTML(wh.id)}" data-name="${escapeHTML(wh.name)}">
+                    ✏️ Đổi tên
+                  </button>
+                  <button type="button" class="btn btn-outline-danger btn-xs btn-delete-warehouse" style="white-space: nowrap;" data-id="${escapeHTML(wh.id)}" data-name="${escapeHTML(wh.name)}" data-count="${prodCount}">
+                    🗑️ Xóa
+                  </button>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  bindCatalogEvents(categories, products, units, warehouses = []) {
+    // 1. Chuyển đổi tab con (Loại diều, Mặt hàng, ĐVT, Kho hàng)
     document.querySelectorAll('.catalog-tab-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const tab = btn.dataset.tab;
@@ -1226,7 +1302,7 @@ export class SettingsModule {
         document.querySelectorAll('.catalog-tab-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
 
-        ['categories', 'products', 'units'].forEach(t => {
+        ['categories', 'products', 'units', 'warehouses'].forEach(t => {
           const el = document.getElementById(`catalog-tab-content-${t}`);
           if (el) el.style.display = (t === tab) ? 'block' : 'none';
         });
@@ -1440,6 +1516,108 @@ export class SettingsModule {
         }
       });
     });
+
+    // 5. Tab Kho Hàng
+    const addWhBtn = document.getElementById('btn-add-warehouse');
+    const newWhInput = document.getElementById('input-new-warehouse');
+    const newWhIconSelect = document.getElementById('select-new-warehouse-icon');
+    if (addWhBtn && newWhInput) {
+      const handleAddWh = async () => {
+        const val = newWhInput.value.trim();
+        const icon = newWhIconSelect ? newWhIconSelect.value : '📦';
+        if (!val) {
+          alert('Vui lòng nhập tên kho hàng mới!');
+          newWhInput.focus();
+          return;
+        }
+        try {
+          await db.addWarehouse(val, icon);
+          alert(`✅ Đã tạo kho "${val}" thành công!`);
+          this.activeSettingSection = 'catalog';
+          this.catalogTab = 'warehouses';
+          await this.render();
+        } catch (err) {
+          alert('Lỗi: ' + err.message);
+        }
+      };
+
+      addWhBtn.addEventListener('click', handleAddWh);
+      newWhInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          handleAddWh();
+        }
+      });
+    }
+
+    // Đổi tên kho hàng
+    document.querySelectorAll('.btn-rename-warehouse').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.id;
+        const oldName = btn.dataset.name;
+        const newName = prompt(`Nhập tên mới cho kho "${oldName}":`, oldName);
+        if (newName !== null) {
+          const trimmed = newName.trim();
+          if (!trimmed) {
+            alert('Tên kho hàng không được để trống!');
+            return;
+          }
+          if (trimmed === oldName) return;
+
+          try {
+            await db.renameWarehouse(id, trimmed);
+            alert(`✅ Đã đổi tên kho thành "${trimmed}"!`);
+            this.activeSettingSection = 'catalog';
+            this.catalogTab = 'warehouses';
+            await this.render();
+          } catch (err) {
+            alert('Lỗi đổi tên: ' + err.message);
+          }
+        }
+      });
+    });
+
+    // Xóa kho hàng
+    document.querySelectorAll('.btn-delete-warehouse').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.id;
+        const name = btn.dataset.name;
+        const count = parseInt(btn.dataset.count, 10) || 0;
+        if (count > 0) {
+          alert(`⚠️ Không thể xóa kho "${name}" vì đang có ${count} sản phẩm trong kho này!\n\nVui lòng vào "Kho Diều" để chuyển các sản phẩm sang kho khác trước khi xóa.`);
+          return;
+        }
+        if (confirm(`Bạn có chắc muốn xóa kho "${name}" không?`)) {
+          try {
+            await db.deleteWarehouse(id);
+            alert(`✅ Đã xóa kho "${name}" thành công!`);
+            this.activeSettingSection = 'catalog';
+            this.catalogTab = 'warehouses';
+            await this.render();
+          } catch (err) {
+            alert('Lỗi xóa: ' + err.message);
+          }
+        }
+      });
+    });
+
+    // Khôi phục danh sách kho mặc định
+    const resetWhBtn = document.getElementById('btn-reset-warehouses');
+    if (resetWhBtn) {
+      resetWhBtn.addEventListener('click', async () => {
+        if (confirm('Khôi phục danh sách kho hàng về mặc định ban đầu?\n(Lưu ý: Các sản phẩm hiện có vẫn được giữ nguyên)')) {
+          try {
+            await db.resetDefaultWarehouses();
+            alert('✅ Đã khôi phục danh sách kho hàng mặc định!');
+            this.activeSettingSection = 'catalog';
+            this.catalogTab = 'warehouses';
+            await this.render();
+          } catch (err) {
+            alert('Lỗi: ' + err.message);
+          }
+        }
+      });
+    }
   }
 
   bindProductListActions() {

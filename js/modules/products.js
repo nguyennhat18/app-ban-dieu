@@ -1,28 +1,59 @@
-// Quản lý sản phẩm (Diều & Phụ kiện - Mobile First - Hỗ Trợ 2 Kho: Kho Mới & Kho Tồn)
+// Quản lý sản phẩm (Diều & Phụ kiện - Mobile First - Hỗ Trợ Nhiều Kho Linh Hoạt)
 import { db } from '../db.js';
 import { formatVND, parseVND, compressImage, escapeHTML } from '../utils.js';
-import { PRODUCT_CATEGORIES, PRODUCT_UNITS } from '../config.js';
+import { DEFAULT_WAREHOUSES, normalizeWarehouseId, PRODUCT_CATEGORIES, PRODUCT_UNITS } from '../config.js';
 import { parseStockArray2D, SAMPLE_STOCK_INVENTORY, detectCategory, detectUnit } from '../excel-importer.js';
 
 export class ProductModule {
   constructor(app) {
     this.app = app;
-    this.currentWarehouse = 'new'; // 'new' (Kho Mới) | 'stock' (Kho Tồn)
+    this.currentWarehouse = 'kho-ao-dieu';
     this.currentCategory = 'all';
     this.stockFilter = 'all'; // 'all' | 'low' | 'out'
     this.searchQuery = '';
+    this._cachedWarehouses = [...DEFAULT_WAREHOUSES];
+  }
+
+  _getWarehousesSync() {
+    return (Array.isArray(this._cachedWarehouses) && this._cachedWarehouses.length > 0)
+      ? this._cachedWarehouses
+      : DEFAULT_WAREHOUSES;
+  }
+
+  _resolveWarehouse(whId, warehouses = this._getWarehousesSync()) {
+    const resolvedId = normalizeWarehouseId(whId, warehouses);
+    return warehouses.find(w => w.id === resolvedId) || warehouses[0] || { id: resolvedId, name: 'Kho Diều', icon: '🪁' };
   }
 
   async render() {
     const container = document.getElementById('view-container');
     const allProducts = await db.getAll('products');
     const categories = await db.getCategories();
+    const loadedWarehouses = await db.getWarehouses();
+    const warehouses = (Array.isArray(loadedWarehouses) && loadedWarehouses.length > 0)
+      ? loadedWarehouses
+      : [...DEFAULT_WAREHOUSES];
+    this._cachedWarehouses = warehouses;
 
-    // Phân tách 2 kho
-    const newProducts = allProducts.filter(p => p.warehouse !== 'stock');
-    const stockProducts = allProducts.filter(p => p.warehouse === 'stock');
-    const warehouseProducts = (this.currentWarehouse === 'stock') ? stockProducts : newProducts;
+    if (!warehouses.some(w => w.id === this.currentWarehouse)) {
+      this.currentWarehouse = warehouses[0]?.id || 'stock';
+    }
+
+    // Phân loại sản phẩm theo từng kho (tự động map 'new' cũ sang 'kho-dieu')
+    const countByWarehouse = {};
+    warehouses.forEach(w => { countByWarehouse[w.id] = 0; });
+    const warehouseProducts = [];
+
+    for (const p of allProducts) {
+      const normalizedWh = normalizeWarehouseId(p.warehouse, warehouses);
+      countByWarehouse[normalizedWh] = (countByWarehouse[normalizedWh] || 0) + 1;
+      if (normalizedWh === this.currentWarehouse) {
+        warehouseProducts.push(p);
+      }
+    }
     this._cachedWarehouseProducts = warehouseProducts;
+
+    const activeWh = this._resolveWarehouse(this.currentWarehouse, warehouses);
 
     // Lọc theo tìm kiếm, danh mục và trạng thái tồn kho trong kho đang chọn
     const filtered = this._filterWarehouseProducts(warehouseProducts);
@@ -31,25 +62,34 @@ export class ProductModule {
     const outStockCount = warehouseProducts.filter(p => p.stock <= 0).length;
 
     container.innerHTML = `
-      <!-- THANH CHUYỂN ĐỔI HAI KHO (KHO MỚI & KHO TỒN) -->
-      <div class="warehouse-tabs-bar mb-3">
-        <button class="warehouse-tab-btn ${this.currentWarehouse === 'new' ? 'active' : ''}" data-warehouse="new">
-          <span class="wh-tab-icon">✨</span>
-          <span class="wh-tab-title">Kho Mới</span>
-          <span class="wh-tab-badge badge ${this.currentWarehouse === 'new' ? 'badge-primary' : 'badge-light'}">${newProducts.length}</span>
+      <!-- THANH CHUYỂN ĐỔI CÁC KHO HÀNG & TẠO KHO MỚI -->
+      <div class="warehouse-tabs-bar-wrap mb-3">
+        <button type="button" class="warehouse-create-btn" id="btn-open-create-warehouse" title="Tạo kho hàng mới">
+          ➕ Tạo Kho
         </button>
-        <button class="warehouse-tab-btn ${this.currentWarehouse === 'stock' ? 'active' : ''}" data-warehouse="stock">
-          <span class="wh-tab-icon">📦</span>
-          <span class="wh-tab-title">Kho Tồn</span>
-          <span class="wh-tab-badge badge ${this.currentWarehouse === 'stock' ? 'badge-warning' : 'badge-light'}">${stockProducts.length}</span>
-        </button>
+        <div class="warehouse-tabs-bar">
+          ${warehouses.map(w => {
+            const count = countByWarehouse[w.id] || 0;
+            const isActive = this.currentWarehouse === w.id;
+            const badgeClass = isActive
+              ? (w.id === 'stock' ? 'badge-warning' : 'badge-primary')
+              : 'badge-light';
+            return `
+              <button type="button" class="warehouse-tab-btn ${isActive ? 'active' : ''}" data-warehouse="${escapeHTML(w.id)}">
+                <span class="wh-tab-icon">${w.icon || '📦'}</span>
+                <span class="wh-tab-title">${escapeHTML(w.name)}</span>
+                <span class="wh-tab-badge badge ${badgeClass}">${count}</span>
+              </button>
+            `;
+          }).join('')}
+        </div>
       </div>
 
       <div class="view-header">
         <div class="header-title-row" style="flex-wrap: wrap; align-items: center; gap: 8px;">
           <div>
             <h1 class="view-title">
-              ${this.currentWarehouse === 'stock' ? '📦 Kho Tồn Hàng & Phụ Kiện' : '✨ Kho Diều Mới'}
+              ${activeWh.icon || '📦'} ${escapeHTML(activeWh.name)}
             </h1>
             <p class="view-subtitle">${warehouseProducts.length} mặt hàng • ${lowStockCount} sắp hết • ${outStockCount} hết hàng</p>
           </div>
@@ -147,12 +187,15 @@ export class ProductModule {
   }
 
   _renderProductGridHtml(filtered) {
+    const warehouses = this._getWarehousesSync();
+    const activeWh = this._resolveWarehouse(this.currentWarehouse, warehouses);
+
     if (filtered.length === 0) {
       return `
         <div class="empty-state" style="grid-column: 1 / -1;">
-          <p class="empty-icon">${this.currentWarehouse === 'stock' ? '📦' : '🪁'}</p>
-          <p class="empty-title">${this.currentWarehouse === 'stock' ? 'Kho Tồn Chưa Có Mặt Hàng Nào' : 'Không tìm thấy diều phù hợp'}</p>
-          <p class="empty-desc">${this.currentWarehouse === 'stock' ? 'Bạn có thể đẩy file Excel tồn kho lên hoặc nạp sẵn 69 mặt hàng mẫu từ file bạn cung cấp.' : 'Thử tìm từ khóa khác hoặc bấm nút thêm diều mới.'}</p>
+          <p class="empty-icon">${activeWh.icon || '📦'}</p>
+          <p class="empty-title">${this.currentWarehouse === 'stock' ? 'Kho Tồn Chưa Có Mặt Hàng Nào' : `${escapeHTML(activeWh.name)} chưa có mặt hàng phù hợp`}</p>
+          <p class="empty-desc">${this.currentWarehouse === 'stock' ? 'Bạn có thể đẩy file Excel tồn kho lên hoặc nạp sẵn 69 mặt hàng mẫu từ file bạn cung cấp.' : 'Thử tìm từ khóa khác hoặc bấm nút thêm mặt hàng mới vào kho này.'}</p>
           <div class="d-flex justify-center gap-2 mt-2 flex-wrap" style="display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; margin-top: 8px;">
             ${this.currentWarehouse === 'stock' ? `
               <button id="btn-trigger-upload-excel" class="btn btn-success btn-sm">
@@ -162,7 +205,7 @@ export class ProductModule {
                 <span>⚡</span> Nạp 69 Mặt Hàng Mẫu
               </button>
             ` : `
-              <button id="btn-add-product-empty" class="btn btn-primary btn-sm">+ Thêm Diều Mới</button>
+              <button id="btn-add-product-empty" class="btn btn-primary btn-sm">+ Thêm Mặt Hàng</button>
             `}
           </div>
         </div>
@@ -179,9 +222,9 @@ export class ProductModule {
         `<span class="badge badge-warning low-stock-badge">Còn ${p.stock}</span>` :
         `<span class="badge badge-success stock-badge">Còn ${p.stock}</span>`;
 
-      const warehouseBadge = p.warehouse === 'stock' ?
-        `<span class="badge badge-warning text-xs" style="position:absolute; bottom:6px; left:6px;">📦 Kho Tồn</span>` :
-        `<span class="badge badge-primary-subtle text-xs" style="position:absolute; bottom:6px; left:6px;">✨ Kho Mới</span>`;
+      const wh = this._resolveWarehouse(p.warehouse, warehouses);
+      const warehouseBadgeClass = wh.id === 'stock' ? 'badge-warning' : 'badge-primary-subtle';
+      const warehouseBadge = `<span class="badge ${warehouseBadgeClass} text-xs" style="position:absolute; bottom:6px; left:6px;">${wh.icon || '📦'} ${escapeHTML(wh.name)}</span>`;
 
       return `
         <div class="product-card ${isLow || isOut ? 'card-warning' : ''}" data-id="${p.id}">
@@ -190,7 +233,7 @@ export class ProductModule {
               <img src="${p.photo}" alt="${escapeHTML(p.name)}" class="product-thumb" loading="lazy">
             ` : `
               <div class="product-thumb-placeholder">
-                <span>${p.warehouse === 'stock' ? '📦' : '🪁'}</span>
+                <span>${wh.icon || '🪁'}</span>
               </div>
             `}
             ${stockBadge}
@@ -210,11 +253,11 @@ export class ProductModule {
                 <div class="cost-price-hint">Vốn: ${formatVND(p.costPrice)}</div>
               </div>
               <div class="product-card-actions" style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px;">
-                <button class="btn-icon btn-switch-warehouse" style="display: inline-flex; align-items: center; justify-content: center; gap: 4px;" data-id="${p.id}" data-current="${p.warehouse || 'new'}" title="${p.warehouse === 'stock' ? 'Chuyển sang Kho Mới' : 'Chuyển sang Kho Tồn'}">
-                  ${p.warehouse === 'stock' ? '✨ Sang Mới' : '📦 Sang Tồn'}
+                <button type="button" class="btn-icon btn-switch-warehouse" style="display: inline-flex; align-items: center; justify-content: center; gap: 4px;" data-id="${p.id}" data-current="${escapeHTML(wh.id)}" title="Chuyển sang kho khác">
+                  🔄 Chuyển kho
                 </button>
-                <button class="btn-icon btn-edit-product" style="display: inline-flex; align-items: center; justify-content: center;" data-id="${p.id}" title="Chỉnh sửa">✏️</button>
-                <button class="btn-icon btn-quick-sell" style="display: inline-flex; align-items: center; justify-content: center; gap: 4px;" data-id="${p.id}" title="Thêm vào giỏ bán">⚡ Bán</button>
+                <button type="button" class="btn-icon btn-edit-product" style="display: inline-flex; align-items: center; justify-content: center;" data-id="${p.id}" title="Chỉnh sửa">✏️</button>
+                <button type="button" class="btn-icon btn-quick-sell" style="display: inline-flex; align-items: center; justify-content: center; gap: 4px;" data-id="${p.id}" title="Thêm vào giỏ bán">⚡ Bán</button>
               </div>
             </div>
           </div>
@@ -224,13 +267,25 @@ export class ProductModule {
   }
 
   bindEvents() {
-    // Chuyển đổi giữa 2 Kho
+    // Chuyển đổi giữa các Kho
     document.querySelectorAll('[data-warehouse]').forEach(btn => {
       btn.addEventListener('click', () => {
         this.currentWarehouse = btn.dataset.warehouse;
         this.render();
       });
     });
+
+    // Cuộn nhẹ để tab kho đang chọn luôn nằm trong vùng nhìn thấy
+    const activeTabEl = document.querySelector('.warehouse-tab-btn.active');
+    if (activeTabEl && typeof activeTabEl.scrollIntoView === 'function') {
+      activeTabEl.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' });
+    }
+
+    // Nút tạo kho mới trực tiếp trên thanh kho
+    const createWarehouseBtn = document.getElementById('btn-open-create-warehouse');
+    if (createWarehouseBtn) {
+      createWarehouseBtn.addEventListener('click', () => this.showCreateWarehouseModal());
+    }
 
     // Đẩy file Excel lên Kho Tồn
     const importExcelBtn = document.getElementById('btn-import-stock-excel');
@@ -319,21 +374,14 @@ export class ProductModule {
     const addBtnEmpty = document.getElementById('btn-add-product-empty');
     if (addBtnEmpty) addBtnEmpty.addEventListener('click', () => this.showProductModal());
 
-    // Chuyển nhanh 1 mặt hàng giữa Kho Mới và Kho Tồn
+    // Mở modal chọn kho để chuyển nhanh 1 chạm sang bất kỳ kho nào
     document.querySelectorAll('.btn-switch-warehouse').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const id = btn.dataset.id;
-        const currentWh = btn.dataset.current;
-        const targetWh = currentWh === 'stock' ? 'new' : 'stock';
-        const targetName = targetWh === 'stock' ? 'Kho Tồn' : 'Kho Mới';
-
         const p = await db.getById('products', id);
         if (p) {
-          p.warehouse = targetWh;
-          await db.put('products', p);
-          alert(`✅ Đã chuyển "${p.name}" sang ${targetName}!`);
-          this.render();
+          await this.showMoveWarehouseModal(p);
         }
       });
     });
@@ -450,6 +498,11 @@ export class ProductModule {
     let isEdit = false;
     const categories = await db.getCategories();
     const units = await db.getUnits();
+    const loadedWarehouses = await db.getWarehouses();
+    const warehouses = (Array.isArray(loadedWarehouses) && loadedWarehouses.length > 0)
+      ? loadedWarehouses
+      : [...DEFAULT_WAREHOUSES];
+    this._cachedWarehouses = warehouses;
 
     if (productId) {
       product = await db.getById('products', productId);
@@ -463,7 +516,7 @@ export class ProductModule {
         id: 'SP-' + Date.now(),
         code,
         name: '',
-        warehouse: this.currentWarehouse || 'new',
+        warehouse: this.currentWarehouse || warehouses[0]?.id || 'kho-ao-dieu',
         category: categories[0] || 'Diều khí động học',
         size: '',
         color: '',
@@ -478,13 +531,14 @@ export class ProductModule {
       };
     }
 
+    const selectedWarehouseId = normalizeWarehouseId(product?.warehouse || this.currentWarehouse, warehouses);
     let photoBase64 = product.photo || '';
 
     const modalHtml = `
       <div class="modal-backdrop" id="product-modal">
         <div class="modal-content modal-lg">
           <div class="modal-header">
-            <h2 class="modal-title">${isEdit ? '✏️ Chỉnh Sửa Diều' : '➕ Thêm Diều Mới'}</h2>
+            <h2 class="modal-title">${isEdit ? '✏️ Chỉnh Sửa Mặt Hàng' : '➕ Thêm Mặt Hàng Mới'}</h2>
             <button class="modal-close" id="btn-modal-close">&times;</button>
           </div>
 
@@ -522,8 +576,9 @@ export class ProductModule {
               <div class="form-group flex-1">
                 <label class="form-label required">Kho lưu trữ</label>
                 <select id="p-warehouse" class="form-select">
-                  <option value="new" ${(product.warehouse || 'new') === 'new' ? 'selected' : ''}>✨ Kho Mới (Diều mới)</option>
-                  <option value="stock" ${product.warehouse === 'stock' ? 'selected' : ''}>📦 Kho Tồn (Phụ kiện / Hàng tồn)</option>
+                  ${warehouses.map(w => `
+                    <option value="${escapeHTML(w.id)}" ${selectedWarehouseId === w.id ? 'selected' : ''}>${w.icon || '📦'} ${escapeHTML(w.name)}</option>
+                  `).join('')}
                 </select>
               </div>
               <div class="form-group flex-1">
@@ -731,5 +786,169 @@ export class ProductModule {
         this.render();
       }
     });
+  }
+
+  async showMoveWarehouseModal(product) {
+    if (!product) return;
+    const loadedWarehouses = await db.getWarehouses();
+    const warehouses = (Array.isArray(loadedWarehouses) && loadedWarehouses.length > 0)
+      ? loadedWarehouses
+      : [...DEFAULT_WAREHOUSES];
+    this._cachedWarehouses = warehouses;
+
+    const currentWh = this._resolveWarehouse(product.warehouse, warehouses);
+
+    const modalHtml = `
+      <div class="modal-backdrop" id="move-warehouse-modal">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2 class="modal-title">🔄 Chuyển Kho Sản Phẩm</h2>
+            <button type="button" class="modal-close" id="btn-close-move-wh">&times;</button>
+          </div>
+
+          <div class="modal-body">
+            <div class="move-wh-product-summary mb-3">
+              <div class="text-bold" style="font-size: 14px;">${escapeHTML(product.name)}</div>
+              <div class="text-xs text-muted mt-1">
+                Mã: ${escapeHTML(product.code || '---')} • Kho hiện tại:
+                <span class="badge badge-primary">${currentWh.icon || '📦'} ${escapeHTML(currentWh.name)}</span>
+              </div>
+            </div>
+
+            <p class="text-sm text-muted mb-2">Chọn kho muốn chuyển đến (chạm 1 lần):</p>
+
+            <div class="move-warehouse-grid">
+              ${warehouses.map(w => {
+                const isCurrent = w.id === currentWh.id;
+                return `
+                  <button type="button"
+                    class="move-wh-option ${isCurrent ? 'is-current' : ''}"
+                    data-target-wh="${escapeHTML(w.id)}"
+                    ${isCurrent ? 'disabled' : ''}>
+                    <span class="move-wh-icon">${w.icon || '📦'}</span>
+                    <span class="move-wh-info">
+                      <span class="move-wh-name">${escapeHTML(w.name)}</span>
+                      ${isCurrent ? '<span class="move-wh-tag">Đang ở đây</span>' : '<span class="move-wh-tag">Chuyển tới</span>'}
+                    </span>
+                  </button>
+                `;
+              }).join('')}
+            </div>
+
+            <div class="modal-footer" style="display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px;">
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-cancel-move-wh">Đóng</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const oldModal = document.getElementById('move-warehouse-modal');
+    if (oldModal) oldModal.remove();
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+    const modalEl = document.getElementById('move-warehouse-modal');
+    const close = () => modalEl.remove();
+
+    document.getElementById('btn-close-move-wh').addEventListener('click', close);
+    document.getElementById('btn-cancel-move-wh').addEventListener('click', close);
+    modalEl.addEventListener('click', (e) => {
+      if (e.target === modalEl) close();
+    });
+
+    modalEl.querySelectorAll('.move-wh-option:not([disabled])').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const targetId = btn.dataset.targetWh;
+        if (!targetId || targetId === currentWh.id) return;
+        const targetWh = warehouses.find(w => w.id === targetId);
+        product.warehouse = targetId;
+        await db.put('products', product);
+        close();
+        alert(`✅ Đã chuyển "${product.name}" sang ${targetWh ? `${targetWh.icon || '📦'} ${targetWh.name}` : targetId}!`);
+        await this.render();
+      });
+    });
+  }
+
+  showCreateWarehouseModal() {
+    const icons = ['📦', '🪁', '👕', '🎋', '🔩', '📏', '🎡', '🧵', '🎶', '🧰', '🏷️', '✨'];
+    let selectedIcon = icons[0];
+
+    const modalHtml = `
+      <div class="modal-backdrop" id="create-warehouse-modal">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2 class="modal-title">➕ Tạo Kho Hàng Mới</h2>
+            <button type="button" class="modal-close" id="btn-close-create-wh">&times;</button>
+          </div>
+
+          <form id="create-warehouse-form" class="modal-body">
+            <div class="form-group">
+              <label class="form-label required" for="cw-name">Tên kho mới</label>
+              <input type="text" id="cw-name" class="form-input" required maxlength="60" placeholder="VD: Kho Đuôi Diều, Kho Phụ Kiện VIP...">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Chọn biểu tượng (Icon)</label>
+              <div class="wh-icon-picker" id="cw-icon-picker">
+                ${icons.map((ic, idx) => `
+                  <button type="button" class="wh-icon-chip ${idx === 0 ? 'active' : ''}" data-icon="${ic}" title="Chọn biểu tượng ${ic}">
+                    ${ic}
+                  </button>
+                `).join('')}
+              </div>
+            </div>
+
+            <div class="modal-footer" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px;">
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-cancel-create-wh">Hủy</button>
+              <button type="submit" class="btn btn-primary btn-sm" id="btn-submit-create-wh">➕ Tạo Kho Ngay</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    `;
+
+    const oldModal = document.getElementById('create-warehouse-modal');
+    if (oldModal) oldModal.remove();
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+    const modalEl = document.getElementById('create-warehouse-modal');
+    const nameInput = document.getElementById('cw-name');
+    const form = document.getElementById('create-warehouse-form');
+    const close = () => modalEl.remove();
+
+    document.getElementById('btn-close-create-wh').addEventListener('click', close);
+    document.getElementById('btn-cancel-create-wh').addEventListener('click', close);
+    modalEl.addEventListener('click', (e) => {
+      if (e.target === modalEl) close();
+    });
+
+    modalEl.querySelectorAll('.wh-icon-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        selectedIcon = chip.dataset.icon || '📦';
+        modalEl.querySelectorAll('.wh-icon-chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+      });
+    });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = nameInput.value.trim();
+      if (!name) {
+        alert('Vui lòng nhập tên kho mới!');
+        nameInput.focus();
+        return;
+      }
+      try {
+        const created = await db.addWarehouse(name, selectedIcon);
+        this.currentWarehouse = created.id;
+        close();
+        await this.render();
+      } catch (err) {
+        alert(err.message || 'Không thể tạo kho mới!');
+      }
+    });
+
+    setTimeout(() => nameInput.focus(), 50);
   }
 }
