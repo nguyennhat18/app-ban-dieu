@@ -13,7 +13,7 @@ import {
   compressImage
 } from '../utils.js';
 import { registerVietnameseFont } from '../vendor/roboto-font.js';
-import { PRODUCT_CATEGORIES } from '../config.js';
+import { PRODUCT_CATEGORIES, normalizeWarehouseId } from '../config.js';
 import {
   resolveOrderQR,
   drawVietQRToJsPdf,
@@ -34,7 +34,7 @@ export class SalesModule {
     this.paymentMethod = 'cash'; // 'cash' | 'transfer' | 'debt' | 'partial'
     this.paidAmount = 0;
     this.searchProductQuery = '';
-    this.posWarehouse = 'all'; // 'all' | 'new' | 'stock'
+    this.posWarehouse = 'all'; // 'all' | warehouseId
     this.posCategory = 'all';
     this.orderFilterStatus = 'all';
     this.orderSearchQuery = '';
@@ -74,12 +74,22 @@ export class SalesModule {
     const shopSettings = (await db.getSetting('shop_info')) || {};
     this._cachedShopSettings = shopSettings;
     const categories = await db.getCategories();
+    const warehouses = await db.getWarehouses();
+    this._cachedWarehouses = warehouses;
 
-    const newStockCount = products.filter(p => (p.warehouse || 'new') === 'new').length;
-    const stockWhCount = products.filter(p => p.warehouse === 'stock').length;
+    if (this.posWarehouse !== 'all' && !warehouses.some(w => w.id === this.posWarehouse)) {
+      this.posWarehouse = 'all';
+    }
+
+    const whCounts = {};
+    warehouses.forEach(w => { whCounts[w.id] = 0; });
+    products.forEach(p => {
+      const whId = normalizeWarehouseId(p.warehouse, warehouses);
+      whCounts[whId] = (whCounts[whId] || 0) + 1;
+    });
 
     const filteredProducts = products.filter(p => {
-      const matchWh = this.posWarehouse === 'all' || (p.warehouse || 'new') === this.posWarehouse;
+      const matchWh = this.posWarehouse === 'all' || normalizeWarehouseId(p.warehouse, warehouses) === this.posWarehouse;
       const matchCat = this.posCategory === 'all' || p.category === this.posCategory;
       const q = this.searchProductQuery.toLowerCase().trim();
       const matchQuery = !q || p.name.toLowerCase().includes(q) || (p.code && p.code.toLowerCase().includes(q));
@@ -94,17 +104,16 @@ export class SalesModule {
         <!-- Khung danh mục diều -->
         <div class="pos-catalog-panel">
           <div class="search-filter-bar">
-            <!-- Phân loại Kho Mới / Kho Tồn trên POS -->
-            <div class="pos-warehouse-pill-row mb-2" style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px;">
-              <button class="warehouse-filter-pill ${this.posWarehouse === 'all' ? 'active' : ''}" data-pos-wh="all" style="flex: 1 1 auto; display: inline-flex; align-items: center; justify-content: center; gap: 4px;">
+            <!-- Phân loại Kho hàng trên POS -->
+            <div class="pos-warehouse-pill-row mb-2">
+              <button class="warehouse-filter-pill ${this.posWarehouse === 'all' ? 'active' : ''}" data-pos-wh="all">
                 🌐 Toàn bộ (${products.length})
               </button>
-              <button class="warehouse-filter-pill ${this.posWarehouse === 'new' ? 'active' : ''}" data-pos-wh="new" style="flex: 1 1 auto; display: inline-flex; align-items: center; justify-content: center; gap: 4px;">
-                ✨ Kho Mới (${newStockCount})
-              </button>
-              <button class="warehouse-filter-pill ${this.posWarehouse === 'stock' ? 'active' : ''}" data-pos-wh="stock" style="flex: 1 1 auto; display: inline-flex; align-items: center; justify-content: center; gap: 4px;">
-                📦 Kho Tồn (${stockWhCount})
-              </button>
+              ${warehouses.map(w => `
+                <button class="warehouse-filter-pill ${this.posWarehouse === w.id ? 'active' : ''}" data-pos-wh="${escapeHTML(w.id)}">
+                  ${w.icon || '📦'} ${escapeHTML(w.name)} (${whCounts[w.id] || 0})
+                </button>
+              `).join('')}
             </div>
 
             <div class="search-input-wrap">
@@ -399,18 +408,27 @@ export class SalesModule {
       `;
     }
 
+    const cachedWarehouses = this._cachedWarehouses || [];
+    const whArg = cachedWarehouses.length > 0 ? cachedWarehouses : undefined;
+
     return filteredProducts.map(p => {
       const inCartItem = this.cart.find(i => i.productId === p.id);
       const qtyInCart = inCartItem ? inCartItem.quantity : 0;
       const isOutOfStock = p.stock <= 0;
       const isLowStock = p.stock <= (p.lowStockThreshold || 5);
-      const isStockWh = p.warehouse === 'stock';
+      const whId = normalizeWarehouseId(p.warehouse, whArg);
+      const wh = cachedWarehouses.find(w => w.id === whId) || {
+        id: whId,
+        name: whId === 'stock' ? 'Kho Tồn' : 'Kho Diều',
+        icon: whId === 'stock' ? '📦' : '🪁'
+      };
+      const isStockWh = whId === 'stock';
 
       return `
         <div class="pos-item-card ${isOutOfStock ? 'out-of-stock' : ''}" data-id="${p.id}">
           <!-- Tag kho hàng nổi góc trên bên trái ảnh -->
-          <span class="pos-card-wh-chip ${isStockWh ? 'wh-chip-stock' : 'wh-chip-new'}">
-            ${isStockWh ? '📦 Kho Tồn' : '✨ Diều Mới'}
+          <span class="pos-card-wh-chip ${isStockWh ? 'wh-chip-stock' : 'wh-chip-new'}" style="max-width: calc(100% - 12px); overflow: hidden; text-overflow: ellipsis;">
+            ${wh.icon || '📦'} ${escapeHTML(wh.name)}
           </span>
 
           ${p.photo ? `
@@ -681,9 +699,11 @@ export class SalesModule {
       const gridEl = document.getElementById('pos-product-grid');
       if (!gridEl) return;
       const products = this._cachedPosProducts || [];
+      const cachedWarehouses = this._cachedWarehouses || [];
+      const whArg = cachedWarehouses.length > 0 ? cachedWarehouses : undefined;
       const q = this.searchProductQuery.toLowerCase().trim();
       const filteredProducts = products.filter(p => {
-        const matchWh = this.posWarehouse === 'all' || (p.warehouse || 'new') === this.posWarehouse;
+        const matchWh = this.posWarehouse === 'all' || normalizeWarehouseId(p.warehouse, whArg) === this.posWarehouse;
         const matchCat = this.posCategory === 'all' || p.category === this.posCategory;
         const matchQuery = !q || p.name.toLowerCase().includes(q) || (p.code && p.code.toLowerCase().includes(q));
         return matchWh && matchCat && matchQuery;
@@ -709,7 +729,7 @@ export class SalesModule {
       });
     }
 
-    // Lọc theo Kho hàng POS (Kho Mới / Kho Tồn)
+    // Lọc theo Kho hàng POS
     document.querySelectorAll('[data-pos-wh]').forEach(btn => {
       btn.addEventListener('click', () => {
         this.posWarehouse = btn.dataset.posWh;
