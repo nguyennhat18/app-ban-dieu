@@ -38,14 +38,14 @@ export class SalesModule {
 
     container.innerHTML = `
       <div class="view-header">
-        <div class="header-title-row">
+        <div class="header-title-row" style="flex-wrap: wrap; align-items: center; gap: 8px;">
           <div>
             <h1 class="view-title">⚡ Bán Hàng (Thu Ngân)</h1>
             <p class="view-subtitle">Chạm vào diều để thêm vào đơn bán nhanh</p>
           </div>
-          <div class="header-tab-switch">
-            <button class="tab-switch-btn ${this.activeTab === 'pos' ? 'active' : ''}" id="tab-btn-pos">🛍️ Bán Hàng</button>
-            <button class="tab-switch-btn ${this.activeTab === 'orders' ? 'active' : ''}" id="tab-btn-orders">📋 Đơn Hàng</button>
+          <div class="header-tab-switch" style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px; max-width: 100%;">
+            <button class="tab-switch-btn ${this.activeTab === 'pos' ? 'active' : ''}" id="tab-btn-pos" style="flex: 1 1 auto; text-align: center;">🛍️ Bán Hàng</button>
+            <button class="tab-switch-btn ${this.activeTab === 'orders' ? 'active' : ''}" id="tab-btn-orders" style="flex: 1 1 auto; text-align: center;">📋 Đơn Hàng</button>
           </div>
         </div>
       </div>
@@ -86,14 +86,14 @@ export class SalesModule {
         <div class="pos-catalog-panel">
           <div class="search-filter-bar">
             <!-- Phân loại Kho Mới / Kho Tồn trên POS -->
-            <div class="pos-warehouse-pill-row mb-2">
-              <button class="warehouse-filter-pill ${this.posWarehouse === 'all' ? 'active' : ''}" data-pos-wh="all">
+            <div class="pos-warehouse-pill-row mb-2" style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px;">
+              <button class="warehouse-filter-pill ${this.posWarehouse === 'all' ? 'active' : ''}" data-pos-wh="all" style="flex: 1 1 auto; display: inline-flex; align-items: center; justify-content: center; gap: 4px;">
                 🌐 Toàn bộ (${products.length})
               </button>
-              <button class="warehouse-filter-pill ${this.posWarehouse === 'new' ? 'active' : ''}" data-pos-wh="new">
+              <button class="warehouse-filter-pill ${this.posWarehouse === 'new' ? 'active' : ''}" data-pos-wh="new" style="flex: 1 1 auto; display: inline-flex; align-items: center; justify-content: center; gap: 4px;">
                 ✨ Kho Mới (${newStockCount})
               </button>
-              <button class="warehouse-filter-pill ${this.posWarehouse === 'stock' ? 'active' : ''}" data-pos-wh="stock">
+              <button class="warehouse-filter-pill ${this.posWarehouse === 'stock' ? 'active' : ''}" data-pos-wh="stock" style="flex: 1 1 auto; display: inline-flex; align-items: center; justify-content: center; gap: 4px;">
                 📦 Kho Tồn (${stockWhCount})
               </button>
             </div>
@@ -136,26 +136,26 @@ export class SalesModule {
           <!-- Thanh tay nắm trên Mobile -->
           <div class="drawer-handle-bar"></div>
           
-          <div class="drawer-header-row mb-2">
+          <div class="drawer-header-row mb-2" style="flex-wrap: wrap; align-items: center; gap: 8px;">
             <div>
               <h3 class="text-bold" style="font-size: 16px; margin: 0; display: flex; align-items: center; gap: 6px;">
                 🛒 Giỏ Hàng <span class="badge badge-primary">${totalCartItems}</span>
               </h3>
               <div class="text-xs text-muted" style="margin-top: 2px;">Kiểm tra mặt hàng và tính tiền</div>
             </div>
-            <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px;">
               ${this.cart.length > 0 ? `
                 <button type="button" class="btn btn-outline-danger btn-xs" id="btn-clear-cart" title="Xóa toàn bộ giỏ hàng">
                   🗑️ Xóa hết
                 </button>
               ` : ''}
-              <button class="btn-icon btn-close-drawer" id="btn-close-drawer" style="border:none; font-size: 24px; color: #64748b; background: none; cursor: pointer; padding: 0 4px; line-height: 1;">&times;</button>
+              <button class="btn-icon btn-close-drawer" id="btn-close-drawer" style="border: none; font-size: 24px; color: #64748b; background: none; cursor: pointer; padding: 0; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; line-height: 1;">&times;</button>
             </div>
           </div>
 
           <!-- Chọn khách hàng -->
           <div class="cart-customer-box">
-            <div class="cart-customer-header">
+            <div class="cart-customer-header" style="flex-wrap: wrap; gap: 8px;">
               <span class="cart-box-title">👤 Khách hàng:</span>
               <button id="btn-change-customer" class="btn btn-outline-primary btn-xs">
                 ${this.selectedCustomer ? 'Đổi' : '+ Chọn khách'}
@@ -163,7 +163,7 @@ export class SalesModule {
             </div>
             <div class="cart-customer-info">
               ${this.selectedCustomer ? `
-                <div class="selected-customer-pill">
+                <div class="selected-customer-pill" style="flex-wrap: wrap; gap: 8px;">
                   <span class="name text-bold">${escapeHTML(this.selectedCustomer.name)}</span>
                   ${this.selectedCustomer.phone ? `<span class="phone text-muted text-xs">📞 ${escapeHTML(this.selectedCustomer.phone)}</span>` : ''}
                   <button id="btn-remove-selected-cust" class="btn-remove-cust" title="Hủy chọn">&times;</button>
@@ -195,7 +195,7 @@ export class SalesModule {
                 </div>
 
                 <!-- Dòng 2: Đơn giá, Bộ tăng giảm số lượng to rõ & Thành tiền -->
-                <div class="cart-item-bottom-row">
+                <div class="cart-item-bottom-row" style="flex-wrap: wrap; gap: 8px;">
                   <div class="cart-item-unit-box">
                     <span class="cart-unit-price">${formatVND(item.unitPrice)}</span>
                     <span class="cart-unit-text">/${escapeHTML(item.unit || 'chiếc')}</span>
@@ -228,8 +228,8 @@ export class SalesModule {
               </div>
 
               <!-- Chiết khấu & Ship -->
-              <div class="summary-line">
-                <div class="discount-label-row">
+              <div class="summary-line" style="flex-wrap: wrap; gap: 8px;">
+                <div class="discount-label-row" style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px;">
                   <span class="text-bold text-xs">Chiết khấu (giảm giá):</span>
                   <div class="discount-toggle-group">
                     <button class="btn-toggle-disc ${this.discountType === 'amount' ? 'active' : ''}" id="disc-type-amt">₫</button>
@@ -239,7 +239,7 @@ export class SalesModule {
                 <input type="number" id="input-discount-val" class="form-input-sm text-right text-bold" style="width: 120px" value="${this.discountValue || ''}" placeholder="${this.discountType === 'percent' ? 'Nhập %' : '0 ₫'}">
               </div>
 
-              <div class="summary-line">
+              <div class="summary-line" style="flex-wrap: wrap; gap: 8px;">
                 <span class="text-bold text-xs">Phí giao hàng (ship):</span>
                 <input type="number" id="input-shipping-fee" class="form-input-sm text-right text-bold" style="width: 120px" value="${this.shippingFee || ''}" placeholder="0 ₫">
               </div>
@@ -439,8 +439,8 @@ export class SalesModule {
       const isCancelled = o.status === 'cancelled';
       return `
         <div class="order-card ${isCancelled ? 'card-cancelled' : ''}" data-id="${o.id}">
-          <div class="order-card-top">
-            <div>
+          <div class="order-card-top" style="flex-wrap: wrap; align-items: center; gap: 8px;">
+            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px;">
               <span class="order-id-badge text-bold">${escapeHTML(o.id)}</span>
               <span class="order-time text-muted text-xs ml-2">${formatDateTime(o.createdAt)}</span>
             </div>
@@ -465,7 +465,7 @@ export class SalesModule {
             </div>
           </div>
 
-          <div class="order-card-bottom">
+          <div class="order-card-bottom" style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin-top: 6px;">
             <div class="order-pay-info text-xs">
               <span>${o.paymentMethod === 'cash' ? '💵 Tiền mặt' : o.paymentMethod === 'qr' ? '📱 Quét mã QR' : o.paymentMethod === 'transfer' ? '🏦 Chuyển khoản' : o.paymentMethod === 'debt' ? '📝 Ghi nợ' : '💳 Trả một phần'}</span>
             </div>
@@ -474,7 +474,7 @@ export class SalesModule {
             </div>
           </div>
 
-          <div class="order-card-actions mt-2" style="display:flex; justify-content: flex-end; gap:6px;">
+          <div class="order-card-actions mt-2" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 8px;">
             <button class="btn btn-outline-primary btn-xs btn-view-order-detail" data-id="${o.id}">👁️ Phiếu thu</button>
             ${!isCancelled ? `
               <button class="btn btn-outline-danger btn-xs btn-cancel-order" data-id="${o.id}">❌ Hủy đơn & hoàn kho</button>
@@ -1419,15 +1419,14 @@ export class SalesModule {
           </div>
 
           <!-- FOOTER MODAL VỚI NÚT XUẤT FILE PDF & IN -->
-          <div class="modal-footer">
+          <div class="modal-footer" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px;">
             <button class="btn btn-primary btn-sm" id="btn-export-order-pdf">
               📄 Xuất File Phiếu Thu PDF (Gửi Zalo)
             </button>
             <button class="btn btn-outline-primary btn-sm" id="btn-print-receipt">
               🖨️ In Phiếu Thu
             </button>
-            <div style="flex:1"></div>
-            <button class="btn btn-secondary btn-sm" id="btn-close-odmodal2">Đóng</button>
+            <button class="btn btn-secondary btn-sm" id="btn-close-odmodal2" style="margin-left: auto;">Đóng</button>
           </div>
         </div>
       </div>

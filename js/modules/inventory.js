@@ -15,15 +15,15 @@ export class InventoryModule {
 
     container.innerHTML = `
       <div class="view-header">
-        <div class="header-title-row">
+        <div class="header-title-row" style="flex-wrap: wrap; align-items: center; gap: 8px;">
           <div>
             <h1 class="view-title">📦 Quản Lý Kho & Nhập Hàng</h1>
             <p class="view-subtitle">Nhập hàng, kiểm kho, truy vết lịch sử biến động kho</p>
           </div>
-          <div class="header-tab-switch">
-            <button class="tab-switch-btn ${this.activeTab === 'history' ? 'active' : ''}" id="tab-btn-inv-history">📜 Lịch Sử Kho</button>
-            <button class="tab-switch-btn ${this.activeTab === 'import' ? 'active' : ''}" id="tab-btn-inv-import">📥 Nhập Hàng</button>
-            <button class="tab-switch-btn ${this.activeTab === 'adjust' ? 'active' : ''}" id="tab-btn-inv-adjust">⚖️ Kiểm/Cân Kho</button>
+          <div class="header-tab-switch" style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px; max-width: 100%;">
+            <button class="tab-switch-btn ${this.activeTab === 'history' ? 'active' : ''}" id="tab-btn-inv-history" style="flex: 1 1 auto; text-align: center;">📜 Lịch Sử Kho</button>
+            <button class="tab-switch-btn ${this.activeTab === 'import' ? 'active' : ''}" id="tab-btn-inv-import" style="flex: 1 1 auto; text-align: center;">📥 Nhập Hàng</button>
+            <button class="tab-switch-btn ${this.activeTab === 'adjust' ? 'active' : ''}" id="tab-btn-inv-adjust" style="flex: 1 1 auto; text-align: center;">⚖️ Kiểm/Cân Kho</button>
           </div>
         </div>
       </div>
@@ -101,8 +101,8 @@ export class InventoryModule {
 
       return `
         <div class="inv-log-card">
-          <div class="inv-log-top">
-            <div>
+          <div class="inv-log-top" style="flex-wrap: wrap; align-items: center; gap: 8px;">
+            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px;">
               <span class="badge ${typeBadgeClass}">${typeLabel}</span>
               <span class="text-bold ml-2">${escapeHTML(log.productName)}</span>
               ${log.productCode ? `<span class="text-muted text-xs">(${escapeHTML(log.productCode)})</span>` : ''}
@@ -149,8 +149,8 @@ export class InventoryModule {
             </div>
           ` : imports.map(imp => `
             <div class="import-card" data-id="${imp.id}">
-              <div class="import-card-header">
-                <div>
+              <div class="import-card-header" style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px;">
+                <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px;">
                   <span class="import-id text-bold">${escapeHTML(imp.id)}</span>
                   <span class="text-muted text-xs ml-2">${formatDateTime(imp.createdAt)}</span>
                 </div>
@@ -476,9 +476,9 @@ export class InventoryModule {
             </div>
           </div>
 
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" id="btn-cancel-imp-modal">Hủy</button>
-            <button type="button" class="btn btn-primary" id="btn-save-import-sheet">✓ Lưu Phiếu & Tăng Tồn Kho</button>
+          <div class="modal-footer" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px;">
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-cancel-imp-modal">Hủy</button>
+            <button type="button" class="btn btn-primary btn-sm" id="btn-save-import-sheet">✓ Lưu Phiếu & Tăng Tồn Kho</button>
           </div>
         </div>
       </div>
