@@ -8,6 +8,12 @@ import {
 } from '../utils.js';
 import { DEFAULT_SHOP_SETTINGS } from '../config.js';
 import { licenseService, LICENSE_CONFIG, generateLicenseKey, formatRemainingCountdown } from './license.js';
+import {
+  NAPAS_BANKS,
+  hasVietQRConfig,
+  resolveOrderQR,
+  normalizeTransferContent
+} from '../vietqr.js';
 
 export class SettingsModule {
   constructor(app) {
@@ -107,9 +113,46 @@ export class SettingsModule {
       <!-- ================= MỤC 1: CỬA HÀNG & MÃ QR ================= -->
       <div id="settings-sec-shop" class="settings-section-pane" style="display: ${this.activeSettingSection === 'shop' ? 'block' : 'none'};">
         <form id="settings-shop-form">
-          <!-- Logo & Mã QR -->
+          <!-- Cấu Hình VietQR Chuyển Khoản (Offline) -->
+          <div class="card p-3 mb-3" style="border: 1px solid #bae6fd; background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);">
+            <h3 class="card-title text-sm mb-1">🏦 Cấu Hình VietQR Chuyển Khoản (Offline)</h3>
+            <p class="text-xs text-muted mb-3">Tạo mã VietQR động chuẩn NAPAS 247 tự động điền sẵn số tiền & nội dung ngay cả khi không có mạng.</p>
+
+            <div class="form-group mb-2">
+              <label class="form-label text-xs text-bold" for="setting-bank-bin">Ngân hàng nhận tiền (NAPAS)</label>
+              <select id="setting-bank-bin" class="form-select">
+                <option value="">-- Chọn ngân hàng NAPAS --</option>
+                ${NAPAS_BANKS.map(b => `
+                  <option value="${escapeHTML(b.bin)}" ${shop.bankBin === b.bin ? 'selected' : ''}>
+                    ${escapeHTML(b.shortName)} - ${escapeHTML(b.name)} (${escapeHTML(b.bin)})
+                  </option>
+                `).join('')}
+              </select>
+            </div>
+
+            <div class="form-row mb-2" style="flex-wrap: wrap; gap: 8px; margin-bottom: 8px;">
+              <div class="form-group mb-0" style="flex: 0 1 135px; min-width: 115px; margin-bottom: 0;">
+                <label class="form-label text-xs text-bold" for="setting-bank-bin-code">Mã BIN (6 số)</label>
+                <input type="text" id="setting-bank-bin-code" class="form-input" inputmode="numeric" maxlength="6" placeholder="VD: 970436" value="${escapeHTML(shop.bankBin || '')}">
+                <span class="text-xs text-muted" style="font-size: 11px;">Tự điền theo ngân hàng</span>
+              </div>
+              <div class="form-group flex-1 mb-0" style="flex: 1 1 180px; min-width: 0; margin-bottom: 0;">
+                <label class="form-label text-xs text-bold" for="setting-bank-account">Số tài khoản</label>
+                <input type="text" id="setting-bank-account" class="form-input" placeholder="VD: 0123456789" value="${escapeHTML(shop.bankAccount || '')}">
+              </div>
+            </div>
+
+            <div class="form-group mb-2">
+              <label class="form-label text-xs text-bold" for="setting-bank-account-name">Tên chủ tài khoản</label>
+              <input type="text" id="setting-bank-account-name" class="form-input" placeholder="VD: NGUYEN VAN A" value="${escapeHTML(shop.bankAccountName || '')}">
+            </div>
+
+            <div id="vietqr-settings-preview" class="mt-2" style="border: 1.5px dashed #38bdf8; border-radius: 12px; padding: 12px; background: #f0f9ff; text-align: center;"></div>
+          </div>
+
+          <!-- Logo & Mã QR Ảnh Tĩnh (Dự phòng) -->
           <div class="card p-3 mb-3">
-            <h3 class="card-title text-sm mb-2">🖼️ Nhận Diện & Thanh Toán</h3>
+            <h3 class="card-title text-sm mb-2">🖼️ Logo & QR Ảnh Tĩnh (Dự Phòng Tùy Chọn)</h3>
             <div class="shop-media-row" style="flex-wrap: wrap; gap: 12px;">
               <!-- Logo -->
               <div class="shop-media-col flex-1" style="flex: 1 1 135px; min-width: 0;">
@@ -129,9 +172,9 @@ export class SettingsModule {
                 <span class="text-xs text-muted mt-1 d-block text-center">In trên báo giá & hóa đơn</span>
               </div>
 
-              <!-- Mã QR -->
+              <!-- Mã QR ảnh tĩnh dự phòng -->
               <div class="shop-media-col flex-1" style="flex: 1 1 135px; min-width: 0;">
-                <label class="form-label text-bold text-xs mb-1">📱 Mã QR Trả Tiền:</label>
+                <label class="form-label text-bold text-xs mb-1">📱 Mã QR Ảnh Tĩnh (Dự phòng):</label>
                 <div class="qr-preview-box" id="qr-preview-box">
                   ${shop.qrCode ? `
                     <img src="${shop.qrCode}" class="shop-qr-img" id="shop-qr-preview-img" alt="Mã QR thanh toán">
@@ -143,12 +186,12 @@ export class SettingsModule {
                   ` : `
                     <div class="qr-placeholder" id="qr-placeholder">
                       <span style="font-size: 22px;">📱</span>
-                      <span class="text-xs">Chạm tải mã QR</span>
+                      <span class="text-xs">Tải ảnh QR dự phòng</span>
                     </div>
                   `}
                 </div>
                 <input type="file" id="qr-file-input" accept="image/*" style="display:none">
-                <span class="text-xs text-muted mt-1 d-block text-center">Cho khách quét trả tiền</span>
+                <span class="text-xs text-muted mt-1 d-block text-center">Tùy chọn dự phòng (MoMo / QR tĩnh)</span>
               </div>
             </div>
           </div>
@@ -617,6 +660,131 @@ export class SettingsModule {
       qrFileInput.click();
     });
 
+    // 2b. Cấu hình VietQR Offline & Live Preview
+    const binSelect = document.getElementById('setting-bank-bin');
+    const binCodeInp = document.getElementById('setting-bank-bin-code');
+    const bankAccountInp = document.getElementById('setting-bank-account');
+    const bankAccountNameInp = document.getElementById('setting-bank-account-name');
+    const bankInfoInp = document.getElementById('set-bank');
+
+    const getVietQRDraft = () => {
+      const cleanBin = (binCodeInp?.value || binSelect?.value || '').replace(/\D/g, '').slice(0, 6);
+      const bankObj = NAPAS_BANKS.find(b => b.bin === cleanBin);
+      const bankName = bankObj ? bankObj.shortName : (cleanBin ? (shop.bankName || `BIN ${cleanBin}`) : '');
+      const bankAccount = (bankAccountInp?.value || '').trim();
+      const bankAccountName = (bankAccountNameInp?.value || '').trim();
+      return {
+        bankBin: cleanBin,
+        bankName,
+        bankAccount,
+        bankAccountName
+      };
+    };
+
+    const buildAutoBankInfo = (draft) => {
+      if (!draft.bankName && !draft.bankAccount) return '';
+      return [
+        draft.bankName,
+        draft.bankAccount ? `STK: ${draft.bankAccount}` : '',
+        draft.bankAccountName ? draft.bankAccountName.toUpperCase() : ''
+      ].filter(Boolean).join(' - ');
+    };
+
+    let lastAutoBankInfo = buildAutoBankInfo({
+      bankName: shop.bankName || (NAPAS_BANKS.find(b => b.bin === shop.bankBin)?.shortName || ''),
+      bankAccount: shop.bankAccount || '',
+      bankAccountName: shop.bankAccountName || ''
+    });
+
+    const syncBankInfoField = (draft) => {
+      if (!bankInfoInp) return;
+      const currentVal = bankInfoInp.value.trim();
+      const nextAuto = buildAutoBankInfo(draft);
+      if (!currentVal || currentVal === lastAutoBankInfo) {
+        bankInfoInp.value = nextAuto;
+      }
+      lastAutoBankInfo = nextAuto;
+    };
+
+    const renderVietQRSettingsPreview = () => {
+      const previewEl = document.getElementById('vietqr-settings-preview');
+      if (!previewEl) return;
+      const draft = getVietQRDraft();
+      if (!hasVietQRConfig(draft)) {
+        previewEl.innerHTML = `
+          <div class="text-xs text-muted" style="line-height: 1.5;">
+            📲 <b>Xem trước VietQR Offline:</b> Chọn ngân hàng NAPAS (hoặc nhập 6 số BIN) và nhập Số tài khoản để tạo mã QR thử nghiệm ngay tại đây.
+          </div>
+        `;
+        return;
+      }
+
+      try {
+        const testDesc = 'TEST VIETQR CUA HANG';
+        const qrInfo = resolveOrderQR(draft, 0, testDesc);
+        if (!qrInfo || !qrInfo.dataUrl) {
+          previewEl.innerHTML = `<div class="text-xs text-danger">Không thể tạo mã VietQR. Vui lòng kiểm tra lại BIN (6 chữ số) và số tài khoản.</div>`;
+          return;
+        }
+        const infoLine = [
+          qrInfo.bankLabel || draft.bankName,
+          qrInfo.account || draft.bankAccount,
+          qrInfo.accountName || draft.bankAccountName
+        ].filter(Boolean).join(' • ');
+        const normDesc = qrInfo.normalizedDesc || normalizeTransferContent(testDesc);
+        previewEl.innerHTML = `
+          <div class="text-xs text-bold text-primary mb-2">👁️ Xem Trước Mã VietQR (100% Offline)</div>
+          <div style="display: inline-block; background: #fff; padding: 8px; border-radius: 10px; border: 1px solid #bae6fd;">
+            <img src="${qrInfo.dataUrl}" alt="VietQR Preview" style="width: 168px; height: 168px; object-fit: contain; display: block;">
+          </div>
+          <div class="text-xs text-bold mt-2">${escapeHTML(infoLine)}</div>
+          <div class="text-xs text-muted mt-1">Nội dung thử: <code>${escapeHTML(normDesc)}</code></div>
+          <div class="mt-2" style="display: flex; justify-content: center; gap: 8px; flex-wrap: wrap;">
+            <button type="button" class="btn btn-outline-primary btn-xs" id="btn-zoom-vietqr-preview">🔍 Phóng to quét thử</button>
+          </div>
+          <div class="text-xs text-success mt-1">✅ Quét thử bằng app ngân hàng để kiểm tra trước khi lưu!</div>
+        `;
+        document.getElementById('btn-zoom-vietqr-preview')?.addEventListener('click', () => {
+          this.app.salesModule.showFullScreenQrModal(qrInfo.dataUrl, infoLine, 0);
+        });
+      } catch (err) {
+        previewEl.innerHTML = `<div class="text-xs text-danger">Lỗi tạo VietQR: ${escapeHTML(err.message)}</div>`;
+      }
+    };
+
+    if (binSelect) {
+      binSelect.addEventListener('change', () => {
+        if (binCodeInp) binCodeInp.value = binSelect.value;
+        const draft = getVietQRDraft();
+        syncBankInfoField(draft);
+        renderVietQRSettingsPreview();
+      });
+    }
+
+    if (binCodeInp) {
+      binCodeInp.addEventListener('input', () => {
+        const digits = binCodeInp.value.replace(/\D/g, '').slice(0, 6);
+        if (binCodeInp.value !== digits) binCodeInp.value = digits;
+        if (binSelect) {
+          binSelect.value = NAPAS_BANKS.some(b => b.bin === digits) ? digits : '';
+        }
+        const draft = getVietQRDraft();
+        syncBankInfoField(draft);
+        renderVietQRSettingsPreview();
+      });
+    }
+
+    [bankAccountInp, bankAccountNameInp].forEach(el => {
+      if (!el) return;
+      el.addEventListener('input', () => {
+        const draft = getVietQRDraft();
+        syncBankInfoField(draft);
+        renderVietQRSettingsPreview();
+      });
+    });
+
+    renderVietQRSettingsPreview();
+
     // Toggle VAT
     const vatCheckbox = document.getElementById('set-enable-vat');
     const vatRateRow = document.getElementById('vat-rate-row');
@@ -632,12 +800,21 @@ export class SettingsModule {
         const shopName = document.getElementById('set-shop-name').value.trim();
         if (!shopName) return alert('Vui lòng nhập tên cửa hàng');
 
+        const draft = getVietQRDraft();
+        if ((draft.bankAccount && draft.bankBin.length !== 6) || (draft.bankBin && draft.bankBin.length !== 6)) {
+          return alert('Mã BIN ngân hàng NAPAS phải gồm đúng 6 chữ số (vui lòng chọn ngân hàng hoặc nhập đủ 6 số BIN).');
+        }
+
         const updatedShop = {
           ...shop,
           shopName,
           phone: document.getElementById('set-phone').value.trim(),
           address: document.getElementById('set-address').value.trim(),
           bankInfo: document.getElementById('set-bank').value.trim(),
+          bankBin: draft.bankBin,
+          bankName: draft.bankName,
+          bankAccount: draft.bankAccount,
+          bankAccountName: draft.bankAccountName,
           quoteValidityDays: parseInt(document.getElementById('set-quote-days').value, 10) || 7,
           enableVat: vatCheckbox ? vatCheckbox.checked : false,
           vatRate: parseInt(document.getElementById('set-vat-rate').value, 10) || 8,
@@ -646,6 +823,7 @@ export class SettingsModule {
         };
 
         await db.saveSetting('shop_info', updatedShop);
+        Object.assign(shop, updatedShop);
         alert('✓ Đã lưu cài đặt cửa hàng & mã QR thành công!');
         this.app.updateHeaderBrand();
       });
