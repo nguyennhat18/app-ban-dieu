@@ -1,6 +1,6 @@
 // Quản lý Kho Hàng (Phiếu Nhập Hàng, Kiểm Kê/Điều Chỉnh Tồn Kho, Lịch Sử Kho)
 import { db } from '../db.js';
-import { formatVND, parseVND, formatDateTime, generateId, escapeHTML } from '../utils.js';
+import { formatDateTime, generateId, escapeHTML, addOrMergeStockImportItem } from '../utils.js';
 
 export class InventoryModule {
   constructor(app) {
@@ -125,7 +125,7 @@ export class InventoryModule {
     }).join('');
   }
 
-  // ================= TAB 2: NHẬP HÀNG (TĂNG TỒN, CẬP NHẬT GIÁ NHẬP) =================
+  // ================= TAB 2: NHẬP HÀNG (TĂNG TỒN THEO SỐ LƯỢNG) =================
   async renderImportView() {
     const products = await db.getAll('products');
     const imports = await db.getAll('stock_imports');
@@ -147,24 +147,27 @@ export class InventoryModule {
               <p class="empty-title">Chưa có phiếu nhập hàng nào</p>
               <p class="empty-desc">Bấm nút trên để ghi nhận lô hàng diều mới về kho.</p>
             </div>
-          ` : imports.map(imp => `
+          ` : imports.map(imp => {
+            const totalQty = imp.totalQuantity || (imp.items || []).reduce((s, i) => s + (i.quantity || 0), 0);
+            return `
             <div class="import-card" data-id="${imp.id}">
               <div class="import-card-header" style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px;">
                 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px;">
                   <span class="import-id text-bold">${escapeHTML(imp.id)}</span>
                   <span class="text-muted text-xs ml-2">${formatDateTime(imp.createdAt)}</span>
                 </div>
-                <div class="text-success text-bold">${formatVND(imp.totalAmount)}</div>
+                <div class="text-primary text-bold">Tổng SL: ${totalQty}</div>
               </div>
 
               <div class="import-card-body">
                 <div class="text-sm"><b>Nhà cung cấp / Nguồn:</b> ${escapeHTML(imp.supplierName || 'Xưởng diều')}</div>
                 <div class="import-items-summary text-muted text-xs mt-1">
-                  ${(imp.items || []).map(i => `${escapeHTML(i.productName)} (x${i.quantity} @ ${formatVND(i.costPrice)})`).join(', ')}
+                  ${(imp.items || []).map(i => `${escapeHTML(i.productName)} (x${i.quantity})`).join(', ')}
                 </div>
               </div>
             </div>
-          `).join('')}
+          `;
+          }).join('')}
         </div>
       </div>
     `;
@@ -393,6 +396,7 @@ export class InventoryModule {
   // ================= MODAL TẠO PHIẾU NHẬP HÀNG =================
   async showImportModal() {
     const products = await db.getAll('products');
+    products.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'vi'));
     const importItems = [];
 
     const modalHtml = `
@@ -420,25 +424,18 @@ export class InventoryModule {
                 <select id="imp-select-prod" class="form-select" style="font-weight: 600;">
                   <option value="">-- Bấm để chọn diều / phụ kiện --</option>
                   ${products.map(p => `
-                    <option value="${p.id}" data-cost="${p.costPrice || 0}" data-unit="${escapeHTML(p.unit || 'chiếc')}">
-                      ${escapeHTML(p.name)} (Giá nhập cũ: ${formatVND(p.costPrice || 0)})
+                    <option value="${p.id}" data-unit="${escapeHTML(p.unit || 'chiếc')}">
+                      ${escapeHTML(p.name)} (Hiện tồn: ${p.stock || 0} ${escapeHTML(p.unit || 'chiếc')})
                     </option>
                   `).join('')}
                 </select>
               </div>
 
-              <div class="form-row">
-                <div class="form-group flex-1 mb-2">
-                  <label class="form-label required text-bold" style="color: #0f172a;">2. SỐ LƯỢNG NHẬP:</label>
-                  <div style="position: relative;">
-                    <input type="number" id="imp-qty" class="form-input form-input-lg text-bold text-center" min="1" step="1" value="10" placeholder="Số lượng" style="font-size: 15px;">
-                    <span id="imp-unit-hint" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 12px; color: #64748b; font-weight: 600; pointer-events: none;">chiếc</span>
-                  </div>
-                </div>
-
-                <div class="form-group flex-1 mb-2">
-                  <label class="form-label required text-bold" style="color: #0f172a;">3. GIÁ NHẬP VỐN (VNĐ):</label>
-                  <input type="text" id="imp-cost" class="form-input form-input-lg text-bold text-primary text-right" placeholder="0 ₫" style="font-size: 15px;">
+              <div class="form-group mb-2">
+                <label class="form-label required text-bold" style="color: #0f172a;">2. SỐ LƯỢNG NHẬP:</label>
+                <div style="position: relative;">
+                  <input type="number" id="imp-qty" class="form-input form-input-lg text-bold text-center" min="1" step="1" value="10" placeholder="Số lượng" style="font-size: 15px;">
+                  <span id="imp-unit-hint" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 12px; color: #64748b; font-weight: 600; pointer-events: none;">chiếc</span>
                 </div>
               </div>
 
@@ -453,21 +450,19 @@ export class InventoryModule {
                 <thead>
                   <tr style="background: #f8fafc;">
                     <th>Sản phẩm</th>
-                    <th class="text-center" style="width: 80px;">Số lượng</th>
-                    <th class="text-right" style="width: 110px;">Giá nhập</th>
-                    <th class="text-right" style="width: 120px;">Thành tiền</th>
-                    <th class="text-center" style="width: 50px;">Xóa</th>
+                    <th class="text-center" style="width: 100px;">Số lượng</th>
+                    <th class="text-center" style="width: 55px;">Xóa</th>
                   </tr>
                 </thead>
                 <tbody id="tbody-imp-items">
-                  <tr><td colspan="5" class="text-center text-muted p-3">Chưa có sản phẩm nào trong phiếu nhập.</td></tr>
+                  <tr><td colspan="3" class="text-center text-muted p-3">Chưa có sản phẩm nào trong phiếu nhập.</td></tr>
                 </tbody>
               </table>
             </div>
 
             <div class="import-total-box mt-2 text-right">
-              <span class="text-lg">Tổng tiền nhập hàng: </span>
-              <span class="text-lg text-bold text-success" id="imp-total-amount">0 ₫</span>
+              <span class="text-lg">Tổng số lượng nhập: </span>
+              <span class="text-lg text-bold text-primary" id="imp-total-qty">0</span>
             </div>
 
             <div class="form-group mt-3">
@@ -495,45 +490,37 @@ export class InventoryModule {
 
     const selectProd = document.getElementById('imp-select-prod');
     const qtyInp = document.getElementById('imp-qty');
-    const costInp = document.getElementById('imp-cost');
     const unitHint = document.getElementById('imp-unit-hint');
     const tbody = document.getElementById('tbody-imp-items');
-    const totalEl = document.getElementById('imp-total-amount');
+    const totalQtyEl = document.getElementById('imp-total-qty');
 
     selectProd.addEventListener('change', () => {
       const opt = selectProd.options[selectProd.selectedIndex];
       if (opt && opt.value) {
-        const cost = parseInt(opt.dataset.cost, 10) || 0;
         const unit = opt.dataset.unit || 'chiếc';
         if (unitHint) unitHint.textContent = unit;
-        if (cost > 0) costInp.value = formatVND(cost);
+      } else if (unitHint) {
+        unitHint.textContent = 'chiếc';
       }
-    });
-
-    costInp.addEventListener('blur', () => {
-      const val = parseVND(costInp.value);
-      costInp.value = val > 0 ? formatVND(val) : '';
     });
 
     const updateTable = () => {
       if (importItems.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted p-3">Chưa có sản phẩm nào trong phiếu nhập.</td></tr>`;
-        totalEl.textContent = '0 ₫';
+        tbody.innerHTML = `<tr><td colspan="3" class="text-center text-muted p-3">Chưa có sản phẩm nào trong phiếu nhập.</td></tr>`;
+        totalQtyEl.textContent = '0';
         return;
       }
 
-      let grandTotal = 0;
+      let grandTotalQty = 0;
       tbody.innerHTML = importItems.map((item, idx) => {
-        grandTotal += item.subtotal;
+        grandTotalQty += item.quantity;
         return `
           <tr>
             <td>
               <b>${escapeHTML(item.productName)}</b>
               <div class="text-xs text-muted">Mã: ${escapeHTML(item.productCode || '---')}</div>
             </td>
-            <td class="text-center"><b>${item.quantity}</b></td>
-            <td class="text-right">${formatVND(item.costPrice)}</td>
-            <td class="text-right text-bold text-success">${formatVND(item.subtotal)}</td>
+            <td class="text-center"><b>+${item.quantity}</b></td>
             <td class="text-center">
               <button type="button" class="btn btn-outline-danger btn-xs btn-remove-imp-item" data-idx="${idx}" title="Xóa món này">🗑️</button>
             </td>
@@ -541,7 +528,7 @@ export class InventoryModule {
         `;
       }).join('');
 
-      totalEl.textContent = formatVND(grandTotal);
+      totalQtyEl.textContent = String(grandTotalQty);
 
       document.querySelectorAll('.btn-remove-imp-item').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -556,23 +543,16 @@ export class InventoryModule {
       const pId = selectProd.value;
       if (!pId) return alert('Vui lòng chọn sản phẩm cần nhập!');
       const p = products.find(x => x.id === pId);
-      const qty = parseInt(qtyInp.value, 10) || 1;
-      const cost = parseVND(costInp.value);
+      if (!p) return alert('Không tìm thấy sản phẩm đã chọn!');
+      const qty = parseInt(qtyInp.value, 10) || 0;
 
       if (qty <= 0) return alert('Số lượng nhập phải lớn hơn 0!');
 
-      importItems.push({
-        productId: p.id,
-        productCode: p.code || '',
-        productName: p.name,
-        quantity: qty,
-        costPrice: cost,
-        subtotal: qty * cost
-      });
+      // Nếu trùng mặt hàng / trùng tên trong phiếu -> chỉ cộng dồn số lượng
+      addOrMergeStockImportItem(importItems, p, qty);
 
       // Reset form chọn món để tiện thêm món tiếp theo
       selectProd.value = '';
-      costInp.value = '';
       qtyInp.value = '10';
       if (unitHint) unitHint.textContent = 'chiếc';
 
@@ -590,13 +570,13 @@ export class InventoryModule {
       const notes = document.getElementById('imp-notes').value.trim();
       const importId = generateId('PN');
       const now = new Date().toISOString();
-      const totalAmount = importItems.reduce((s, i) => s + i.subtotal, 0);
+      const totalQuantity = importItems.reduce((s, i) => s + (i.quantity || 0), 0);
 
       const importRecord = {
         id: importId,
         supplierName: supplier,
         items: importItems,
-        totalAmount,
+        totalQuantity,
         notes,
         createdAt: now
       };
@@ -612,7 +592,7 @@ export class InventoryModule {
 
             impStore.put(importRecord);
 
-            // Tăng tồn kho & Cập nhật giá nhập mới nhất cho từng món
+            // Chỉ tăng số lượng tồn kho, không thay đổi giá của mặt hàng
             for (const item of importItems) {
               const req = prodStore.get(item.productId);
               req.onsuccess = () => {
@@ -621,9 +601,6 @@ export class InventoryModule {
                   const stockBefore = product.stock || 0;
                   const stockAfter = stockBefore + item.quantity;
                   product.stock = stockAfter;
-                  if (item.costPrice > 0) {
-                    product.costPrice = item.costPrice; // Cập nhật giá nhập gần nhất
-                  }
                   product.updatedAt = now;
                   prodStore.put(product);
 

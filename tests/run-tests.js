@@ -4,7 +4,9 @@ import {
   formatVND,
   parseVND,
   numberToVietnameseWords,
-  calculateChecksum
+  calculateChecksum,
+  addOrMergeStockImportItem,
+  mergeImportedProductsByName
 } from '../js/utils.js';
 import {
   parseStockArray2D,
@@ -371,6 +373,41 @@ async function main() {
 
     // Khi kho không còn tồn tại trong danh sách -> fallback an toàn về kho đầu tiên
     assert.strictEqual(normalizeWarehouseId('kho-khong-ton-tai', customWarehouses), 'kho-ao-dieu');
+  });
+
+  runTest('8.2b. Nhập hàng không tiền theo món & trùng tên chỉ cộng thêm số lượng', () => {
+    const sheetItems = [];
+    const prodA = { id: 'SP-1', code: 'D-01', name: 'Áo Diều 2.5m' };
+    const prodASameName = { id: 'SP-99', code: 'D-99', name: '  áo diều 2.5m ' };
+    const prodB = { id: 'SP-2', code: 'D-02', name: 'Nan Carbon D7' };
+
+    addOrMergeStockImportItem(sheetItems, prodA, 5);
+    addOrMergeStockImportItem(sheetItems, prodASameName, 3);
+    addOrMergeStockImportItem(sheetItems, prodB, 10);
+
+    assert.strictEqual(sheetItems.length, 2);
+    assert.strictEqual(sheetItems[0].quantity, 8);
+    assert.strictEqual('costPrice' in sheetItems[0], false);
+    assert.strictEqual('subtotal' in sheetItems[0], false);
+    assert.strictEqual(sheetItems[1].quantity, 10);
+
+    const existing = [
+      { id: 'SP-1', name: 'Áo Diều 2.5m', stock: 4, sellingPrice: 350000, costPrice: 200000 }
+    ];
+    const incoming = [
+      { id: 'SP-EXCEL-1', name: ' áo diều 2.5m ', stock: 6, sellingPrice: 999999 },
+      { id: 'SP-EXCEL-2', name: 'Dây Dù 500m', stock: 12, sellingPrice: 120000 },
+      { id: 'SP-EXCEL-3', name: 'dây dù 500m', stock: 3, sellingPrice: 150000 }
+    ];
+    const res = mergeImportedProductsByName(existing, incoming, '2026-11-12T10:00:00Z');
+    assert.strictEqual(res.added, 1);
+    assert.strictEqual(res.merged, 2);
+    assert.strictEqual(res.recordsToSave.length, 2);
+    const updatedA = res.recordsToSave.find(r => r.id === 'SP-1');
+    const createdB = res.recordsToSave.find(r => r.id === 'SP-EXCEL-2');
+    assert.strictEqual(updatedA.stock, 10);
+    assert.strictEqual(updatedA.sellingPrice, 350000); // Giữ nguyên giá cũ khi trùng tên
+    assert.strictEqual(createdB.stock, 15);
   });
 
   runTest('8.3. Excel Importer & Nhận diện tự động danh mục, đơn vị tính', () => {

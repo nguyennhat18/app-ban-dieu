@@ -397,3 +397,85 @@ export function escapeHTML(str) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
 }
+
+/**
+ * Thêm món vào danh sách phiếu nhập kho: nếu đã có cùng ID hoặc trùng tên thì chỉ cộng dồn số lượng.
+ * @param {Array} items
+ * @param {object} product
+ * @param {number} qty
+ * @returns {Array}
+ */
+export function addOrMergeStockImportItem(items, product, qty) {
+  const list = Array.isArray(items) ? items : [];
+  const addQty = Math.trunc(Number(qty) || 0);
+  if (!product || addQty <= 0) return list;
+
+  const normName = String(product.name || '').trim().toLowerCase();
+  const existing = list.find(
+    item =>
+      (product.id && item.productId === product.id) ||
+      (normName && String(item.productName || '').trim().toLowerCase() === normName)
+  );
+
+  if (existing) {
+    existing.quantity = (existing.quantity || 0) + addQty;
+  } else {
+    list.push({
+      productId: product.id,
+      productCode: product.code || '',
+      productName: product.name,
+      quantity: addQty
+    });
+  }
+  return list;
+}
+
+/**
+ * Gộp danh sách sản phẩm nhập mới với danh sách hiện có:
+ * nếu trùng tên (không phân biệt hoa thường/khoảng trắng thừa) thì chỉ cộng thêm số lượng tồn.
+ * @param {Array} existingProducts
+ * @param {Array} incomingProducts
+ * @param {string} nowIso
+ * @returns {{ added: number, merged: number, recordsToSave: Array }}
+ */
+export function mergeImportedProductsByName(existingProducts, incomingProducts, nowIso = new Date().toISOString()) {
+  const byName = new Map();
+  for (const p of (existingProducts || [])) {
+    if (!p || p.isDeleted) continue;
+    const key = String(p.name || '').trim().toLowerCase();
+    if (key && !byName.has(key)) {
+      byName.set(key, p);
+    }
+  }
+
+  const touchedById = new Map();
+  let added = 0;
+  let merged = 0;
+
+  for (const raw of (incomingProducts || [])) {
+    if (!raw || !String(raw.name || '').trim()) continue;
+    const key = String(raw.name).trim().toLowerCase();
+    const qtyToAdd = Math.max(0, Math.trunc(Number(raw.stock) || 0));
+    const existing = byName.get(key);
+
+    if (existing) {
+      const updated = touchedById.get(existing.id) || { ...existing };
+      updated.stock = (Number(updated.stock) || 0) + qtyToAdd;
+      updated.updatedAt = nowIso;
+      byName.set(key, updated);
+      touchedById.set(updated.id, updated);
+      merged++;
+    } else {
+      const created = { ...raw, stock: qtyToAdd, updatedAt: raw.updatedAt || nowIso };
+      byName.set(key, created);
+      touchedById.set(created.id, created);
+      added++;
+    }
+  }
+
+  return {
+    added,
+    merged,
+    recordsToSave: Array.from(touchedById.values())
+  };
+}

@@ -1,6 +1,6 @@
 // Quản lý sản phẩm (Diều & Phụ kiện - Mobile First - Hỗ Trợ Nhiều Kho Linh Hoạt)
 import { db } from '../db.js';
-import { formatVND, parseVND, compressImage, escapeHTML } from '../utils.js';
+import { formatVND, parseVND, compressImage, escapeHTML, mergeImportedProductsByName } from '../utils.js';
 import { DEFAULT_WAREHOUSES, normalizeWarehouseId, PRODUCT_CATEGORIES, PRODUCT_UNITS } from '../config.js';
 import { parseStockArray2D, SAMPLE_STOCK_INVENTORY, detectCategory, detectUnit } from '../excel-importer.js';
 
@@ -445,10 +445,12 @@ export class ProductModule {
           );
 
           if (confirmed) {
-            for (const p of parsedProducts) {
-              await db.put('products', p);
+            const existingProducts = await db.getAll('products');
+            const { added, merged, recordsToSave } = mergeImportedProductsByName(existingProducts, parsedProducts);
+            for (const rec of recordsToSave) {
+              await db.put('products', rec);
             }
-            alert(`🎉 Đã đẩy thành công ${parsedProducts.length} mặt hàng vào Kho Tồn!`);
+            alert(`🎉 Đã xử lý ${parsedProducts.length} dòng: thêm mới ${added} mặt hàng, cộng thêm số lượng cho ${merged} mặt hàng trùng tên!`);
             this.currentWarehouse = 'stock';
             await this.render();
           }
