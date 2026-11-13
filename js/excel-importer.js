@@ -1,5 +1,10 @@
 // Bộ Xử Lý Đọc & Nhập File Excel/CSV Vào Kho Tồn (Smart Kite Inventory Parser)
-import { formatVND, parseVND } from './utils.js';
+import { formatVND, parseVND, downloadBlobFile } from './utils.js';
+import {
+  DEFAULT_WAREHOUSES,
+  normalizeWarehouseIdByNameOrId,
+  DEFAULT_WAREHOUSE_CATEGORIES
+} from './config.js';
 
 export function detectCategory(name) {
   const n = (name || '').toLowerCase();
@@ -21,6 +26,93 @@ export function detectUnit(name) {
   if (n.includes('bộ') || n.includes('sáo 5') || n.includes('sáo 3')) return 'Bộ';
   if (n.includes('cặp')) return 'Cặp';
   return 'Chiếc';
+}
+
+// Fallback danh mục theo kho trong trường hợp import độc lập
+const FALLBACK_WAREHOUSE_CATEGORIES = {
+  'kho-ao-dieu': [
+    'Áo diều sáo truyền thống',
+    'Áo diều khí động học',
+    'Áo diều đại trà',
+    'Áo diều ghép màu',
+    'Áo diều mini'
+  ],
+  'kho-nan-dieu': [
+    'Nan carbon xoắn',
+    'Nan carbon đặc',
+    'Nan cáp quang',
+    'Nan tre vót sẵn',
+    'Nan bụng / Nan cánh'
+  ],
+  'kho-pass-inox': [
+    'Pass khóa sáo',
+    'Pass chữ T',
+    'Pass khớp nối',
+    'Pass khóa cánh',
+    'Phụ kiện pass inox 304'
+  ],
+  'kho-thanh-cai': [
+    'Thanh cái carbon',
+    'Thanh cái tre',
+    'Vai diều dẹp',
+    'Ống nối sống diều'
+  ],
+  'kho-guong-inox': [
+    'Guồng tay inox',
+    'Guồng trợ lực',
+    'Guồng nhôm',
+    'Bát guồng & Tay quay'
+  ],
+  'kho-day-dieu': [
+    'Dây amiang chịu lực',
+    'Dây dù đan tròn',
+    'Dây cáp quang',
+    'Dây bọc thép',
+    'Cuộn dây thả diều'
+  ],
+  'kho-sao-dieu': [
+    'Sáo còi D40 D50',
+    'Sáo chuông & hòa âm',
+    'Sáo đàn còi',
+    'Miệng sáo gỗ / nhôm',
+    'Ống sáo sáp & sáo tre'
+  ],
+  'kho-dieu': [
+    'Diều sáo hoàn thiện',
+    'Diều khí động học',
+    'Diều đại trà',
+    'Diều rồng / Phượng hoàng',
+    'Diều mini'
+  ],
+  'kho-combo': [
+    'Combo diều tự ráp',
+    'Combo nan + áo + pass',
+    'Kit phụ kiện diều tự làm'
+  ],
+  'stock': [
+    'Nan carbon & Nan diều',
+    'Pass & Phụ kiện nối',
+    'Cuộn guồng & Dây thả diều',
+    'Sáo diều & Âm thanh',
+    'Phụ kiện & Đồ nghề diều'
+  ]
+};
+
+function safeNormalizeWarehouse(nameOrId, warehouses = DEFAULT_WAREHOUSES) {
+  if (typeof normalizeWarehouseIdByNameOrId === 'function') {
+    return normalizeWarehouseIdByNameOrId(nameOrId, warehouses);
+  }
+  const list = Array.isArray(warehouses) ? warehouses : DEFAULT_WAREHOUSES;
+  if (!nameOrId || nameOrId === 'new') {
+    return list.some(w => w && w.id === 'kho-dieu') ? 'kho-dieu' : (list[0]?.id || 'stock');
+  }
+  const str = String(nameOrId).trim();
+  const byId = list.find(w => w && w.id === str);
+  if (byId) return byId.id;
+  const lower = str.toLowerCase();
+  const byName = list.find(w => w && w.name && w.name.trim().toLowerCase() === lower);
+  if (byName) return byName.id;
+  return list.some(w => w && w.id === 'kho-dieu') ? 'kho-dieu' : (list[0]?.id || 'stock');
 }
 
 // 69 Mặt hàng trích xuất nguyên gốc từ file Excel tồn kho của cửa hàng
@@ -96,8 +188,292 @@ export const SAMPLE_STOCK_INVENTORY = [
   { name: 'Dây chặn Pass 50mm', stock: 0, costPrice: 2500, sellingPrice: 5000, supplier: 'Nguyễn Lý', importDate: '2026-05-23' }
 ];
 
-// Hàm phân tích mảng 2D (từ XLSX hoặc CSV)
-export function parseStockArray2D(rows) {
+/**
+ * Tạo Workbook file Excel mẫu chuẩn phục vụ nhập hàng đa kho
+ * @param {Array} warehouses Danh sách kho hàng
+ * @returns {object} XLSX Workbook
+ */
+export function generateProductExcelTemplate(warehouses = DEFAULT_WAREHOUSES) {
+  const XLSX = (typeof window !== 'undefined' && window.XLSX) ? window.XLSX : globalThis.XLSX;
+  if (!XLSX) {
+    throw new Error('Thư viện Excel (XLSX) chưa sẵn sàng.');
+  }
+
+  const listWh = Array.isArray(warehouses) && warehouses.length > 0 ? warehouses : DEFAULT_WAREHOUSES;
+  const wb = XLSX.utils.book_new();
+
+  // ---------------- SHEET 1: "Danh Sách Nhập Hàng" ----------------
+  const headers1 = [
+    'Tên mặt hàng (*)',
+    'Mã sản phẩm',
+    'Kho hàng',
+    'Chủng loại',
+    'Đơn vị tính',
+    'Số lượng tồn',
+    'Giá bán (VNĐ)',
+    'Giá vốn nhập (VNĐ)',
+    'Mức cảnh báo tồn',
+    'Kích thước',
+    'Màu sắc',
+    'Nhà cung cấp / Nguồn',
+    'Ghi chú'
+  ];
+
+  const sampleRows = [
+    ['Áo Diều Sáo D7 D8 Ghép Màu 2.5m', 'AD-001', 'Kho Áo Diều', 'Áo diều sáo truyền thống', 'Chiếc', 10, 350000, 200000, 3, '2.5m', 'Đỏ vàng', 'Xưởng Nam Định', 'Chất vải dù chống rách'],
+    ['Nan Carbon Xoắn Cao Cấp D7', 'NAN-002', 'Kho Nan Diều', 'Nan carbon xoắn', 'Chiếc', 50, 45000, 28000, 10, '1m2', 'Đen nhám', 'Mai Ngọc', 'Độ đàn hồi cao'],
+    ['Pass Khóa Sáo Inox 304 Cỡ Lớn', 'PASS-003', 'Kho Pass Inox', 'Pass khóa sáo', 'Cái', 30, 25000, 15000, 5, 'D40', 'Bạc sáng', 'Duy Phương', 'Inox chống rỉ sét'],
+    ['Dây Amiang Chịu Lực 1ly5 Cuộn 500m', 'DAY-004', 'Kho Dây Diều', 'Dây amiang chịu lực', 'Cuộn', 15, 650000, 450000, 2, '500m', 'Trắng', 'Huân Nguyễn', 'Chịu tải gió lớn'],
+    ['Bộ Còi Sáo Chuông D50 Hòa Âm', 'SAO-005', 'Kho Sáo Diều', 'Sáo chuông & hòa âm', 'Bộ', 5, 1200000, 800000, 1, 'D50', 'Gỗ mít', 'Nghệ nhân Nam Định', 'Âm vang trầm ấm']
+  ];
+
+  const ws1 = XLSX.utils.aoa_to_sheet([headers1, ...sampleRows]);
+  ws1['!cols'] = [
+    { wch: 38 }, // Tên mặt hàng (*)
+    { wch: 15 }, // Mã sản phẩm
+    { wch: 18 }, // Kho hàng
+    { wch: 28 }, // Chủng loại
+    { wch: 12 }, // Đơn vị tính
+    { wch: 14 }, // Số lượng tồn
+    { wch: 16 }, // Giá bán (VNĐ)
+    { wch: 20 }, // Giá vốn nhập (VNĐ)
+    { wch: 18 }, // Mức cảnh báo tồn
+    { wch: 14 }, // Kích thước
+    { wch: 14 }, // Màu sắc
+    { wch: 26 }, // Nhà cung cấp / Nguồn
+    { wch: 32 }  // Ghi chú
+  ];
+  XLSX.utils.book_append_sheet(wb, ws1, 'Danh Sách Nhập Hàng');
+
+  // ---------------- SHEET 2: "Hướng Dẫn & Danh Mục Kho" ----------------
+  const catMap = (typeof DEFAULT_WAREHOUSE_CATEGORIES !== 'undefined' && DEFAULT_WAREHOUSE_CATEGORIES)
+    ? DEFAULT_WAREHOUSE_CATEGORIES
+    : FALLBACK_WAREHOUSE_CATEGORIES;
+
+  const headers2 = ['Tên Kho Hàng', 'Mã Kho', 'Các Chủng Loại Thuộc Kho', 'Ghi Chú Hướng Dẫn'];
+  const guideRows = listWh.map((w, index) => {
+    const cats = catMap[w.id] || [];
+    let note = '';
+    if (index === 0) {
+      note = 'Cột có dấu (*) là bắt buộc. Có thể điền Tên Kho hoặc Mã Kho vào cột "Kho hàng".';
+    } else if (index === 1) {
+      note = 'Giá bán và giá vốn nhập chỉ nhập số nguyên không kèm chữ hay ký hiệu tiền tệ.';
+    } else if (index === 2) {
+      note = 'Số lượng tồn và mức cảnh báo tồn chỉ nhập số nguyên (mặc định cảnh báo tồn là 3).';
+    } else if (index === 3) {
+      note = 'Nếu để trống cột Kho hàng, sản phẩm sẽ được xếp vào kho mặc định khi nạp.';
+    } else if (index === 4) {
+      note = 'Chủng loại nên chọn từ danh sách thuộc kho tương ứng để lọc danh mục chuẩn xác.';
+    } else {
+      note = 'Các cột Kích thước, Màu sắc, Nhà cung cấp và Ghi chú là tùy chọn, có thể để trống.';
+    }
+    return [
+      w.name,
+      w.id,
+      cats.join(', '),
+      note
+    ];
+  });
+
+  const ws2 = XLSX.utils.aoa_to_sheet([headers2, ...guideRows]);
+  ws2['!cols'] = [
+    { wch: 24 }, // Tên Kho Hàng
+    { wch: 18 }, // Mã Kho
+    { wch: 55 }, // Các Chủng Loại Thuộc Kho
+    { wch: 75 }  // Ghi Chú Hướng Dẫn
+  ];
+  XLSX.utils.book_append_sheet(wb, ws2, 'Hướng Dẫn & Danh Mục Kho');
+
+  return wb;
+}
+
+/**
+ * Tải file Excel mẫu nhập hàng chuẩn cho cửa hàng diều
+ * @param {Array} warehouses Danh sách kho hàng
+ */
+export function downloadProductExcelTemplate(warehouses = DEFAULT_WAREHOUSES) {
+  const XLSX = (typeof window !== 'undefined' && window.XLSX) ? window.XLSX : globalThis.XLSX;
+  if (!XLSX) {
+    throw new Error('Thư viện Excel (XLSX) chưa sẵn sàng.');
+  }
+
+  const wb = generateProductExcelTemplate(warehouses);
+  const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  const blob = new Blob([excelBuffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  });
+  const fileName = 'Mau_Nhap_Hang_KiteStore.xlsx';
+  downloadBlobFile(blob, fileName);
+  return { success: true, fileName };
+}
+
+/**
+ * Phân tích mảng 2D (từ XLSX hoặc CSV)
+ * Tự động nhận diện mẫu chuẩn đầy đủ cột (Mẫu Nhập Hàng) hoặc mẫu cũ (NHẬP _ XUẤT.xlsx)
+ * @param {Array<Array>} rows Dữ liệu 2D
+ * @param {string} defaultWarehouse Kho mặc định khi không chỉ định
+ * @param {Array} warehouses Danh sách kho hiện tại
+ * @returns {Array<object>} Danh sách sản phẩm chuẩn hóa
+ */
+export function parseStockArray2D(rows, defaultWarehouse = 'stock', warehouses = DEFAULT_WAREHOUSES) {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return [];
+  }
+
+  const listWh = Array.isArray(warehouses) && warehouses.length > 0 ? warehouses : DEFAULT_WAREHOUSES;
+
+  // 1. Kiểm tra xem file có khớp với mẫu chuẩn (Standard Template) hay không
+  let standardHeaderIndex = -1;
+  let standardColMap = null;
+
+  for (let i = 0; i < Math.min(rows.length, 10); i++) {
+    const row = rows[i] || [];
+    const lowerCells = row.map(c => String(c || '').trim().toLowerCase());
+
+    const hasNameHeader = lowerCells.some(c => c.includes('tên mặt hàng') || c.includes('tên sản phẩm'));
+    const hasWarehouseOrCatHeader = lowerCells.some(c => c.includes('kho') || c.includes('chủng loại'));
+
+    if (hasNameHeader && hasWarehouseOrCatHeader) {
+      standardHeaderIndex = i;
+      const colMap = {
+        name: -1,
+        code: -1,
+        warehouse: -1,
+        category: -1,
+        unit: -1,
+        stock: -1,
+        sellingPrice: -1,
+        costPrice: -1,
+        lowStockThreshold: -1,
+        size: -1,
+        color: -1,
+        supplier: -1,
+        notes: -1
+      };
+
+      lowerCells.forEach((c, idx) => {
+        if (colMap.name === -1 && (c.includes('tên mặt hàng') || c.includes('tên sản phẩm') || (c.includes('tên') && !c.includes('kho') && !c.includes('khách')))) {
+          colMap.name = idx;
+        } else if (colMap.code === -1 && (c.includes('mã sản phẩm') || c.includes('mã sp') || c.includes('mã hàng') || c === 'mã' || c.includes('mã diều'))) {
+          colMap.code = idx;
+        } else if (colMap.warehouse === -1 && (c.includes('kho hàng') || c === 'kho' || c.includes('mã kho') || (c.includes('kho') && !c.includes('tồn')))) {
+          colMap.warehouse = idx;
+        } else if (colMap.category === -1 && (c.includes('chủng loại') || c.includes('danh mục') || c.includes('loại hàng') || c === 'loại')) {
+          colMap.category = idx;
+        } else if (colMap.unit === -1 && (c.includes('đơn vị') || c.includes('đvt'))) {
+          colMap.unit = idx;
+        } else if (colMap.stock === -1 && (c.includes('số lượng tồn') || c.includes('tồn kho') || c === 'tồn' || c.includes('số lượng') || c === 'slg' || c === 'sl')) {
+          colMap.stock = idx;
+        } else if (colMap.sellingPrice === -1 && (c.includes('giá bán') || (c.includes('giá') && c.includes('bán')))) {
+          colMap.sellingPrice = idx;
+        } else if (colMap.costPrice === -1 && (c.includes('giá vốn') || c.includes('giá nhập') || (c.includes('giá') && (c.includes('vốn') || c.includes('nhập'))))) {
+          colMap.costPrice = idx;
+        } else if (colMap.lowStockThreshold === -1 && (c.includes('cảnh báo') || c.includes('ngưỡng') || c.includes('mức cảnh báo'))) {
+          colMap.lowStockThreshold = idx;
+        } else if (colMap.size === -1 && (c.includes('kích thước') || c.includes('size'))) {
+          colMap.size = idx;
+        } else if (colMap.color === -1 && (c.includes('màu sắc') || c.includes('màu'))) {
+          colMap.color = idx;
+        } else if (colMap.supplier === -1 && (c.includes('nhà cung cấp') || c.includes('nguồn') || c.includes('ncc'))) {
+          colMap.supplier = idx;
+        } else if (colMap.notes === -1 && (c.includes('ghi chú') || c.includes('mô tả') || c.includes('note'))) {
+          colMap.notes = idx;
+        }
+      });
+
+      standardColMap = colMap;
+      break;
+    }
+  }
+
+  // 1a. Nếu khớp mẫu chuẩn: Đọc chi tiết từng dòng với đầy đủ các trường
+  if (standardHeaderIndex >= 0 && standardColMap && standardColMap.name >= 0) {
+    const defaultWhId = safeNormalizeWarehouse(defaultWarehouse, listWh);
+
+    const parseNum = (val) => {
+      if (val === undefined || val === null || val === '') return 0;
+      if (typeof val === 'number') return Math.round(val);
+      const clean = String(val).replace(/[^0-9]/g, '');
+      return parseInt(clean, 10) || 0;
+    };
+
+    const products = [];
+    let count = 1;
+    const nowTimestamp = Date.now();
+
+    for (let r = standardHeaderIndex + 1; r < rows.length; r++) {
+      const row = rows[r];
+      if (!row || row.length === 0) continue;
+
+      const rawName = standardColMap.name >= 0 ? row[standardColMap.name] : '';
+      const name = String(rawName || '').trim();
+      if (!name || name === 'NaN' || name.startsWith('Tên mặt hàng') || name.startsWith('Tên sản phẩm')) {
+        continue;
+      }
+
+      // Kho hàng
+      let rawWh = standardColMap.warehouse >= 0 ? row[standardColMap.warehouse] : '';
+      let whId = defaultWhId;
+      if (rawWh !== undefined && rawWh !== null && String(rawWh).trim() !== '') {
+        whId = safeNormalizeWarehouse(rawWh, listWh);
+      }
+
+      // Mã sản phẩm
+      let rawCode = standardColMap.code >= 0 ? row[standardColMap.code] : '';
+      const code = String(rawCode || '').trim() || `SP-${String(count).padStart(3, '0')}`;
+
+      // Chủng loại
+      let rawCat = standardColMap.category >= 0 ? row[standardColMap.category] : '';
+      const category = String(rawCat || '').trim() || detectCategory(name);
+
+      // Đơn vị tính
+      let rawUnit = standardColMap.unit >= 0 ? row[standardColMap.unit] : '';
+      const unit = String(rawUnit || '').trim() || detectUnit(name);
+
+      // Số lượng & Giá cả
+      const stock = standardColMap.stock >= 0 ? parseNum(row[standardColMap.stock]) : 0;
+      const sellingPrice = standardColMap.sellingPrice >= 0 ? parseNum(row[standardColMap.sellingPrice]) : 0;
+      const costPrice = standardColMap.costPrice >= 0 ? parseNum(row[standardColMap.costPrice]) : 0;
+
+      let lowStockThreshold = 3;
+      if (standardColMap.lowStockThreshold >= 0) {
+        const rawAlert = row[standardColMap.lowStockThreshold];
+        if (rawAlert !== undefined && rawAlert !== null && String(rawAlert).trim() !== '') {
+          lowStockThreshold = parseNum(rawAlert);
+        }
+      }
+
+      const size = standardColMap.size >= 0 && row[standardColMap.size] != null ? String(row[standardColMap.size]).trim() : '';
+      const color = standardColMap.color >= 0 && row[standardColMap.color] != null ? String(row[standardColMap.color]).trim() : '';
+      const supplier = standardColMap.supplier >= 0 && row[standardColMap.supplier] != null ? String(row[standardColMap.supplier]).trim() : '';
+      const notes = standardColMap.notes >= 0 && row[standardColMap.notes] != null ? String(row[standardColMap.notes]).trim() : '';
+
+      products.push({
+        id: `SP-EXC-${nowTimestamp}-${count}`,
+        code,
+        name,
+        warehouse: whId,
+        category,
+        unit,
+        size,
+        color,
+        stock,
+        costPrice,
+        sellingPrice,
+        lowStockThreshold,
+        supplier,
+        notes,
+        photo: '',
+        importDate: ''
+      });
+      count++;
+    }
+
+    return products;
+  }
+
+  // 2. Fallback: Phân tích theo định dạng bảng kép cũ (NHẬP _ XUẤT.xlsx)
+  const legacyWarehouse = safeNormalizeWarehouse(defaultWarehouse, listWh);
   const productsMap = new Map();
   let headerRowIndex = -1;
 
@@ -211,7 +587,7 @@ export function parseStockArray2D(rows) {
     id: 'SP-STOCK-' + Date.now() + '-' + (count++),
     code: 'TON-' + String(count).padStart(3, '0'),
     name: item.name,
-    warehouse: 'stock', // Kho tồn
+    warehouse: legacyWarehouse,
     category: detectCategory(item.name),
     unit: detectUnit(item.name),
     size: '',
