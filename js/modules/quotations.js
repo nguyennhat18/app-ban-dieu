@@ -306,20 +306,20 @@ export class QuotationsModule {
             <!-- Thông tin khách hàng & số báo giá -->
             <div class="form-row">
               <div class="form-group flex-1">
-                <label class="form-label text-bold">Số báo giá</label>
-                <input type="text" id="q-id" class="form-input" readonly value="${escapeHTML(quote.id)}">
+                <label class="form-label text-bold" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 20px; line-height: 20px;">Số báo giá</label>
+                <input type="text" id="q-id" class="form-input" readonly value="${escapeHTML(quote.id)}" style="height: 44px; min-height: 44px; box-sizing: border-box;">
               </div>
               <div class="form-group flex-1">
-                <label class="form-label text-bold">Hạn hiệu lực đến ngày</label>
-                <input type="date" id="q-valid-until" class="form-input" value="${quote.validUntil}">
+                <label class="form-label text-bold" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 20px; line-height: 20px;">Hạn hiệu lực</label>
+                <input type="date" id="q-valid-until" class="form-input" value="${quote.validUntil}" style="height: 44px; min-height: 44px; box-sizing: border-box;">
               </div>
             </div>
 
             <!-- Chọn khách hoặc nhập tay -->
             <div class="form-row">
               <div class="form-group flex-1">
-                <label class="form-label">Chọn khách quen (tự điền SĐT)</label>
-                <select id="q-select-customer" class="form-select">
+                <label class="form-label" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 20px; line-height: 20px;">Chọn khách quen</label>
+                <select id="q-select-customer" class="form-select" style="height: 44px; min-height: 44px; box-sizing: border-box;">
                   <option value="">-- Nhập tay hoặc chọn khách --</option>
                   ${customers.map(c => `
                     <option value="${c.id}" data-name="${escapeHTML(c.name)}" data-phone="${escapeHTML(c.phone || '')}" data-address="${escapeHTML(c.address || '')}" ${quote.customerId === c.id ? 'selected' : ''}>
@@ -329,24 +329,24 @@ export class QuotationsModule {
                 </select>
               </div>
               <div class="form-group flex-1">
-                <label class="form-label required">Tên người nhận báo giá</label>
-                <input type="text" id="q-customer-name" class="form-input" required placeholder="VD: Anh Hải (Hội diều Bình Dương)" value="${escapeHTML(quote.customerName)}">
+                <label class="form-label required" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 20px; line-height: 20px;">Tên người nhận</label>
+                <input type="text" id="q-customer-name" class="form-input" required placeholder="VD: Anh Hải (Hội diều Bình Dương)" value="${escapeHTML(quote.customerName)}" style="height: 44px; min-height: 44px; box-sizing: border-box;">
               </div>
             </div>
 
             <div class="form-row">
               <div class="form-group flex-1">
-                <label class="form-label">Số điện thoại</label>
-                <input type="tel" id="q-customer-phone" class="form-input" placeholder="0901234567" value="${escapeHTML(quote.customerPhone)}">
+                <label class="form-label" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 20px; line-height: 20px;">Số điện thoại</label>
+                <input type="tel" id="q-customer-phone" class="form-input" placeholder="0901234567" value="${escapeHTML(quote.customerPhone)}" style="height: 44px; min-height: 44px; box-sizing: border-box;">
               </div>
-              <div class="form-group flex-2">
-                <label class="form-label">Địa chỉ nhận hàng</label>
-                <input type="text" id="q-customer-address" class="form-input" placeholder="Địa chỉ giao hàng..." value="${escapeHTML(quote.customerAddress || '')}">
+              <div class="form-group flex-1">
+                <label class="form-label" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 20px; line-height: 20px;">Địa chỉ nhận hàng</label>
+                <input type="text" id="q-customer-address" class="form-input" placeholder="Địa chỉ giao hàng..." value="${escapeHTML(quote.customerAddress || '')}" style="height: 44px; min-height: 44px; box-sizing: border-box;">
               </div>
             </div>
 
             <!-- Chọn diều thêm vào bảng báo giá -->
-            <div class="card p-3 mb-3 bg-light" style="border: 1.5px solid #cbd5e1; border-radius: 12px;">
+            <div class="add-to-quote-box card p-3 mb-3 bg-light" style="border: 1.5px solid #cbd5e1; border-radius: 12px;">
               <h3 class="text-bold text-sm mb-2" style="color: #0284c7; display: flex; align-items: center; gap: 6px;">
                 📋 Chọn Diều / Phụ Kiện Đưa Vào Báo Giá
               </h3>
@@ -372,18 +372,20 @@ export class QuotationsModule {
                 </select>
               </div>
 
-              <div class="form-row">
-                <div class="form-group flex-1 mb-2">
-                  <label class="form-label required text-bold" style="color: #0f172a;">2. SỐ LƯỢNG BÁO:</label>
-                  <div style="position: relative;">
-                    <input type="number" id="q-add-qty" class="form-input form-input-lg text-bold text-center" min="1" step="1" value="1" placeholder="Số lượng" style="font-size: 15px;">
+              <div class="form-row" style="display: flex; gap: 8px; align-items: flex-end;">
+                <div class="form-group flex-1 mb-2" style="margin-bottom: 8px;">
+                  <label class="form-label required text-bold" style="color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 20px; line-height: 20px; margin-bottom: 6px;">2. Số lượng:</label>
+                  <div style="position: relative; width: 100%;">
+                    <input type="number" id="q-add-qty" class="form-input form-input-lg text-bold text-center" min="1" step="1" value="1" placeholder="Số lượng" style="font-size: 16px; height: 48px; min-height: 48px; box-sizing: border-box; padding-right: 48px;">
                     <span id="q-unit-hint" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 12px; color: #64748b; font-weight: 600; pointer-events: none;">chiếc</span>
                   </div>
                 </div>
 
-                <div class="form-group flex-1 mb-2">
-                  <label class="form-label required text-bold" style="color: #0f172a;">3. ĐƠN GIÁ BÁO (VNĐ):</label>
-                  <input type="text" id="q-add-price" class="form-input form-input-lg text-bold text-primary text-right" placeholder="0 ₫" style="font-size: 15px;">
+                <div class="form-group flex-1 mb-2" style="margin-bottom: 8px;">
+                  <label class="form-label required text-bold" style="color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 20px; line-height: 20px; margin-bottom: 6px;">3. Đơn giá (đ):</label>
+                  <div style="position: relative; width: 100%;">
+                    <input type="text" id="q-add-price" class="form-input form-input-lg text-bold text-primary text-right" placeholder="0 ₫" style="font-size: 16px; height: 48px; min-height: 48px; box-sizing: border-box; padding-right: 12px;">
+                  </div>
                 </div>
               </div>
 

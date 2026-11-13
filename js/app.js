@@ -430,7 +430,6 @@ class KiteApp {
       this.navigateTo('settings');
     });
   }
-  }
 }
 
 // Khởi chạy khi DOM sẵn sàng
