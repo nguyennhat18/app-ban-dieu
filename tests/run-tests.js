@@ -9,10 +9,18 @@ import {
   mergeImportedProductsByName
 } from '../js/utils.js';
 import {
+  DEFAULT_WAREHOUSES,
+  normalizeWarehouseId,
+  DEFAULT_WAREHOUSE_CATEGORIES,
+  getDefaultCategoriesForWarehouse,
+  normalizeWarehouseIdByNameOrId
+} from '../js/config.js';
+import {
   parseStockArray2D,
   detectCategory,
   detectUnit,
-  SAMPLE_STOCK_INVENTORY
+  SAMPLE_STOCK_INVENTORY,
+  generateProductExcelTemplate
 } from '../js/excel-importer.js';
 import {
   generateLicenseKey,
@@ -33,10 +41,6 @@ import {
   hasVietQRConfig,
   resolveOrderQR
 } from '../js/vietqr.js';
-import {
-  DEFAULT_WAREHOUSES,
-  normalizeWarehouseId
-} from '../js/config.js';
 
 console.log('========================================================');
 console.log('🧪 BẮT ĐẦU CHẠY BỘ TEST TỰ ĐỘNG CHO HỆ THỐNG BÁN DIỀU');
@@ -477,6 +481,72 @@ async function main() {
 
     decItem('SP-1');
     assert.strictEqual(cart.length, 0);
+  });
+
+  runTest('8.6. Chủng loại riêng biệt cho từng kho hàng & normalizeWarehouseIdByNameOrId', () => {
+    // 1. Mỗi kho có danh sách chủng loại riêng, không dùng chung
+    const aoCats = getDefaultCategoriesForWarehouse('kho-ao-dieu');
+    const nanCats = getDefaultCategoriesForWarehouse('kho-nan-dieu');
+    const passCats = getDefaultCategoriesForWarehouse('kho-pass-inox');
+    const saoCats = getDefaultCategoriesForWarehouse('kho-sao-dieu');
+
+    assert.ok(aoCats.includes('Áo diều sáo truyền thống'), 'Kho Áo Diều có chủng loại áo diều');
+    assert.ok(!aoCats.includes('Nan carbon xoắn'), 'Kho Áo Diều không chứa chủng loại nan diều');
+
+    assert.ok(nanCats.includes('Nan carbon xoắn'), 'Kho Nan Diều có chủng loại nan');
+    assert.ok(!nanCats.includes('Pass khóa sáo'), 'Kho Nan Diều không chứa chủng loại pass');
+
+    assert.ok(passCats.includes('Pass khóa sáo'), 'Kho Pass Inox có chủng loại pass');
+    assert.ok(saoCats.includes('Sáo còi D40 D50'), 'Kho Sáo Diều có chủng loại sáo');
+
+    // 2. normalizeWarehouseIdByNameOrId: nhận diện chuẩn theo cả ID, Tên kho tiếng Việt và slug
+    assert.strictEqual(normalizeWarehouseIdByNameOrId('kho-ao-dieu'), 'kho-ao-dieu');
+    assert.strictEqual(normalizeWarehouseIdByNameOrId('Kho Áo Diều'), 'kho-ao-dieu');
+    assert.strictEqual(normalizeWarehouseIdByNameOrId('  kho nan diều  '), 'kho-nan-dieu');
+    assert.strictEqual(normalizeWarehouseIdByNameOrId('Kho Pass Inox'), 'kho-pass-inox');
+    assert.strictEqual(normalizeWarehouseIdByNameOrId('Kho Thanh Cái, Vai Diều'), 'kho-thanh-cai');
+    assert.strictEqual(normalizeWarehouseIdByNameOrId('Kho Guồng Inox'), 'kho-guong-inox');
+    assert.strictEqual(normalizeWarehouseIdByNameOrId('Kho Dây Diều'), 'kho-day-dieu');
+    assert.strictEqual(normalizeWarehouseIdByNameOrId('Kho Sáo Diều'), 'kho-sao-dieu');
+    assert.strictEqual(normalizeWarehouseIdByNameOrId('Kho Diều'), 'kho-dieu');
+    assert.strictEqual(normalizeWarehouseIdByNameOrId('Kho Combo Về Tự Làm'), 'kho-combo');
+    assert.strictEqual(normalizeWarehouseIdByNameOrId('Kho Tồn'), 'stock');
+    assert.strictEqual(normalizeWarehouseIdByNameOrId(''), 'kho-dieu');
+  });
+
+  runTest('8.7. Tự động nhận diện phân kho & dữ liệu đầy đủ từ File Excel chuẩn', () => {
+    // Mô phỏng 2D array đọc từ file Excel mẫu chuẩn 13 cột
+    const sampleExcelRows = [
+      ['HƯỚNG DẪN: ĐIỀN ĐẦY ĐỦ CÁC CỘT BÊN DƯỚI'],
+      ['Tên mặt hàng (*)', 'Mã sản phẩm', 'Kho hàng', 'Chủng loại', 'Đơn vị tính', 'Số lượng tồn', 'Giá bán (VNĐ)', 'Giá vốn nhập (VNĐ)', 'Mức cảnh báo tồn', 'Kích thước', 'Màu sắc', 'Nhà cung cấp / Nguồn', 'Ghi chú'],
+      ['Áo Diều Sáo Ghép Màu 3m', 'AD-300', 'Kho Áo Diều', 'Áo diều ghép màu', 'Chiếc', 15, 450000, 280000, 4, '3.0m', 'Đỏ xanh', 'Xưởng Nam Định', 'Vải caro chống thấm'],
+      ['Nan Đen Đặc D8 1m5', 'NAN-080', 'Kho Nan Diều', 'Nan carbon đặc', 'Chiếc', 40, 55000, 35000, 8, '1.5m', 'Đen', 'Mai Ngọc', 'Đàn hồi chuẩn'],
+      ['Pass Khóa Cánh Inox D8', 'PASS-008', 'Kho Pass Inox', 'Pass khóa cánh', 'Cái', 60, 30000, 18000, 10, 'D8', 'Inox bóng', 'Duy Phương', 'Pass chống rỉ'],
+      ['Guồng Quay Trợ Lực 28cm', 'G-28', 'Kho Guồng Inox', 'Guồng trợ lực', 'Chiếc', 5, 850000, 550000, 2, '28cm', 'Bạc', 'Xưởng cơ khí', 'Vòng bi êm ái']
+    ];
+
+    const parsed = parseStockArray2D(sampleExcelRows, 'stock', DEFAULT_WAREHOUSES);
+    assert.strictEqual(parsed.length, 4);
+
+    const aoItem = parsed.find(p => p.name === 'Áo Diều Sáo Ghép Màu 3m');
+    assert.ok(aoItem, 'Phải có Áo Diều');
+    assert.strictEqual(aoItem.code, 'AD-300');
+    assert.strictEqual(aoItem.warehouse, 'kho-ao-dieu'); // Phân đúng vào Kho Áo Diều
+    assert.strictEqual(aoItem.category, 'Áo diều ghép màu');
+    assert.strictEqual(aoItem.unit, 'Chiếc');
+    assert.strictEqual(aoItem.stock, 15);
+    assert.strictEqual(aoItem.sellingPrice, 450000);
+    assert.strictEqual(aoItem.costPrice, 280000);
+    assert.strictEqual(aoItem.size, '3.0m');
+    assert.strictEqual(aoItem.supplier, 'Xưởng Nam Định');
+
+    const nanItem = parsed.find(p => p.name === 'Nan Đen Đặc D8 1m5');
+    assert.ok(nanItem, 'Phải có Nan Đen');
+    assert.strictEqual(nanItem.warehouse, 'kho-nan-dieu'); // Phân đúng vào Kho Nan Diều
+
+    const guongItem = parsed.find(p => p.name === 'Guồng Quay Trợ Lực 28cm');
+    assert.ok(guongItem, 'Phải có Guồng');
+    assert.strictEqual(guongItem.warehouse, 'kho-guong-inox'); // Phân đúng vào Kho Guồng Inox
   });
 
   // ================= 9. TEST HỆ THỐNG BẢN QUYỀN KHÓA THEO MÁY =================
