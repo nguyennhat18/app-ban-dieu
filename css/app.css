@@ -151,6 +151,62 @@ input, textarea, select {
   flex-shrink: 0;
 }
 
+.header-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: var(--radius-full);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 0.12s ease, background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+  -webkit-tap-highlight-color: transparent;
+  min-height: 34px;
+}
+
+.header-pill-btn:hover {
+  background: rgba(255, 255, 255, 0.22);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.header-pill-btn:active {
+  transform: scale(0.94);
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Màu sắc nhận diện riêng biệt cho từng nút trên Header */
+.header-pill-inventory {
+  background: linear-gradient(135deg, rgba(2, 132, 199, 0.65), rgba(14, 165, 233, 0.5));
+  border-color: rgba(186, 230, 253, 0.55);
+}
+
+.header-pill-reports {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.65), rgba(5, 150, 105, 0.5));
+  border-color: rgba(167, 243, 208, 0.55);
+}
+
+.header-pill-menu {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.65), rgba(217, 119, 6, 0.5));
+  border-color: rgba(253, 230, 138, 0.55);
+}
+
+.header-pill-icon {
+  font-size: 14.5px;
+  line-height: 1;
+}
+
+.header-pill-text {
+  font-weight: 700;
+  letter-spacing: -0.2px;
+}
+
 .header-icon-btn {
   background: rgba(255, 255, 255, 0.12);
   border: none;
@@ -171,6 +227,83 @@ input, textarea, select {
 .header-icon-btn:active {
   transform: scale(0.92);
   background: rgba(255, 255, 255, 0.25);
+}
+
+/* ================= QUICK TOOLS SHEET (BẢNG QUẢN LÝ TIỆN ÍCH) ================= */
+.quick-tools-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.quick-tool-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1.5px solid var(--border);
+  background: #ffffff;
+  cursor: pointer;
+  text-align: left;
+  transition: transform 0.12s ease, border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  box-shadow: var(--shadow-sm);
+  width: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.quick-tool-card:hover {
+  background: #f8fafc;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.quick-tool-card:active {
+  transform: scale(0.98);
+}
+
+.quick-tool-icon-wrap {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+.quick-tool-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.quick-tool-title {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 2px;
+}
+
+.quick-tool-desc {
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.35;
+}
+
+/* Nút btn-outline-info cho lối tắt */
+.btn-outline-info {
+  background: #f0f9ff;
+  border: 1px solid #7dd3fc;
+  color: #0284c7;
+  font-weight: 600;
+}
+
+.btn-outline-info:hover {
+  background: #e0f2fe;
+  border-color: #38bdf8;
+  color: #0369a1;
 }
 
 /* ================= BANNERS CẢNH BÁO ================= */
@@ -3684,20 +3817,42 @@ input, textarea, select {
   }
 }
 
-@media (max-width: 380px) {
+@media (max-width: 520px) {
+  .header-actions {
+    gap: 6px;
+  }
+
+  .header-pill-btn {
+    padding: 5px 9px;
+    font-size: 11.5px;
+    min-height: 32px;
+    gap: 4px;
+  }
+}
+
+@media (max-width: 390px) {
   .header-container {
-    padding: 0 10px;
+    padding: 0 8px;
     gap: 6px;
   }
 
   .header-actions {
-    gap: 5px;
+    gap: 4px;
   }
 
-  .header-icon-btn {
-    width: 34px;
-    height: 34px;
-    font-size: 15px;
+  .header-pill-btn {
+    padding: 5px 7px;
+    font-size: 11px;
+    min-height: 32px;
+    gap: 3px;
+  }
+
+  .shop-brand-title {
+    font-size: 13.5px;
+  }
+
+  .shop-offline-pill {
+    font-size: 10px;
   }
 
   .warehouse-create-btn {
@@ -3719,6 +3874,19 @@ input, textarea, select {
 
   .move-warehouse-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 340px) {
+  .header-pill-text {
+    display: none;
+  }
+
+  .header-pill-btn {
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border-radius: var(--radius-full);
   }
 }
 

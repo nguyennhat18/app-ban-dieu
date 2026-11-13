@@ -32,17 +32,17 @@
       </div>
 
       <div class="header-actions">
-        <button class="header-icon-btn" id="btn-header-restore" title="Nạp file sao lưu dữ liệu (.json)">
-          <span>📥</span>
+        <button class="header-pill-btn header-pill-inventory" id="btn-header-inventory" title="Quản lý kho & Nhập hàng">
+          <span class="header-pill-icon">📦</span>
+          <span class="header-pill-text">Nhập Hàng</span>
         </button>
-        <button class="header-icon-btn" id="btn-header-inventory" title="Kho hàng">
-          <span>📦</span>
+        <button class="header-pill-btn header-pill-reports" id="btn-header-reports" title="Báo cáo doanh thu & Lợi nhuận">
+          <span class="header-pill-icon">📊</span>
+          <span class="header-pill-text">Báo Cáo</span>
         </button>
-        <button class="header-icon-btn" id="btn-header-reports" title="Báo cáo">
-          <span>📊</span>
-        </button>
-        <button class="header-icon-btn" id="btn-header-settings" title="Cài đặt">
-          <span>⚙️</span>
+        <button class="header-pill-btn header-pill-menu" id="btn-header-menu" title="Bảng tiện ích & Quản lý nhanh">
+          <span class="header-pill-icon">⚡</span>
+          <span class="header-pill-text">Tiện Ích</span>
         </button>
       </div>
     </div>
@@ -125,8 +125,8 @@
       document.getElementById('btn-header-reports')?.addEventListener('click', () => {
         window.app?.navigateTo('reports');
       });
-      document.getElementById('btn-header-settings')?.addEventListener('click', () => {
-        window.app?.navigateTo('settings');
+      document.getElementById('btn-header-menu')?.addEventListener('click', () => {
+        window.app?.showQuickToolsModal();
       });
     });
   </script>

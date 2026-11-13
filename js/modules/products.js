@@ -98,6 +98,7 @@ export class ProductModule {
             <p class="view-subtitle">${warehouseProducts.length} mặt hàng • ${lowStockCount} sắp hết • ${outStockCount} hết hàng</p>
           </div>
           <div class="d-flex flex-wrap align-center gap-2" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px;">
+            <button id="btn-goto-inventory-from-products" class="btn btn-outline-info btn-sm" title="Quản lý phiếu nhập hàng & lịch sử kho"><span>📥</span> Nhập Hàng</button>
             <button id="btn-download-excel-template" class="btn btn-outline-primary btn-sm" title="Tải file Excel mẫu chuẩn để tự điền dữ liệu"><span>📄</span> Tải File Mẫu Excel</button>
             ${this.currentWarehouse === 'stock' ? `
               <button id="btn-import-stock-excel" class="btn btn-outline-success btn-sm" title="Đẩy file Excel hoặc CSV vào Kho Tồn">
@@ -303,6 +304,12 @@ export class ProductModule {
     const createWarehouseBtn = document.getElementById('btn-open-create-warehouse');
     if (createWarehouseBtn) {
       createWarehouseBtn.addEventListener('click', () => this.showCreateWarehouseModal());
+    }
+
+    // Lối tắt sang Quản Lý Nhập Hàng
+    const gotoInvBtn = document.getElementById('btn-goto-inventory-from-products');
+    if (gotoInvBtn) {
+      gotoInvBtn.addEventListener('click', () => this.app.navigateTo('inventory'));
     }
 
     // Đẩy file Excel lên Kho Tồn

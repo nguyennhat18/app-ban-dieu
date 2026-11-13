@@ -273,18 +273,21 @@ class KiteApp {
     });
 
     // Lối tắt từ Header cố định trên cùng
+    const btnHeaderInv = document.getElementById('btn-header-inventory');
+    if (btnHeaderInv) btnHeaderInv.addEventListener('click', () => this.navigateTo('inventory'));
+
+    const btnHeaderRep = document.getElementById('btn-header-reports');
+    if (btnHeaderRep) btnHeaderRep.addEventListener('click', () => this.navigateTo('reports'));
+
+    const btnHeaderMenu = document.getElementById('btn-header-menu');
+    if (btnHeaderMenu) btnHeaderMenu.addEventListener('click', () => this.showQuickToolsModal());
+
     const btnHeaderRestore = document.getElementById('btn-header-restore');
     if (btnHeaderRestore) {
       btnHeaderRestore.addEventListener('click', () => {
         this.backupModule.promptRestoreFile();
       });
     }
-
-    const btnHeaderInv = document.getElementById('btn-header-inventory');
-    if (btnHeaderInv) btnHeaderInv.addEventListener('click', () => this.navigateTo('inventory'));
-
-    const btnHeaderRep = document.getElementById('btn-header-reports');
-    if (btnHeaderRep) btnHeaderRep.addEventListener('click', () => this.navigateTo('reports'));
 
     const btnHeaderSet = document.getElementById('btn-header-settings');
     if (btnHeaderSet) btnHeaderSet.addEventListener('click', () => this.navigateTo('settings'));
@@ -296,6 +299,137 @@ class KiteApp {
         this.navigateTo('settings');
       });
     }
+  }
+
+  // Bảng Quản Lý Tiện Ích Thông Minh (Quick Tools Sheet)
+  showQuickToolsModal() {
+    const modalHtml = `
+      <div class="modal-backdrop" id="quick-tools-modal">
+        <div class="modal-content modal-md">
+          <div class="modal-header">
+            <h2 class="modal-title">⚡ Bảng Quản Lý Tiện Ích</h2>
+            <button class="modal-close" id="btn-close-quick-tools">&times;</button>
+          </div>
+
+          <div class="modal-body">
+            <p class="text-xs text-muted mb-2">Truy cập nhanh các nghiệp vụ quản lý kho, doanh thu và dữ liệu cửa hàng:</p>
+
+            <div class="quick-tools-list">
+              <!-- 1. Quản lý kho & Nhập hàng -->
+              <div class="quick-tool-card" id="qt-goto-inventory" style="border-left: 4px solid #0284c7;">
+                <div class="quick-tool-icon-wrap" style="background: #e0f2fe; color: #0284c7;">📦</div>
+                <div class="quick-tool-content">
+                  <div class="quick-tool-title">Quản Lý Nhập Hàng & Lịch Sử Kho</div>
+                  <div class="quick-tool-desc">Tạo phiếu nhập hàng, cân tồn kho, xem vết biến động kho</div>
+                </div>
+                <span class="text-muted text-xs">➔</span>
+              </div>
+
+              <!-- 2. Báo cáo doanh thu -->
+              <div class="quick-tool-card" id="qt-goto-reports" style="border-left: 4px solid #10b981;">
+                <div class="quick-tool-icon-wrap" style="background: #d1fae5; color: #059669;">📊</div>
+                <div class="quick-tool-content">
+                  <div class="quick-tool-title">Báo Cáo Doanh Thu & Lợi Nhuận</div>
+                  <div class="quick-tool-desc">Xem doanh thu, tiền lãi gộp, mặt hàng bán chạy và xuất Excel</div>
+                </div>
+                <span class="text-muted text-xs">➔</span>
+              </div>
+
+              <!-- 3. Nạp file sao lưu dữ liệu -->
+              <div class="quick-tool-card" id="qt-goto-restore" style="border-left: 4px solid #f59e0b;">
+                <div class="quick-tool-icon-wrap" style="background: #fef3c7; color: #d97706;">📥</div>
+                <div class="quick-tool-content">
+                  <div class="quick-tool-title">Nạp File Sao Lưu Dữ Liệu (.json)</div>
+                  <div class="quick-tool-desc">Khôi phục danh sách diều, khách hàng và đơn hàng khi chuyển máy</div>
+                </div>
+                <span class="text-muted text-xs">➔</span>
+              </div>
+
+              <!-- 4. Tải file mẫu Excel nhập hàng -->
+              <div class="quick-tool-card" id="qt-download-excel-template" style="border-left: 4px solid #6366f1;">
+                <div class="quick-tool-icon-wrap" style="background: #ede9fe; color: #6366f1;">📄</div>
+                <div class="quick-tool-content">
+                  <div class="quick-tool-title">Tải File Excel Mẫu Chuẩn</div>
+                  <div class="quick-tool-desc">Tải file mẫu 13 cột chuẩn để tự điền và đẩy hàng loạt vào kho</div>
+                </div>
+                <span class="text-muted text-xs">⬇️</span>
+              </div>
+
+              <!-- 5. Xuất file sao lưu dự phòng -->
+              <div class="quick-tool-card" id="qt-do-backup" style="border-left: 4px solid #06b6d4;">
+                <div class="quick-tool-icon-wrap" style="background: #cffafe; color: #0891b2;">💾</div>
+                <div class="quick-tool-content">
+                  <div class="quick-tool-title">Xuất File Sao Lưu Dự Phòng</div>
+                  <div class="quick-tool-desc">Tải ngay file .json lưu toàn bộ dữ liệu an toàn về máy</div>
+                </div>
+                <span class="text-muted text-xs">⬇️</span>
+              </div>
+
+              <!-- 6. Cài đặt cửa hàng & Bản quyền -->
+              <div class="quick-tool-card" id="qt-goto-settings" style="border-left: 4px solid #64748b;">
+                <div class="quick-tool-icon-wrap" style="background: #f1f5f9; color: #475569;">⚙️</div>
+                <div class="quick-tool-content">
+                  <div class="quick-tool-title">Cài Đặt Cửa Hàng & VietQR</div>
+                  <div class="quick-tool-desc">Cấu hình ngân hàng, tên shop, loại diều, ĐVT và bản quyền</div>
+                </div>
+                <span class="text-muted text-xs">➔</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-footer" style="justify-content: flex-end;">
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-close-quick-tools-footer">Đóng</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const old = document.getElementById('quick-tools-modal');
+    if (old) old.remove();
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+    const modal = document.getElementById('quick-tools-modal');
+    const close = () => modal?.remove();
+
+    document.getElementById('btn-close-quick-tools')?.addEventListener('click', close);
+    document.getElementById('btn-close-quick-tools-footer')?.addEventListener('click', close);
+
+    document.getElementById('qt-goto-inventory')?.addEventListener('click', () => {
+      close();
+      this.navigateTo('inventory');
+    });
+
+    document.getElementById('qt-goto-reports')?.addEventListener('click', () => {
+      close();
+      this.navigateTo('reports');
+    });
+
+    document.getElementById('qt-goto-restore')?.addEventListener('click', () => {
+      close();
+      this.backupModule.promptRestoreFile();
+    });
+
+    document.getElementById('qt-download-excel-template')?.addEventListener('click', async () => {
+      close();
+      try {
+        const { downloadProductExcelTemplate } = await import('./excel-importer.js');
+        const warehouses = this.productModule?._cachedWarehouses || (await import('./config.js')).DEFAULT_WAREHOUSES;
+        await downloadProductExcelTemplate(warehouses);
+      } catch (err) {
+        alert('Lỗi tải file mẫu: ' + err.message);
+      }
+    });
+
+    document.getElementById('qt-do-backup')?.addEventListener('click', () => {
+      close();
+      this.backupModule.exportBackupFile();
+    });
+
+    document.getElementById('qt-goto-settings')?.addEventListener('click', () => {
+      close();
+      this.navigateTo('settings');
+    });
+  }
   }
 }
 
