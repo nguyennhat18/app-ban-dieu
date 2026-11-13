@@ -1,5 +1,14 @@
 // Quản lý cơ sở dữ liệu IndexedDB (Offline-First, Transactional, Versioned, Snapshot)
-import { APP_CONFIG, DEFAULT_SHOP_SETTINGS, PRODUCT_CATEGORIES, PRODUCT_UNITS, DEFAULT_WAREHOUSES, normalizeWarehouseId } from './config.js';
+import {
+  APP_CONFIG,
+  DEFAULT_SHOP_SETTINGS,
+  PRODUCT_CATEGORIES,
+  PRODUCT_UNITS,
+  DEFAULT_WAREHOUSES,
+  normalizeWarehouseId,
+  DEFAULT_WAREHOUSE_CATEGORIES,
+  getDefaultCategoriesForWarehouse
+} from './config.js';
 import { calculateChecksum } from './utils.js';
 
 class KiteDatabase {
@@ -307,51 +316,144 @@ class KiteDatabase {
     });
   }
 
-  // ================= QUẢN LÝ LOẠI DIỀU (CATEGORIES) =================
-  async getCategories() {
-    const cats = await this.getSetting('product_categories');
-    if (Array.isArray(cats) && cats.length > 0) return cats;
-    return [...PRODUCT_CATEGORIES];
-  }
-
-  async saveCategories(categories) {
-    await this.saveSetting('product_categories', categories);
-  }
-
-  async addCategory(name) {
-    const trimmed = name.trim();
-    if (!trimmed) throw new Error('Tên loại diều không được để trống');
-    const cats = await this.getCategories();
-    if (cats.some(c => c.toLowerCase() === trimmed.toLowerCase())) {
-      throw new Error(`Loại diều "${trimmed}" đã tồn tại!`);
+  // ================= QUẢN LÝ CHỦNG LOẠI THEO KHO (WAREHOUSE CATEGORIES) =================
+  async getCategories(warehouseId = null) {
+    const warehouses = await this.getWarehouses();
+    if (warehouseId !== null && warehouseId !== undefined && warehouseId !== '') {
+      const normId = normalizeWarehouseId(warehouseId, warehouses);
+      const map = (await this.getSetting('warehouse_categories')) || {};
+      if (map && typeof map === 'object' && Array.isArray(map[normId]) && map[normId].length > 0) {
+        return [...map[normId]];
+      }
+      const defaults = getDefaultCategoriesForWarehouse(normId);
+      const updatedMap = (map && typeof map === 'object') ? { ...map } : {};
+      updatedMap[normId] = [...defaults];
+      await this.saveSetting('warehouse_categories', updatedMap);
+      return [...defaults];
     }
+
+    // warehouseId is null/undefined: trả về mảng chủng loại không trùng lặp từ tất cả các kho
+    const map = await this.getSetting('warehouse_categories');
+    if (map && typeof map === 'object' && Object.keys(map).length > 0) {
+      const seen = new Set();
+      const allCats = [];
+      for (const w of warehouses) {
+        const cats = Array.isArray(map[w.id]) && map[w.id].length > 0
+          ? map[w.id]
+          : getDefaultCategoriesForWarehouse(w.id);
+        for (const c of cats) {
+          const trimmed = String(c).trim();
+          if (trimmed && !seen.has(trimmed)) {
+            seen.add(trimmed);
+            allCats.push(trimmed);
+          }
+        }
+      }
+      for (const key of Object.keys(map)) {
+        if (Array.isArray(map[key])) {
+          for (const c of map[key]) {
+            const trimmed = String(c).trim();
+            if (trimmed && !seen.has(trimmed)) {
+              seen.add(trimmed);
+              allCats.push(trimmed);
+            }
+          }
+        }
+      }
+      if (allCats.length > 0) return allCats;
+    }
+
+    const legacy = await this.getSetting('product_categories');
+    if (Array.isArray(legacy) && legacy.length > 0) {
+      return [...legacy];
+    }
+
+    const seen = new Set();
+    const allCats = [];
+    for (const w of warehouses) {
+      for (const c of getDefaultCategoriesForWarehouse(w.id)) {
+        const trimmed = String(c).trim();
+        if (trimmed && !seen.has(trimmed)) {
+          seen.add(trimmed);
+          allCats.push(trimmed);
+        }
+      }
+    }
+    return allCats.length > 0 ? allCats : [...PRODUCT_CATEGORIES];
+  }
+
+  async saveCategories(warehouseId, categories) {
+    if (Array.isArray(warehouseId) && categories === undefined) {
+      await this.saveSetting('product_categories', warehouseId);
+      return warehouseId;
+    }
+    const warehouses = await this.getWarehouses();
+    const normId = normalizeWarehouseId(warehouseId, warehouses);
+    const map = (await this.getSetting('warehouse_categories')) || {};
+    const updatedMap = (map && typeof map === 'object') ? { ...map } : {};
+    updatedMap[normId] = Array.isArray(categories) ? [...categories] : [];
+    await this.saveSetting('warehouse_categories', updatedMap);
+    return updatedMap[normId];
+  }
+
+  async addCategory(warehouseId, name) {
+    let targetWh = warehouseId;
+    let targetName = name;
+    if (targetName === undefined) {
+      targetName = targetWh;
+      targetWh = 'kho-dieu';
+    }
+    const trimmed = String(targetName || '').trim();
+    if (!trimmed) throw new Error('Tên chủng loại không được để trống');
+
+    const warehouses = await this.getWarehouses();
+    const normId = normalizeWarehouseId(targetWh, warehouses);
+    const cats = await this.getCategories(normId);
+
+    if (cats.some(c => c.toLowerCase() === trimmed.toLowerCase())) {
+      throw new Error(`Chủng loại "${trimmed}" đã tồn tại trong kho này!`);
+    }
+
     cats.push(trimmed);
-    await this.saveCategories(cats);
+    await this.saveCategories(normId, cats);
     return cats;
   }
 
-  async renameCategory(oldName, newName) {
-    const trimmedOld = oldName.trim();
-    const trimmedNew = newName.trim();
-    if (!trimmedNew) throw new Error('Tên loại diều mới không được để trống');
+  async renameCategory(warehouseId, oldName, newName) {
+    let targetWh = warehouseId;
+    let targetOld = oldName;
+    let targetNew = newName;
+    if (newName === undefined && oldName !== undefined) {
+      targetWh = 'kho-dieu';
+      targetOld = warehouseId;
+      targetNew = oldName;
+    }
+    const trimmedOld = String(targetOld || '').trim();
+    const trimmedNew = String(targetNew || '').trim();
+    if (!trimmedNew) throw new Error('Tên chủng loại mới không được để trống');
     if (trimmedOld === trimmedNew) return { updatedProductsCount: 0 };
 
-    const cats = await this.getCategories();
-    const idx = cats.indexOf(trimmedOld);
-    if (idx === -1) throw new Error(`Không tìm thấy loại diều "${trimmedOld}"`);
+    const warehouses = await this.getWarehouses();
+    const normId = normalizeWarehouseId(targetWh, warehouses);
+    const cats = await this.getCategories(normId);
+
+    const idx = cats.findIndex(c => c.toLowerCase() === trimmedOld.toLowerCase());
+    if (idx === -1) {
+      throw new Error(`Không tìm thấy chủng loại "${trimmedOld}"`);
+    }
 
     if (cats.some((c, i) => i !== idx && c.toLowerCase() === trimmedNew.toLowerCase())) {
-      throw new Error(`Tên loại diều "${trimmedNew}" đã tồn tại!`);
+      throw new Error(`Tên chủng loại "${trimmedNew}" đã tồn tại trong kho này!`);
     }
 
     cats[idx] = trimmedNew;
-    await this.saveCategories(cats);
+    await this.saveCategories(normId, cats);
 
-    // Tự động đồng bộ loại mới sang tất cả sản phẩm
-    const products = await this.getAll('products', true); // Bao gồm cả xóa mềm
+    // Cập nhật tất cả sản phẩm đang hoạt động trong kho đó
+    const products = await this.getAll('products', false);
     let updatedProductsCount = 0;
     for (const p of products) {
-      if (p.category === trimmedOld) {
+      if (normalizeWarehouseId(p.warehouse, warehouses) === normId && p.category === trimmedOld) {
         p.category = trimmedNew;
         await this.put('products', p);
         updatedProductsCount++;
@@ -360,26 +462,38 @@ class KiteDatabase {
     return { updatedProductsCount };
   }
 
-  async deleteCategory(catName) {
-    const trimmed = catName.trim();
-    const products = await this.getAll('products');
-    const linked = products.filter(p => p.category === trimmed);
+  async deleteCategory(warehouseId, name) {
+    let targetWh = warehouseId;
+    let targetName = name;
+    if (targetName === undefined) {
+      targetName = targetWh;
+      targetWh = 'kho-dieu';
+    }
+    const trimmed = String(targetName || '').trim();
+    const warehouses = await this.getWarehouses();
+    const normId = normalizeWarehouseId(targetWh, warehouses);
+
+    const products = await this.getAll('products', false);
+    const linked = products.filter(p => !p.isDeleted && normalizeWarehouseId(p.warehouse, warehouses) === normId && p.category === trimmed);
     if (linked.length > 0) {
-      throw new Error(`Không thể xóa vì đang có ${linked.length} sản phẩm thuộc loại "${trimmed}". Vui lòng đổi loại cho các sản phẩm này trước khi xóa!`);
+      throw new Error(`Không thể xóa vì đang có ${linked.length} sản phẩm thuộc loại "${trimmed}" trong kho này. Vui lòng đổi loại cho các sản phẩm này trước khi xóa!`);
     }
 
-    let cats = await this.getCategories();
+    let cats = await this.getCategories(normId);
     if (cats.length <= 1) {
-      throw new Error('Cửa hàng phải có ít nhất 1 loại diều!');
+      throw new Error('Kho hàng phải có ít nhất 1 chủng loại!');
     }
-    cats = cats.filter(c => c !== trimmed);
-    await this.saveCategories(cats);
+    cats = cats.filter(c => c !== trimmed && c.toLowerCase() !== trimmed.toLowerCase());
+    await this.saveCategories(normId, cats);
     return cats;
   }
 
-  async resetDefaultCategories() {
-    await this.saveCategories([...PRODUCT_CATEGORIES]);
-    return [...PRODUCT_CATEGORIES];
+  async resetDefaultCategories(warehouseId = 'kho-ao-dieu') {
+    const warehouses = await this.getWarehouses();
+    const normId = normalizeWarehouseId(warehouseId, warehouses);
+    const defaults = getDefaultCategoriesForWarehouse(normId);
+    await this.saveCategories(normId, defaults);
+    return [...defaults];
   }
 
   // ================= QUẢN LÝ ĐƠN VỊ TÍNH (UNITS) =================
@@ -578,6 +692,11 @@ class KiteDatabase {
     const categories = await this.getSetting('product_categories');
     if (Array.isArray(categories)) exportData.settings['product_categories'] = categories;
 
+    const warehouseCategories = await this.getSetting('warehouse_categories');
+    if (warehouseCategories && typeof warehouseCategories === 'object') {
+      exportData.settings['warehouse_categories'] = warehouseCategories;
+    }
+
     const units = await this.getSetting('product_units');
     if (Array.isArray(units)) exportData.settings['product_units'] = units;
 
@@ -694,6 +813,14 @@ class KiteDatabase {
           settingsStore.put({
             key: 'product_categories',
             value: settingsData['product_categories'],
+            updatedAt: nowIso
+          });
+        }
+
+        if (settingsData['warehouse_categories'] && typeof settingsData['warehouse_categories'] === 'object') {
+          settingsStore.put({
+            key: 'warehouse_categories',
+            value: settingsData['warehouse_categories'],
             updatedAt: nowIso
           });
         }

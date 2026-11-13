@@ -41,6 +41,90 @@ export const PRODUCT_CATEGORIES = [
   'Phụ kiện & Đồ nghề diều'
 ];
 
+export const DEFAULT_WAREHOUSE_CATEGORIES = {
+  'kho-ao-dieu': [
+    'Áo diều sáo truyền thống',
+    'Áo diều khí động học',
+    'Áo diều đại trà',
+    'Áo diều ghép màu',
+    'Áo diều mini'
+  ],
+  'kho-nan-dieu': [
+    'Nan carbon xoắn',
+    'Nan carbon đặc',
+    'Nan cáp quang',
+    'Nan tre vót sẵn',
+    'Nan bụng / Nan cánh'
+  ],
+  'kho-pass-inox': [
+    'Pass khóa sáo',
+    'Pass chữ T',
+    'Pass khớp nối',
+    'Pass khóa cánh',
+    'Phụ kiện pass inox 304'
+  ],
+  'kho-thanh-cai': [
+    'Thanh cái carbon',
+    'Thanh cái tre',
+    'Vai diều dẹp',
+    'Ống nối sống diều'
+  ],
+  'kho-guong-inox': [
+    'Guồng tay inox',
+    'Guồng trợ lực',
+    'Guồng nhôm',
+    'Bát guồng & Tay quay'
+  ],
+  'kho-day-dieu': [
+    'Dây amiang chịu lực',
+    'Dây dù đan tròn',
+    'Dây cáp quang',
+    'Dây bọc thép',
+    'Cuộn dây thả diều'
+  ],
+  'kho-sao-dieu': [
+    'Sáo còi D40 D50',
+    'Sáo chuông & hòa âm',
+    'Sáo đàn còi',
+    'Miệng sáo gỗ / nhôm',
+    'Ống sáo sáp & sáo tre'
+  ],
+  'kho-dieu': [
+    'Diều sáo hoàn thiện',
+    'Diều khí động học',
+    'Diều đại trà',
+    'Diều rồng / Phượng hoàng',
+    'Diều mini'
+  ],
+  'kho-combo': [
+    'Combo diều tự ráp',
+    'Combo nan + áo + pass',
+    'Kit phụ kiện diều tự làm'
+  ],
+  'stock': [
+    'Nan carbon & Nan diều',
+    'Pass & Phụ kiện nối',
+    'Cuộn guồng & Dây thả diều',
+    'Sáo diều & Âm thanh',
+    'Phụ kiện & Đồ nghề diều'
+  ]
+};
+
+/**
+ * Lấy danh sách chủng loại mặc định theo kho hàng
+ * @param {string} warehouseId
+ * @returns {string[]} Mảng bản sao các chủng loại mặc định
+ */
+export function getDefaultCategoriesForWarehouse(warehouseId) {
+  if (warehouseId && DEFAULT_WAREHOUSE_CATEGORIES[warehouseId]) {
+    return [...DEFAULT_WAREHOUSE_CATEGORIES[warehouseId]];
+  }
+  if (warehouseId === 'new' && DEFAULT_WAREHOUSE_CATEGORIES['kho-dieu']) {
+    return [...DEFAULT_WAREHOUSE_CATEGORIES['kho-dieu']];
+  }
+  return ['Chủng loại 1', 'Chủng loại 2'];
+}
+
 export const PRODUCT_UNITS = [
   'Chiếc',
   'Cái',
@@ -78,6 +162,34 @@ export function normalizeWarehouseId(warehouseId, warehouses = DEFAULT_WAREHOUSE
     return warehouseId;
   }
   return list[0]?.id || 'stock';
+}
+
+/**
+ * Chuẩn hóa mã kho từ ID hoặc Tên kho hàng
+ * Khớp chính xác ID, hoặc tên kho (không phân biệt hoa thường sau khi trim),
+ * hoặc fallback về normalizeWarehouseId(nameOrId, warehouses).
+ * @param {string} nameOrId
+ * @param {Array} warehouses
+ * @returns {string}
+ */
+export function normalizeWarehouseIdByNameOrId(nameOrId, warehouses = DEFAULT_WAREHOUSES) {
+  const list = Array.isArray(warehouses) ? warehouses : DEFAULT_WAREHOUSES;
+  if (!nameOrId) {
+    return normalizeWarehouseId(nameOrId, list);
+  }
+  const str = String(nameOrId).trim();
+
+  // 1. Khớp chính xác ID
+  const byId = list.find(w => w && w.id === str);
+  if (byId) return byId.id;
+
+  // 2. Khớp theo tên (trim & lowercase)
+  const lower = str.toLowerCase();
+  const byName = list.find(w => w && w.name && w.name.trim().toLowerCase() === lower);
+  if (byName) return byName.id;
+
+  // 3. Fallback
+  return normalizeWarehouseId(nameOrId, list);
 }
 
 export const PAYMENT_METHODS = {
