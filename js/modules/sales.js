@@ -13,7 +13,7 @@ import {
   compressImage
 } from '../utils.js';
 import { registerVietnameseFont } from '../vendor/roboto-font.js';
-import { PRODUCT_CATEGORIES, normalizeWarehouseId } from '../config.js';
+import { PRODUCT_CATEGORIES, DEFAULT_WAREHOUSES, normalizeWarehouseId } from '../config.js';
 import {
   resolveOrderQR,
   drawVietQRToJsPdf,
@@ -73,12 +73,22 @@ export class SalesModule {
     const customers = await db.getAll('customers');
     const shopSettings = (await db.getSetting('shop_info')) || {};
     this._cachedShopSettings = shopSettings;
-    const categories = await db.getCategories();
-    const warehouses = await db.getWarehouses();
+    const loadedWarehouses = await db.getWarehouses();
+    const warehouses = (Array.isArray(loadedWarehouses) && loadedWarehouses.length > 0)
+      ? loadedWarehouses
+      : [...DEFAULT_WAREHOUSES];
     this._cachedWarehouses = warehouses;
 
     if (this.posWarehouse !== 'all' && !warehouses.some(w => w.id === this.posWarehouse)) {
       this.posWarehouse = 'all';
+    }
+
+    const categories = (this.posWarehouse !== 'all')
+      ? await db.getCategories(this.posWarehouse)
+      : await db.getCategories();
+
+    if (this.posCategory !== 'all' && !categories.includes(this.posCategory)) {
+      this.posCategory = 'all';
     }
 
     const whCounts = {};

@@ -6,7 +6,7 @@ import {
   compressImage,
   escapeHTML
 } from '../utils.js';
-import { DEFAULT_SHOP_SETTINGS, normalizeWarehouseId } from '../config.js';
+import { DEFAULT_SHOP_SETTINGS, DEFAULT_WAREHOUSES, normalizeWarehouseId } from '../config.js';
 import { licenseService, LICENSE_CONFIG, generateLicenseKey, formatRemainingCountdown } from './license.js';
 import {
   NAPAS_BANKS,
@@ -21,6 +21,7 @@ export class SettingsModule {
     this.activeSettingSection = 'shop'; // 'shop' | 'catalog' | 'backup' | 'guide' | 'license'
     this.guidePlatform = 'ios'; // 'ios' | 'android'
     this.catalogTab = 'categories'; // 'categories' | 'products' | 'units' | 'warehouses'
+    this.catSelectedWarehouse = 'kho-ao-dieu';
     this.productSearchQuery = '';
     this.productCatFilter = 'all';
     this.isAdminKeygenUnlocked = false;
@@ -73,9 +74,18 @@ export class SettingsModule {
     const container = document.getElementById('view-container');
     const shop = (await db.getSetting('shop_info')) || { ...DEFAULT_SHOP_SETTINGS };
     const snapshotsHtml = await this.app.backupModule.renderSnapshotsSection();
-    const categories = await db.getCategories();
+    const loadedWarehouses = await db.getWarehouses();
+    const warehouses = (Array.isArray(loadedWarehouses) && loadedWarehouses.length > 0)
+      ? loadedWarehouses
+      : [...DEFAULT_WAREHOUSES];
+
+    if (!warehouses.some(w => w.id === this.catSelectedWarehouse)) {
+      this.catSelectedWarehouse = warehouses[0]?.id || 'kho-ao-dieu';
+    }
+
+    const categories = await db.getCategories(this.catSelectedWarehouse);
+    const allCategories = await db.getCategories();
     const units = await db.getUnits();
-    const warehouses = await db.getWarehouses();
     const products = await db.getAll('products');
     const licStatus = await licenseService.checkStatus();
 
@@ -282,12 +292,12 @@ export class SettingsModule {
 
           <!-- Tab 1: Loại Diều -->
           <div id="catalog-tab-content-categories" style="display: ${this.catalogTab === 'categories' ? 'block' : 'none'};">
-            ${this.renderCategoriesTabHtml(categories, products)}
+            ${this.renderCategoriesTabHtml(categories, products, warehouses)}
           </div>
 
           <!-- Tab 2: Sửa Mặt Hàng -->
           <div id="catalog-tab-content-products" style="display: ${this.catalogTab === 'products' ? 'block' : 'none'};">
-            ${this.renderProductsTabHtml(products, categories)}
+            ${this.renderProductsTabHtml(products, allCategories)}
           </div>
 
           <!-- Tab 3: Đơn Vị Tính -->
@@ -1025,19 +1035,29 @@ export class SettingsModule {
   }
 
   // ================= QUẢN LÝ LOẠI DIỀU, SỬA MẶT HÀNG & ĐVT =================
-  renderCategoriesTabHtml(categories, products) {
+  renderCategoriesTabHtml(categories, products, warehouses = DEFAULT_WAREHOUSES) {
+    const listWh = (Array.isArray(warehouses) && warehouses.length > 0) ? warehouses : DEFAULT_WAREHOUSES;
+    const activeWh = listWh.find(w => w.id === this.catSelectedWarehouse) || listWh[0] || { id: this.catSelectedWarehouse, name: 'Kho Diều', icon: '🪁' };
+
     return `
       <div class="catalog-tab-pane">
+        <div class="cat-wh-picker-bar mb-3">
+          <label class="form-label text-bold">🏭 Chọn kho để quản lý chủng loại:</label>
+          <select id="select-cat-warehouse" class="form-select text-bold">
+            ${listWh.map(w => `<option value="${escapeHTML(w.id)}" ${this.catSelectedWarehouse === w.id ? 'selected' : ''}>${w.icon || '📦'} ${escapeHTML(w.name)}</option>`).join('')}
+          </select>
+        </div>
+
         <div class="catalog-intro-box mb-3">
           <div class="text-xs text-muted">
-            💡 <b>Quy tắc đồng bộ thông minh:</b> Khi bạn đổi tên một loại diều (ví dụ từ <i>"Diều khí động học"</i> sang <i>"Diều dù không xương"</i>), toàn bộ các mặt hàng đang thuộc loại này sẽ được hệ thống <b>tự động cập nhật</b> theo tên mới ngay lập tức.
+            💡 <b>Quy tắc đồng bộ thông minh (${escapeHTML(activeWh.name)}):</b> Khi bạn đổi tên một loại diều/chủng loại, toàn bộ các mặt hàng đang thuộc chủng loại này trong kho <b>${escapeHTML(activeWh.name)}</b> sẽ được hệ thống <b>tự động cập nhật</b> theo tên mới ngay lập tức.
           </div>
         </div>
 
         <div class="catalog-add-form mb-3">
-          <label class="form-label text-bold">Thêm loại diều mới:</label>
+          <label class="form-label text-bold">Thêm loại diều / chủng loại mới cho ${escapeHTML(activeWh.name)}:</label>
           <div class="input-with-button-row" style="gap: 8px;">
-            <input type="text" id="input-new-category" class="form-input" style="min-width: 0;" placeholder="VD: Diều nan carbon, Diều led đêm, Diều mini..." maxlength="50">
+            <input type="text" id="input-new-category" class="form-input" style="min-width: 0;" placeholder="VD: Nan carbon xoắn, Pass chữ T, Áo 2m5..." maxlength="50">
             <button type="button" id="btn-add-category" class="btn btn-primary" style="flex-shrink: 0; white-space: nowrap;">
               <span>+</span> Thêm Loại
             </button>
@@ -1045,7 +1065,7 @@ export class SettingsModule {
         </div>
 
         <div class="categories-list-header mb-2 d-flex justify-between align-center" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 8px;">
-          <span class="text-xs text-muted text-bold">DANH SÁCH LOẠI DIỀU (${categories.length})</span>
+          <span class="text-xs text-muted text-bold">DANH SÁCH CHỦNG LOẠI (${categories.length})</span>
           <button type="button" id="btn-reset-categories" class="btn btn-link text-xs text-muted p-0" style="background: transparent; border: none; padding: 4px 6px; min-height: auto; font-weight: 600; white-space: nowrap;">
             🔄 Khôi phục mặc định
           </button>
@@ -1053,15 +1073,15 @@ export class SettingsModule {
 
         <div class="categories-list-container">
           ${categories.map(cat => {
-            const prodCount = products.filter(p => p.category === cat).length;
+            const prodCount = products.filter(p => !p.isDeleted && normalizeWarehouseId(p.warehouse, listWh) === this.catSelectedWarehouse && p.category === cat).length;
             return `
               <div class="catalog-item-card" style="flex-wrap: wrap; gap: 10px;">
                 <div class="catalog-item-info" style="flex: 1 1 160px; min-width: 0;">
-                  <span class="catalog-item-icon">🪁</span>
+                  <span class="catalog-item-icon">${activeWh.icon || '🪁'}</span>
                   <div class="catalog-item-main">
                     <div class="catalog-item-title">${escapeHTML(cat)}</div>
                     <div class="catalog-item-subtitle text-xs text-muted">
-                      ${prodCount > 0 ? `<b>${prodCount}</b> sản phẩm đang dùng` : 'Chưa có sản phẩm'}
+                      ${prodCount > 0 ? `<b>${prodCount}</b> sản phẩm trong kho đang dùng` : 'Chưa có sản phẩm'}
                     </div>
                   </div>
                 </div>
@@ -1309,6 +1329,17 @@ export class SettingsModule {
       });
     });
 
+    // Chọn kho để quản lý chủng loại
+    const selectCatWh = document.getElementById('select-cat-warehouse');
+    if (selectCatWh) {
+      selectCatWh.addEventListener('change', async (e) => {
+        this.catSelectedWarehouse = e.target.value;
+        this.activeSettingSection = 'catalog';
+        this.catalogTab = 'categories';
+        await this.render();
+      });
+    }
+
     // 2. Tab Loại Diều
     const addCatBtn = document.getElementById('btn-add-category');
     const newCatInput = document.getElementById('input-new-category');
@@ -1321,8 +1352,10 @@ export class SettingsModule {
           return;
         }
         try {
-          await db.addCategory(val);
+          await db.addCategory(this.catSelectedWarehouse, val);
           alert(`✅ Đã thêm loại diều "${val}" thành công!`);
+          this.activeSettingSection = 'catalog';
+          this.catalogTab = 'categories';
           await this.render();
         } catch (err) {
           alert('Lỗi: ' + err.message);
@@ -1352,8 +1385,10 @@ export class SettingsModule {
           if (trimmed === oldName) return;
 
           try {
-            const res = await db.renameCategory(oldName, trimmed);
-            alert(`✅ Đã đổi tên loại diều thành "${trimmed}"!\nCó ${res.updatedProductsCount} sản phẩm liên quan đã tự động cập nhật.`);
+            const res = await db.renameCategory(this.catSelectedWarehouse, oldName, trimmed);
+            alert(`✅ Đã đổi tên loại diều thành "${trimmed}"!\nCó ${res?.updatedProductsCount || 0} sản phẩm liên quan đã tự động cập nhật.`);
+            this.activeSettingSection = 'catalog';
+            this.catalogTab = 'categories';
             await this.render();
           } catch (err) {
             alert('Lỗi đổi tên: ' + err.message);
@@ -1373,8 +1408,10 @@ export class SettingsModule {
         }
         if (confirm(`Bạn có chắc muốn xóa loại diều "${name}" không?`)) {
           try {
-            await db.deleteCategory(name);
+            await db.deleteCategory(this.catSelectedWarehouse, name);
             alert(`✅ Đã xóa loại diều "${name}" thành công!`);
+            this.activeSettingSection = 'catalog';
+            this.catalogTab = 'categories';
             await this.render();
           } catch (err) {
             alert('Lỗi xóa: ' + err.message);
@@ -1387,10 +1424,12 @@ export class SettingsModule {
     const resetCatsBtn = document.getElementById('btn-reset-categories');
     if (resetCatsBtn) {
       resetCatsBtn.addEventListener('click', async () => {
-        if (confirm('Khôi phục danh sách loại diều về mặc định ban đầu?\n(Lưu ý: Các sản phẩm hiện có vẫn được giữ nguyên)')) {
+        if (confirm('Khôi phục danh sách loại diều về mặc định ban đầu cho kho này?\n(Lưu ý: Các sản phẩm hiện có vẫn được giữ nguyên)')) {
           try {
-            await db.resetDefaultCategories();
+            await db.resetDefaultCategories(this.catSelectedWarehouse);
             alert('✅ Đã khôi phục danh mục loại diều mặc định!');
+            this.activeSettingSection = 'catalog';
+            this.catalogTab = 'categories';
             await this.render();
           } catch (err) {
             alert('Lỗi: ' + err.message);

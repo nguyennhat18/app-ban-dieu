@@ -2,7 +2,7 @@
 import { db } from '../db.js';
 import { formatVND, parseVND, compressImage, escapeHTML, mergeImportedProductsByName } from '../utils.js';
 import { DEFAULT_WAREHOUSES, normalizeWarehouseId, PRODUCT_CATEGORIES, PRODUCT_UNITS } from '../config.js';
-import { parseStockArray2D, SAMPLE_STOCK_INVENTORY, detectCategory, detectUnit } from '../excel-importer.js';
+import { parseStockArray2D, SAMPLE_STOCK_INVENTORY, detectCategory, detectUnit, downloadProductExcelTemplate } from '../excel-importer.js';
 
 export class ProductModule {
   constructor(app) {
@@ -28,7 +28,6 @@ export class ProductModule {
   async render() {
     const container = document.getElementById('view-container');
     const allProducts = await db.getAll('products');
-    const categories = await db.getCategories();
     const loadedWarehouses = await db.getWarehouses();
     const warehouses = (Array.isArray(loadedWarehouses) && loadedWarehouses.length > 0)
       ? loadedWarehouses
@@ -37,6 +36,11 @@ export class ProductModule {
 
     if (!warehouses.some(w => w.id === this.currentWarehouse)) {
       this.currentWarehouse = warehouses[0]?.id || 'stock';
+    }
+
+    const categories = await db.getCategories(this.currentWarehouse);
+    if (this.currentCategory !== 'all' && !categories.includes(this.currentCategory)) {
+      this.currentCategory = 'all';
     }
 
     // Phân loại sản phẩm theo từng kho (tự động map 'new' cũ sang 'kho-dieu')
@@ -94,6 +98,7 @@ export class ProductModule {
             <p class="view-subtitle">${warehouseProducts.length} mặt hàng • ${lowStockCount} sắp hết • ${outStockCount} hết hàng</p>
           </div>
           <div class="d-flex flex-wrap align-center gap-2" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px;">
+            <button id="btn-download-excel-template" class="btn btn-outline-primary btn-sm" title="Tải file Excel mẫu chuẩn để tự điền dữ liệu"><span>📄</span> Tải File Mẫu Excel</button>
             ${this.currentWarehouse === 'stock' ? `
               <button id="btn-import-stock-excel" class="btn btn-outline-success btn-sm" title="Đẩy file Excel hoặc CSV vào Kho Tồn">
                 <span>📥</span> Đẩy File Excel
@@ -197,6 +202,7 @@ export class ProductModule {
           <p class="empty-title">${this.currentWarehouse === 'stock' ? 'Kho Tồn Chưa Có Mặt Hàng Nào' : `${escapeHTML(activeWh.name)} chưa có mặt hàng phù hợp`}</p>
           <p class="empty-desc">${this.currentWarehouse === 'stock' ? 'Bạn có thể đẩy file Excel tồn kho lên hoặc nạp sẵn 69 mặt hàng mẫu từ file bạn cung cấp.' : 'Thử tìm từ khóa khác hoặc bấm nút thêm mặt hàng mới vào kho này.'}</p>
           <div class="d-flex justify-center gap-2 mt-2 flex-wrap" style="display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; margin-top: 8px;">
+            <button id="btn-download-excel-template" class="btn btn-outline-primary btn-sm" title="Tải file Excel mẫu chuẩn để tự điền dữ liệu"><span>📄</span> Tải File Mẫu Excel</button>
             ${this.currentWarehouse === 'stock' ? `
               <button id="btn-trigger-upload-excel" class="btn btn-success btn-sm">
                 <span>📥</span> Đẩy File Excel Lên
@@ -271,7 +277,19 @@ export class ProductModule {
     document.querySelectorAll('[data-warehouse]').forEach(btn => {
       btn.addEventListener('click', () => {
         this.currentWarehouse = btn.dataset.warehouse;
+        this.currentCategory = 'all';
         this.render();
+      });
+    });
+
+    // Tải file mẫu Excel chuẩn
+    document.querySelectorAll('#btn-download-excel-template').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        try {
+          await downloadProductExcelTemplate(this._cachedWarehouses);
+        } catch (err) {
+          alert('Lỗi tải file mẫu: ' + err.message);
+        }
       });
     });
 
@@ -363,6 +381,17 @@ export class ProductModule {
   }
 
   bindProductGridEvents() {
+    // Tải file mẫu Excel chuẩn trong empty-state
+    document.querySelectorAll('#products-grid-container #btn-download-excel-template').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        try {
+          await downloadProductExcelTemplate(this._cachedWarehouses);
+        } catch (err) {
+          alert('Lỗi tải file mẫu: ' + err.message);
+        }
+      });
+    });
+
     const fileInput = document.getElementById('stock-excel-file-input');
     const triggerUploadBtn = document.getElementById('btn-trigger-upload-excel');
     if (triggerUploadBtn && fileInput) {
@@ -432,16 +461,17 @@ export class ProductModule {
           const ws = wb.Sheets[firstSheetName];
           const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
-          const parsedProducts = parseStockArray2D(rows);
+          const parsedProducts = parseStockArray2D(rows, this.currentWarehouse, this._cachedWarehouses);
           if (parsedProducts.length === 0) {
             alert('Không tìm thấy dữ liệu mặt hàng hợp lệ trong file Excel/CSV!');
             return;
           }
 
+          const targetWh = this._resolveWarehouse(this.currentWarehouse, this._cachedWarehouses);
           const confirmed = confirm(
             `📊 PHÁT HIỆN ${parsedProducts.length} MẶT HÀNG TRONG FILE:\n"${file.name}"\n\n` +
-            `Bạn có muốn GỘP THÊM toàn bộ danh sách này vào KHO TỒN không?\n` +
-            `(Hệ thống sẽ tự nhận diện tên, giá nhập, giá bán, số lượng và nhà cung cấp)`
+            `Bạn có muốn GỘP THÊM toàn bộ danh sách này vào hệ thống (${targetWh ? targetWh.name : 'Kho hàng'}) không?\n` +
+            `(Hệ thống sẽ tự nhận diện tên, kho, chủng loại, giá nhập, giá bán, số lượng và nhà cung cấp)`
           );
 
           if (confirmed) {
@@ -451,7 +481,6 @@ export class ProductModule {
               await db.put('products', rec);
             }
             alert(`🎉 Đã xử lý ${parsedProducts.length} dòng: thêm mới ${added} mặt hàng, cộng thêm số lượng cho ${merged} mặt hàng trùng tên!`);
-            this.currentWarehouse = 'stock';
             await this.render();
           }
         } catch (err) {
@@ -498,8 +527,6 @@ export class ProductModule {
   async showProductModal(productId = null) {
     let product = null;
     let isEdit = false;
-    const categories = await db.getCategories();
-    const units = await db.getUnits();
     const loadedWarehouses = await db.getWarehouses();
     const warehouses = (Array.isArray(loadedWarehouses) && loadedWarehouses.length > 0)
       ? loadedWarehouses
@@ -511,6 +538,10 @@ export class ProductModule {
       isEdit = !!product;
     }
 
+    const selectedWarehouseId = normalizeWarehouseId(product?.warehouse || this.currentWarehouse, warehouses);
+    const categories = await db.getCategories(selectedWarehouseId);
+    const units = await db.getUnits();
+
     if (!product) {
       const count = (await db.getAll('products', true)).length + 1;
       const code = 'DIEU-' + String(count).padStart(3, '0');
@@ -518,8 +549,8 @@ export class ProductModule {
         id: 'SP-' + Date.now(),
         code,
         name: '',
-        warehouse: this.currentWarehouse || warehouses[0]?.id || 'kho-ao-dieu',
-        category: categories[0] || 'Diều khí động học',
+        warehouse: selectedWarehouseId,
+        category: categories[0] || 'Chủng loại 1',
         size: '',
         color: '',
         unit: units[0] || 'Chiếc',
@@ -532,8 +563,6 @@ export class ProductModule {
         notes: ''
       };
     }
-
-    const selectedWarehouseId = normalizeWarehouseId(product?.warehouse || this.currentWarehouse, warehouses);
     let photoBase64 = product.photo || '';
 
     const modalHtml = `
@@ -594,7 +623,7 @@ export class ProductModule {
               <div class="form-group flex-2">
                 <label class="form-label">Chủng loại</label>
                 <select id="p-category" class="form-select">
-                  ${categories.map(c => `
+                  ${(product.category && !categories.includes(product.category) ? [product.category, ...categories] : categories).map(c => `
                     <option value="${escapeHTML(c)}" ${product.category === c ? 'selected' : ''}>${escapeHTML(c)}</option>
                   `).join('')}
                 </select>
@@ -744,6 +773,28 @@ export class ProductModule {
           } else {
             this.render();
           }
+        }
+      });
+    }
+
+    // Khi đổi kho trong modal: tự động nạp lại danh sách chủng loại tương ứng của kho đó
+    const warehouseSelect = document.getElementById('p-warehouse');
+    const categorySelect = document.getElementById('p-category');
+
+    if (warehouseSelect && categorySelect) {
+      warehouseSelect.addEventListener('change', async (e) => {
+        const newWarehouseId = e.target.value;
+        try {
+          const newCategories = await db.getCategories(newWarehouseId);
+          const currentCatVal = categorySelect.value;
+          categorySelect.innerHTML = newCategories.map(c => `
+            <option value="${escapeHTML(c)}" ${c === currentCatVal ? 'selected' : ''}>${escapeHTML(c)}</option>
+          `).join('');
+          if (!newCategories.includes(currentCatVal) && newCategories.length > 0) {
+            categorySelect.value = newCategories[0];
+          }
+        } catch (err) {
+          console.error('Lỗi nạp chủng loại theo kho:', err);
         }
       });
     }

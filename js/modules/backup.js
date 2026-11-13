@@ -11,8 +11,25 @@ import {
   downloadBlobFile,
   escapeHTML
 } from '../utils.js';
-import { APP_CONFIG } from '../config.js';
+import { APP_CONFIG, DEFAULT_WAREHOUSES, normalizeWarehouseIdByNameOrId } from '../config.js';
 import { parseStockArray2D } from '../excel-importer.js';
+
+function safeNormalizeWarehouse(nameOrId, warehouses = DEFAULT_WAREHOUSES) {
+  if (typeof normalizeWarehouseIdByNameOrId === 'function') {
+    return normalizeWarehouseIdByNameOrId(nameOrId, warehouses);
+  }
+  const list = Array.isArray(warehouses) ? warehouses : DEFAULT_WAREHOUSES;
+  if (!nameOrId || nameOrId === 'new') {
+    return list.some(w => w && w.id === 'kho-dieu') ? 'kho-dieu' : (list[0]?.id || 'stock');
+  }
+  const str = String(nameOrId).trim();
+  const byId = list.find(w => w && w.id === str);
+  if (byId) return byId.id;
+  const lower = str.toLowerCase();
+  const byName = list.find(w => w && w.name && w.name.trim().toLowerCase() === lower);
+  if (byName) return byName.id;
+  return list.some(w => w && w.id === 'kho-dieu') ? 'kho-dieu' : (list[0]?.id || 'stock');
+}
 
 export class BackupModule {
   constructor(app) {
@@ -316,7 +333,7 @@ export class BackupModule {
    * Hỗ trợ đọc file Excel (.xlsx) xuất từ "Xuất Excel Toàn Bộ" hoặc Excel kho tồn chuyển thành cấu trúc Backup
    */
   async _parseExcelFileToBackupData(file) {
-    const XLSX = window.XLSX;
+    const XLSX = (typeof window !== 'undefined' && window.XLSX) ? window.XLSX : globalThis.XLSX;
     if (!XLSX) throw new Error('Thư viện đọc Excel chưa sẵn sàng.');
 
     const buffer = await file.arrayBuffer();
@@ -332,38 +349,62 @@ export class BackupModule {
       debt_payments: []
     };
 
+    const warehouses = (await db.getAllWarehouses?.()) || DEFAULT_WAREHOUSES;
+
     // 1. Trường hợp file là Xuất Excel Toàn Bộ Dữ Liệu (có sheet "Sản Phẩm")
     if (wb.Sheets['Sản Phẩm']) {
       const rows = XLSX.utils.sheet_to_json(wb.Sheets['Sản Phẩm'], { header: 1 });
+      const headerRow = (rows[0] || []).map(h => String(h || '').trim().toLowerCase());
+
+      const colId = headerRow.findIndex(h => h === 'id');
+      const colCode = headerRow.findIndex(h => h.includes('mã'));
+      const colName = headerRow.findIndex(h => h.includes('tên'));
+      const colWh = headerRow.findIndex(h => h === 'kho hàng' || h === 'kho' || (h.includes('kho') && !h.includes('tồn')));
+      const colCat = headerRow.findIndex(h => h.includes('danh mục') || h.includes('chủng loại'));
+      const colSize = headerRow.findIndex(h => h.includes('kích thước') || h.includes('size'));
+      const colColor = headerRow.findIndex(h => h.includes('màu'));
+      const colUnit = headerRow.findIndex(h => h.includes('đvt') || h.includes('đơn vị'));
+      const colCost = headerRow.findIndex(h => h.includes('giá nhập') || h.includes('giá vốn'));
+      const colSell = headerRow.findIndex(h => h.includes('giá bán'));
+      const colStock = headerRow.findIndex(h => h.includes('tồn kho') || h === 'tồn' || h.includes('số lượng'));
+      const colAlert = headerRow.findIndex(h => h.includes('cảnh báo'));
+      const colDeleted = headerRow.findIndex(h => h.includes('xóa'));
+
       for (let i = 1; i < rows.length; i++) {
         const r = rows[i];
-        if (!r || !r[2]) continue;
+        if (!r) continue;
+        const name = colName >= 0 ? r[colName] : r[2];
+        if (!name) continue;
+
+        let whVal = colWh >= 0 ? r[colWh] : 'kho-dieu';
+        let warehouse = safeNormalizeWarehouse(whVal, warehouses);
+
         stores.products.push({
-          id: r[0] ? String(r[0]) : `SP-XLS-${Date.now()}-${i}`,
-          code: String(r[1] || ''),
-          name: String(r[2] || '').trim(),
-          category: String(r[3] || 'Phụ kiện diều'),
-          size: String(r[4] || ''),
-          color: String(r[5] || ''),
-          unit: String(r[6] || 'Chiếc'),
-          costPrice: Number(r[7]) || 0,
-          sellingPrice: Number(r[8]) || 0,
-          stock: Number(r[9]) || 0,
-          lowStockThreshold: Number(r[10]) || 5,
-          warehouse: 'kho-dieu',
-          isDeleted: String(r[11] || '').toUpperCase() === 'CÓ'
+          id: (colId >= 0 && r[colId]) ? String(r[colId]) : (r[0] ? String(r[0]) : `SP-XLS-${Date.now()}-${i}`),
+          code: String((colCode >= 0 ? r[colCode] : r[1]) || ''),
+          name: String(name).trim(),
+          category: String((colCat >= 0 ? r[colCat] : (colWh >= 0 ? r[4] : r[3])) || 'Phụ kiện diều'),
+          size: String((colSize >= 0 ? r[colSize] : (colWh >= 0 ? r[5] : r[4])) || ''),
+          color: String((colColor >= 0 ? r[colColor] : (colWh >= 0 ? r[6] : r[5])) || ''),
+          unit: String((colUnit >= 0 ? r[colUnit] : (colWh >= 0 ? r[7] : r[6])) || 'Chiếc'),
+          costPrice: Number(colCost >= 0 ? r[colCost] : (colWh >= 0 ? r[8] : r[7])) || 0,
+          sellingPrice: Number(colSell >= 0 ? r[colSell] : (colWh >= 0 ? r[9] : r[8])) || 0,
+          stock: Number(colStock >= 0 ? r[colStock] : (colWh >= 0 ? r[10] : r[9])) || 0,
+          lowStockThreshold: Number(colAlert >= 0 ? r[colAlert] : (colWh >= 0 ? r[11] : r[10])) || 5,
+          warehouse: warehouse || 'kho-dieu',
+          isDeleted: String((colDeleted >= 0 ? r[colDeleted] : (colWh >= 0 ? r[12] : r[11])) || '').toUpperCase() === 'CÓ'
         });
       }
     } else if (wb.SheetNames.length > 0) {
-      // Trường hợp nạp nhầm file Kho tồn kiểu NHẬP _ XUẤT.xlsx
-      const firstSheet = wb.Sheets[wb.SheetNames[0]];
-      const rows2D = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
-      const parsed = parseStockArray2D(rows2D);
+      // Trường hợp nạp file mẫu chuẩn "Danh Sách Nhập Hàng" hoặc file Kho tồn kiểu NHẬP _ XUẤT.xlsx
+      const targetSheet = wb.Sheets['Danh Sách Nhập Hàng'] || wb.Sheets[wb.SheetNames[0]];
+      const rows2D = XLSX.utils.sheet_to_json(targetSheet, { header: 1 });
+      const parsed = parseStockArray2D(rows2D, 'stock', warehouses);
       parsed.forEach((p, idx) => {
         stores.products.push({
           ...p,
           id: p.id || `SP-IMP-${Date.now()}-${idx}`,
-          warehouse: 'stock',
+          warehouse: p.warehouse || 'stock',
           isDeleted: false
         });
       });
@@ -652,7 +693,7 @@ export class BackupModule {
   // ================= 5. XUẤT TOÀN BỘ EXCEL DỰ PHÒNG =================
   async exportAllDataToExcel() {
     try {
-      const XLSX = window.XLSX;
+      const XLSX = (typeof window !== 'undefined' && window.XLSX) ? window.XLSX : globalThis.XLSX;
       if (!XLSX) return alert('Thư viện Excel chưa sẵn sàng');
 
       const products = await db.getAll('products', true);
@@ -660,13 +701,16 @@ export class BackupModule {
       const orders = await db.getAll('orders', true);
       const inventoryLogs = await db.getAll('inventory_logs');
       const quotations = await db.getAll('quotations', true);
+      const warehouses = (await db.getAllWarehouses?.()) || DEFAULT_WAREHOUSES;
+      const whMap = new Map((warehouses || DEFAULT_WAREHOUSES).map(w => [w.id, w.name]));
 
       const wb = XLSX.utils.book_new();
 
       // Sheet 1: Sản phẩm
-      const prodHeaders = ['ID', 'Mã Diều', 'Tên Sản Phẩm', 'Danh Mục', 'Kích Thước', 'Màu', 'ĐVT', 'Giá Nhập', 'Giá Bán', 'Tồn Kho', 'Cảnh Báo Tồn', 'Đã Xóa?'];
+      const prodHeaders = ['ID', 'Mã Diều', 'Tên Sản Phẩm', 'Kho Hàng', 'Danh Mục', 'Kích Thước', 'Màu', 'ĐVT', 'Giá Nhập', 'Giá Bán', 'Tồn Kho', 'Cảnh Báo Tồn', 'Đã Xóa?'];
       const prodRows = products.map(p => [
-        p.id, p.code || '', p.name, p.category || '', p.size || '', p.color || '',
+        p.id, p.code || '', p.name, whMap.get(p.warehouse) || p.warehouse || 'Kho Diều',
+        p.category || '', p.size || '', p.color || '',
         p.unit || 'Chiếc', p.costPrice || 0, p.sellingPrice || 0, p.stock || 0,
         p.lowStockThreshold || 5, p.isDeleted ? 'CÓ' : 'KHÔNG'
       ]);
