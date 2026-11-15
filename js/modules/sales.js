@@ -10,7 +10,8 @@ import {
   numberToVietnameseWords,
   shareFileOrDownload,
   downloadBlobFile,
-  compressImage
+  compressImage,
+  showToast
 } from '../utils.js';
 import { registerVietnameseFont } from '../vendor/roboto-font.js';
 import { PRODUCT_CATEGORIES, DEFAULT_WAREHOUSES, normalizeWarehouseId } from '../config.js';
@@ -627,6 +628,7 @@ export class SalesModule {
       });
     }
     this.render();
+    showToast(`Đã thêm: ${product.name}`, 'success', 1800);
   }
 
   decrementItemInCart(productId) {
@@ -648,6 +650,7 @@ export class SalesModule {
   setCustomer(customer) {
     this.selectedCustomer = customer;
     this.render();
+    showToast(customer ? `Đã chọn: ${customer.name}` : 'Đã chọn khách lẻ', 'info', 1800);
   }
 
   bindCommonEvents() {

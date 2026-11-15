@@ -479,3 +479,56 @@ export function mergeImportedProductsByName(existingProducts, incomingProducts, 
     recordsToSave: Array.from(touchedById.values())
   };
 }
+
+/**
+ * Hiển thị thông báo Toast hiện đại không gây gián đoạn thao tác
+ * @param {string} message Nội dung thông báo
+ * @param {'success'|'warning'|'danger'|'info'} type Loại thông báo
+ * @param {number} duration Thời gian hiển thị (ms)
+ */
+export function showToast(message, type = 'info', duration = 2800) {
+  if (typeof document === 'undefined') return;
+  let container = document.getElementById('toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toast-container';
+    container.className = 'toast-container';
+    document.body.appendChild(container);
+  }
+
+  const icons = {
+    success: '✅',
+    warning: '⚠️',
+    danger: '❌',
+    info: '💡'
+  };
+
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.innerHTML = `
+    <span class="toast-icon">${icons[type] || '💡'}</span>
+    <span class="toast-message">${escapeHTML(message)}</span>
+  `;
+
+  container.appendChild(toast);
+
+  const removeToast = () => {
+    toast.classList.add('toast-out');
+    setTimeout(() => {
+      toast.remove();
+      if (container && container.children.length === 0) {
+        container.remove();
+      }
+    }, 250);
+  };
+
+  const timer = setTimeout(removeToast, duration);
+  toast.addEventListener('click', () => {
+    clearTimeout(timer);
+    removeToast();
+  });
+}
+
+if (typeof window !== 'undefined') {
+  window.showToast = showToast;
+}

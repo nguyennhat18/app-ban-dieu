@@ -175,22 +175,27 @@ class KiteApp {
       }
     }
 
-    if (needsReminder) {
+    if (needsReminder && !sessionStorage.getItem('dismissed_backup_banner')) {
       banner.style.display = 'flex';
       banner.innerHTML = `
         <div class="banner-text">
           <span>⚠️ <b>CẢNH BÁO:</b> ${reason}</span>
           <span class="banner-subtext">Sao lưu gần nhất: ${shop.lastBackupTime ? formatDateTime(shop.lastBackupTime) : 'Chưa có'}</span>
         </div>
-        <button id="btn-quick-backup-banner" class="btn btn-warning btn-xs">💾 Sao Lưu Ngay</button>
+        <div class="banner-actions" style="display: flex; align-items: center; gap: 8px;">
+          <button id="btn-quick-backup-banner" class="btn btn-warning btn-xs">💾 Sao Lưu Ngay</button>
+          <button id="btn-dismiss-backup-banner" class="btn-dismiss-banner" title="Tạm ẩn cảnh báo">&times;</button>
+        </div>
       `;
 
-      const backupBtn = document.getElementById('btn-quick-backup-banner');
-      if (backupBtn) {
-        backupBtn.addEventListener('click', () => {
-          this.backupModule.exportBackupFile();
-        });
-      }
+      document.getElementById('btn-quick-backup-banner')?.addEventListener('click', () => {
+        this.backupModule.exportBackupFile();
+      });
+
+      document.getElementById('btn-dismiss-backup-banner')?.addEventListener('click', () => {
+        banner.style.display = 'none';
+        sessionStorage.setItem('dismissed_backup_banner', 'true');
+      });
     } else {
       banner.style.display = 'none';
     }
