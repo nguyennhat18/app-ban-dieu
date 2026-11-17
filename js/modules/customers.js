@@ -312,7 +312,7 @@ export class CustomerModule {
 
             <div class="form-group">
               <label class="form-label required">Số tiền thu đợt này (VNĐ)</label>
-              <input type="number" id="dp-amount" class="form-input form-input-lg text-primary text-bold" required min="1000" max="${currentDebt}" value="${currentDebt}">
+              <input type="number" id="dp-amount" inputmode="numeric" class="form-input form-input-lg text-primary text-bold" required min="1000" max="${currentDebt}" value="${currentDebt}">
               <div class="quick-amount-buttons mt-2" style="display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:8px;">
                 <button type="button" class="btn btn-outline-secondary btn-xs btn-set-full-debt" data-amt="${currentDebt}">Thu hết (${formatVND(currentDebt)})</button>
                 ${currentDebt > 200000 ? `<button type="button" class="btn btn-outline-secondary btn-xs btn-set-debt-half" data-amt="${Math.round(currentDebt / 2)}">Thu 50%</button>` : ''}
@@ -517,7 +517,7 @@ export class CustomerModule {
 
             <div class="form-group">
               <label class="form-label">Số điện thoại (Zalo)</label>
-              <input type="tel" id="c-phone" class="form-input" placeholder="VD: 0901234567" value="${escapeHTML(customer.phone || '')}">
+              <input type="tel" id="c-phone" inputmode="tel" class="form-input" placeholder="VD: 0901234567" value="${escapeHTML(customer.phone || '')}">
             </div>
 
             <div class="form-group">

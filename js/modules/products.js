@@ -661,11 +661,11 @@ export class ProductModule {
             <div class="form-row card p-2 bg-light mb-3">
               <div class="form-group flex-1 mb-0">
                 <label class="form-label required text-primary">Giá bán (VNĐ)</label>
-                <input type="text" id="p-selling-price" class="form-input form-input-lg text-primary text-bold" required value="${product.sellingPrice ? formatVND(product.sellingPrice) : ''}" placeholder="0 ₫">
+                <input type="text" id="p-selling-price" inputmode="numeric" class="form-input form-input-lg text-primary text-bold" required value="${product.sellingPrice ? formatVND(product.sellingPrice) : ''}" placeholder="0 ₫">
               </div>
               <div class="form-group flex-1 mb-0">
                 <label class="form-label text-muted">Giá vốn nhập (VNĐ)</label>
-                <input type="text" id="p-cost-price" class="form-input form-input-lg text-muted" value="${product.costPrice ? formatVND(product.costPrice) : ''}" placeholder="0 ₫">
+                <input type="text" id="p-cost-price" inputmode="numeric" class="form-input form-input-lg text-muted" value="${product.costPrice ? formatVND(product.costPrice) : ''}" placeholder="0 ₫">
               </div>
             </div>
 
@@ -673,11 +673,11 @@ export class ProductModule {
             <div class="form-row">
               <div class="form-group flex-1">
                 <label class="form-label required">Tồn kho hiện tại</label>
-                <input type="number" id="p-stock" class="form-input" required min="0" step="1" value="${product.stock !== undefined ? product.stock : 10}">
+                <input type="number" id="p-stock" inputmode="numeric" class="form-input" required min="0" step="1" value="${product.stock !== undefined ? product.stock : 10}">
               </div>
               <div class="form-group flex-1">
                 <label class="form-label">Báo động khi dưới</label>
-                <input type="number" id="p-low-stock" class="form-input" min="0" step="1" value="${product.lowStockThreshold || 5}">
+                <input type="number" id="p-low-stock" inputmode="numeric" class="form-input" min="0" step="1" value="${product.lowStockThreshold || 5}">
               </div>
             </div>
 

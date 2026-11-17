@@ -204,7 +204,7 @@ export class InventoryModule {
               </div>
               <div class="form-group flex-1">
                 <label class="form-label required text-bold text-primary">📦 TỒN THỰC TẾ MỚI:</label>
-                <input type="number" id="adj-new-stock" class="form-input form-input-lg text-bold text-primary text-center" required min="0" step="1" value="0">
+                <input type="number" id="adj-new-stock" inputmode="numeric" class="form-input form-input-lg text-bold text-primary text-center" required min="0" step="1" value="0">
               </div>
             </div>
             <div id="adj-diff-hint" class="text-xs text-muted mb-3" style="text-align: right;">Độ lệch tồn: <b>0</b></div>
@@ -442,7 +442,7 @@ export class InventoryModule {
               <div class="form-group mb-2">
                 <label class="form-label required text-bold" style="color: #0f172a;">2. SỐ LƯỢNG NHẬP:</label>
                 <div style="position: relative;">
-                  <input type="number" id="imp-qty" class="form-input form-input-lg text-bold text-center" min="1" step="1" value="10" placeholder="Số lượng" style="font-size: 15px;">
+                  <input type="number" id="imp-qty" inputmode="numeric" class="form-input form-input-lg text-bold text-center" min="1" step="1" value="10" placeholder="Số lượng" style="font-size: 15px;">
                   <span id="imp-unit-hint" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 12px; color: #64748b; font-weight: 600; pointer-events: none;">chiếc</span>
                 </div>
               </div>

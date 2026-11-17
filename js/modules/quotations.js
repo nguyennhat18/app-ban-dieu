@@ -337,7 +337,7 @@ export class QuotationsModule {
             <div class="form-row">
               <div class="form-group flex-1">
                 <label class="form-label" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 20px; line-height: 20px;">Số điện thoại</label>
-                <input type="tel" id="q-customer-phone" class="form-input" placeholder="0901234567" value="${escapeHTML(quote.customerPhone)}" style="height: 44px; min-height: 44px; box-sizing: border-box;">
+                <input type="tel" id="q-customer-phone" inputmode="tel" class="form-input" placeholder="0901234567" value="${escapeHTML(quote.customerPhone)}" style="height: 44px; min-height: 44px; box-sizing: border-box;">
               </div>
               <div class="form-group flex-1">
                 <label class="form-label" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 20px; line-height: 20px;">Địa chỉ nhận hàng</label>
@@ -376,7 +376,7 @@ export class QuotationsModule {
                 <div class="form-group flex-1 mb-2" style="margin-bottom: 8px;">
                   <label class="form-label required text-bold" style="color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 20px; line-height: 20px; margin-bottom: 6px;">2. Số lượng:</label>
                   <div style="position: relative; width: 100%;">
-                    <input type="number" id="q-add-qty" class="form-input form-input-lg text-bold text-center" min="1" step="1" value="1" placeholder="Số lượng" style="font-size: 16px; height: 48px; min-height: 48px; box-sizing: border-box; padding-right: 48px;">
+                    <input type="number" id="q-add-qty" inputmode="numeric" class="form-input form-input-lg text-bold text-center" min="1" step="1" value="1" placeholder="Số lượng" style="font-size: 16px; height: 48px; min-height: 48px; box-sizing: border-box; padding-right: 48px;">
                     <span id="q-unit-hint" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 12px; color: #64748b; font-weight: 600; pointer-events: none;">chiếc</span>
                   </div>
                 </div>
@@ -384,7 +384,7 @@ export class QuotationsModule {
                 <div class="form-group flex-1 mb-2" style="margin-bottom: 8px;">
                   <label class="form-label required text-bold" style="color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 20px; line-height: 20px; margin-bottom: 6px;">3. Đơn giá (đ):</label>
                   <div style="position: relative; width: 100%;">
-                    <input type="text" id="q-add-price" class="form-input form-input-lg text-bold text-primary text-right" placeholder="0 ₫" style="font-size: 16px; height: 48px; min-height: 48px; box-sizing: border-box; padding-right: 12px;">
+                    <input type="text" id="q-add-price" inputmode="numeric" class="form-input form-input-lg text-bold text-primary text-right" placeholder="0 ₫" style="font-size: 16px; height: 48px; min-height: 48px; box-sizing: border-box; padding-right: 12px;">
                   </div>
                 </div>
               </div>
@@ -420,11 +420,11 @@ export class QuotationsModule {
               </div>
               <div class="summary-line">
                 <span class="text-bold text-xs">Chiết khấu giảm giá (VNĐ):</span>
-                <input type="number" id="q-calc-discount" class="form-input-sm text-right text-bold" style="width: 130px" value="${quote.discountAmount || 0}" placeholder="0 ₫">
+                <input type="number" id="q-calc-discount" inputmode="numeric" class="form-input-sm text-right text-bold" style="width: 130px" value="${quote.discountAmount || 0}" placeholder="0 ₫">
               </div>
               <div class="summary-line">
                 <span class="text-bold text-xs">Phí vận chuyển (VNĐ):</span>
-                <input type="number" id="q-calc-shipping" class="form-input-sm text-right text-bold" style="width: 130px" value="${quote.shippingFee || 0}" placeholder="0 ₫">
+                <input type="number" id="q-calc-shipping" inputmode="numeric" class="form-input-sm text-right text-bold" style="width: 130px" value="${quote.shippingFee || 0}" placeholder="0 ₫">
               </div>
               ${shopSettings.enableVat ? `
                 <div class="summary-line text-muted">

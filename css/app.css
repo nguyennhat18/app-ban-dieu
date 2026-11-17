@@ -2510,18 +2510,31 @@ input[type="date"].form-input {
 /* ================= EMPTY STATE ================= */
 .empty-state {
   text-align: center;
-  padding: 36px 16px;
+  padding: 42px 18px;
+  background: #ffffff;
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius-lg);
+  margin: 12px 0;
 }
 
 .empty-icon {
-  font-size: 44px;
-  margin-bottom: 6px;
+  font-size: 48px;
+  margin-bottom: 8px;
+  line-height: 1;
+  display: inline-block;
+  animation: floatEmpty 3s ease-in-out infinite;
+}
+
+@keyframes floatEmpty {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
 }
 
 .empty-title {
   font-size: 17px;
-  font-weight: 700;
+  font-weight: 800;
   color: var(--text-main);
+  letter-spacing: -0.2px;
 }
 
 .empty-desc {
@@ -2529,6 +2542,10 @@ input[type="date"].form-input {
   color: var(--text-muted);
   margin-top: 4px;
   margin-bottom: 14px;
+  max-width: 440px;
+  margin-left: auto;
+  margin-right: auto;
+  line-height: 1.45;
 }
 
 /* ================= CARDS LIST ================= */
@@ -2537,10 +2554,16 @@ input[type="date"].form-input {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 12px;
-  margin-bottom: 8px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
   box-shadow: var(--shadow-sm);
-  transition: transform 0.1s, box-shadow 0.15s;
+  transition: transform 0.12s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.customer-card:hover, .order-card:hover, .quote-card:hover, .inv-log-card:hover, .debtor-card:hover {
+  border-color: #bae6fd;
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
 }
 
 .customer-card:active, .order-card:active, .quote-card:active {

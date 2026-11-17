@@ -265,12 +265,12 @@ export class SalesModule {
                     <button class="btn-toggle-disc ${this.discountType === 'percent' ? 'active' : ''}" id="disc-type-pct">%</button>
                   </div>
                 </div>
-                <input type="number" id="input-discount-val" class="form-input-sm text-right text-bold" style="width: 120px" value="${this.discountValue || ''}" placeholder="${this.discountType === 'percent' ? 'Nhập %' : '0 ₫'}">
+                <input type="number" id="input-discount-val" inputmode="numeric" class="form-input-sm text-right text-bold" style="width: 120px" value="${this.discountValue || ''}" placeholder="${this.discountType === 'percent' ? 'Nhập %' : '0 ₫'}">
               </div>
 
               <div class="summary-line" style="flex-wrap: wrap; gap: 8px;">
                 <span class="text-bold text-xs">Phí giao hàng (ship):</span>
-                <input type="number" id="input-shipping-fee" class="form-input-sm text-right text-bold" style="width: 120px" value="${this.shippingFee || ''}" placeholder="0 ₫">
+                <input type="number" id="input-shipping-fee" inputmode="numeric" class="form-input-sm text-right text-bold" style="width: 120px" value="${this.shippingFee || ''}" placeholder="0 ₫">
               </div>
 
               ${shopSettings.enableVat ? `
@@ -308,7 +308,7 @@ export class SalesModule {
                 <div class="partial-pay-box card p-2 bg-light mt-1">
                   <div class="summary-line">
                     <span class="text-bold text-xs">Khách trả trước (VNĐ):</span>
-                    <input type="number" id="input-paid-amount" class="form-input-sm text-right text-bold text-primary" style="width: 130px" value="${this.paidAmount || 0}" placeholder="Nhập tiền trả">
+                    <input type="number" id="input-paid-amount" inputmode="numeric" class="form-input-sm text-right text-bold text-primary" style="width: 130px" value="${this.paidAmount || 0}" placeholder="Nhập tiền trả">
                   </div>
                   <div class="summary-line text-danger mt-1">
                     <span class="text-bold text-xs">Còn nợ ghi sổ:</span>
